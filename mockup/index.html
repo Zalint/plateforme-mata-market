@@ -4390,16 +4390,16 @@
           <aside class="hidden lg:block">
             <nav class="sticky top-24 space-y-1 text-sm">
               <div class="text-[11px] uppercase tracking-wider text-stone-500 font-bold mb-2">Sommaire</div>
-              <a href="#sec-intro" class="block px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Introduction</a>
-              <a href="#sec-roles" class="block px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Rôles utilisateurs</a>
-              <a href="#sec-status-orders" class="block px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Statuts des commandes</a>
-              <a href="#sec-status-offers" class="block px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Statuts des offres</a>
-              <a href="#sec-status-payments" class="block px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Paiements & reversements</a>
-              <a href="#sec-status-producers" class="block px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Statuts des producteurs</a>
-              <a href="#sec-status-pickup" class="block px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Statuts des collectes</a>
-              <a href="#sec-pricing" class="block px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Composantes du prix</a>
-              <a href="#sec-teleconseil" class="block px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Règles téléconseiller</a>
-              <a href="#sec-glossary" class="block px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Glossaire</a>
+              <button onclick="scrollToAnchor('sec-intro')" class="block w-full text-left px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Introduction</button>
+              <button onclick="scrollToAnchor('sec-roles')" class="block w-full text-left px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Rôles utilisateurs</button>
+              <button onclick="scrollToAnchor('sec-status-orders')" class="block w-full text-left px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Statuts des commandes</button>
+              <button onclick="scrollToAnchor('sec-status-offers')" class="block w-full text-left px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Statuts des offres</button>
+              <button onclick="scrollToAnchor('sec-status-payments')" class="block w-full text-left px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Paiements & reversements</button>
+              <button onclick="scrollToAnchor('sec-status-producers')" class="block w-full text-left px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Statuts des producteurs</button>
+              <button onclick="scrollToAnchor('sec-status-pickup')" class="block w-full text-left px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Statuts des collectes</button>
+              <button onclick="scrollToAnchor('sec-pricing')" class="block w-full text-left px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Composantes du prix</button>
+              <button onclick="scrollToAnchor('sec-teleconseil')" class="block w-full text-left px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Règles téléconseiller</button>
+              <button onclick="scrollToAnchor('sec-glossary')" class="block w-full text-left px-3 py-1.5 text-stone-700 hover:bg-stone-100 rounded-md">Glossaire</button>
             </nav>
           </aside>
 
@@ -5314,8 +5314,16 @@
       `;
     }
 
+    function scrollToAnchor(id){
+      const el = document.getElementById(id);
+      if(el) el.scrollIntoView({ behavior:'smooth', block:'start' });
+    }
+
     function applyRoute(){
-      const path = (location.hash || '#/auth/welcome').replace(/^#\//,'');
+      const hash = location.hash || '#/auth/welcome';
+      // Ignore anchor links (e.g. #sec-roles) — they don't represent routes
+      if(hash && !hash.startsWith('#/')) return;
+      const path = hash.replace(/^#\//,'');
       const route = ROUTES[path] || ROUTES['auth/welcome'];
       const isAuth = route.role === null;
 
