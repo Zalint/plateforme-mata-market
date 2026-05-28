@@ -1,0 +1,81 @@
+{
+  "realm": "mata",
+  "displayName": "MATA",
+  "displayNameHtml": "<strong>MATA</strong> · Du champ à l'assiette",
+  "enabled": true,
+  "loginWithEmailAllowed": false,
+  "registrationAllowed": false,
+  "rememberMe": false,
+  "resetPasswordAllowed": true,
+  "verifyEmail": false,
+  "internationalizationEnabled": true,
+  "supportedLocales": ["fr"],
+  "defaultLocale": "fr",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 5,
+  "roles": {
+    "realm": [
+      { "name": "producer", "description": "Producteur agricole" },
+      {
+        "name": "client_pro",
+        "description": "Client professionnel (restaurant, hôtel, boucherie...)"
+      },
+      { "name": "client_particulier", "description": "Client particulier" },
+      { "name": "admin", "description": "Admin MATA · pilotage plateforme" },
+      { "name": "teleconsultant", "description": "Téléconseiller MATA · assistance producteurs" },
+      {
+        "name": "super_admin",
+        "description": "Super-admin · gestion utilisateurs et configuration"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "mata-web",
+      "name": "MATA Web (PWA)",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "implicitFlowEnabled": false,
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:3000"
+      },
+      "redirectUris": ["http://localhost:3000/*"],
+      "webOrigins": ["http://localhost:3000"]
+    },
+    {
+      "clientId": "mata-api",
+      "name": "MATA API (bearer-only)",
+      "enabled": true,
+      "bearerOnly": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "mata-admin-bootstrap",
+      "name": "MATA Admin Bootstrap (scripts ops)",
+      "enabled": true,
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "secret": "change-me-in-prod"
+    }
+  ],
+  "users": []
+}

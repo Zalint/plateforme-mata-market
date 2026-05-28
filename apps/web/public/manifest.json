@@ -1,0 +1,39 @@
+{
+  "name": "MATA · Du champ à l'assiette",
+  "short_name": "MATA",
+  "description": "Plateforme MATA pour producteurs, clients et back-office.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fafaf9",
+  "theme_color": "#9b1c1c",
+  "lang": "fr",
+  "categories": ["business", "food", "shopping"],
+  "icons": [
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' rx='40' fill='%239b1c1c'/><text x='96' y='128' font-family='Inter,sans-serif' font-size='80' font-weight='800' fill='white' text-anchor='middle'>MA</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' fill='%239b1c1c'/><text x='96' y='118' font-family='Inter,sans-serif' font-size='65' font-weight='800' fill='white' text-anchor='middle'>MA</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    },
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' rx='112' fill='%239b1c1c'/><text x='256' y='340' font-family='Inter,sans-serif' font-size='220' font-weight='800' fill='white' text-anchor='middle'>MA</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'><rect width='512' height='512' fill='%239b1c1c'/><text x='256' y='320' font-family='Inter,sans-serif' font-size='180' font-weight='800' fill='white' text-anchor='middle'>MA</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

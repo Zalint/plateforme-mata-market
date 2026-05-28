@@ -1,0 +1,151 @@
+# Render Blueprint · MATA Plateforme
+#
+# Référence : ARCHITECTURE.md §11 « CI/CD et opérations ».
+# Procédure d'application : voir docs/DEPLOYMENT.md.
+#
+# Services :
+#   - mata-api          (web service, Fastify)
+#   - mata-web          (web service, Next.js)
+#   - mata-keycloak     (web service, Keycloak)
+#   - mata-db           (postgres, applicatif)
+#   - mata-keycloak-db  (postgres, Keycloak)
+#
+# Coût estimé : 6 services Starter (~42 $/mois) + n8n optionnel.
+
+databases:
+  - name: mata-db
+    plan: starter
+    databaseName: mata
+    user: mata
+    postgresMajorVersion: '16'
+
+  - name: mata-keycloak-db
+    plan: starter
+    databaseName: keycloak
+    user: keycloak
+    postgresMajorVersion: '16'
+
+services:
+  # ────────────────────────────────────────────────────────────
+  # mata-api · Fastify
+  # ────────────────────────────────────────────────────────────
+  - type: web
+    name: mata-api
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    branch: main
+    rootDir: .
+    dockerfilePath: ./infra/docker/api.Dockerfile
+    dockerContext: .
+    healthCheckPath: /v1/health
+    preDeployCommand: cd /app && npx prisma migrate deploy
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: '4000'
+      - key: LOG_LEVEL
+        value: info
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mata-db
+          property: connectionString
+      - key: PUBLIC_WEB_URL
+        sync: false
+      - key: KEYCLOAK_URL
+        sync: false
+      - key: KEYCLOAK_REALM
+        value: mata
+      - key: KEYCLOAK_CLIENT_API_AUDIENCE
+        value: mata-api
+      - key: BICTORYS_API_KEY
+        sync: false
+      - key: BICTORYS_WEBHOOK_SECRET
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_SUBJECT
+        sync: false
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: HCAPTCHA_SECRET
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+
+  # ────────────────────────────────────────────────────────────
+  # mata-web · Next.js (PWA)
+  # ────────────────────────────────────────────────────────────
+  - type: web
+    name: mata-web
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    branch: main
+    rootDir: .
+    dockerfilePath: ./infra/docker/web.Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: '3000'
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: mata-api
+          property: hostport
+      - key: NEXT_PUBLIC_KEYCLOAK_URL
+        sync: false
+      - key: NEXT_PUBLIC_KEYCLOAK_REALM
+        value: mata
+      - key: NEXT_PUBLIC_KEYCLOAK_CLIENT_ID
+        value: mata-web
+
+  # ────────────────────────────────────────────────────────────
+  # mata-keycloak · SSO
+  # ────────────────────────────────────────────────────────────
+  - type: web
+    name: mata-keycloak
+    runtime: image
+    image:
+      url: quay.io/keycloak/keycloak:26.0
+    plan: starter
+    region: frankfurt
+    healthCheckPath: /health/ready
+    dockerCommand: start --optimized --hostname-strict=false
+    envVars:
+      - key: KC_DB
+        value: postgres
+      - key: KC_DB_URL
+        fromDatabase:
+          name: mata-keycloak-db
+          property: connectionString
+      - key: KC_HOSTNAME_STRICT
+        value: 'false'
+      - key: KC_HTTP_ENABLED
+        value: 'true'
+      - key: KC_HEALTH_ENABLED
+        value: 'true'
+      - key: KC_PROXY_HEADERS
+        value: xforwarded
+      - key: KC_BOOTSTRAP_ADMIN_USERNAME
+        sync: false
+      - key: KC_BOOTSTRAP_ADMIN_PASSWORD
+        sync: false

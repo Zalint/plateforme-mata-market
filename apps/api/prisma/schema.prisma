@@ -1,0 +1,28 @@
+// Schéma Prisma · Lot 0 (minimal)
+//
+// Volontairement minimal au Lot 0 : un seul modèle `HealthCheck` qui sert à
+// valider la chaîne complète Prisma (generate, migrate, query, déploiement
+// Render Pre-Deploy Command).
+//
+// Les 15 vraies tables (users, producer_profiles, offers, orders, payments,
+// pricing_snapshots, pickups, teleconsult_codes, audit_log, etc.) arrivent
+// dans leurs lots dédiés (cf. ARCHITECTURE.md §6).
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Modèle bidon utilisé uniquement par `/v1/health` pour vérifier la connexion DB.
+/// Sera supprimé au Lot 1 quand les vraies tables arrivent.
+model HealthCheck {
+  id        Int      @id @default(autoincrement())
+  bootedAt  DateTime @default(now()) @map("booted_at")
+
+  @@map("health_check")
+}

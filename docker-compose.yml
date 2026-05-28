@@ -1,0 +1,85 @@
+# Docker Compose · dev local MATA
+#
+# Lance Postgres, Keycloak, et Mailhog uniquement. L'API et le Web
+# tournent en `pnpm dev` natif (hot reload, plus rapide qu'en conteneur).
+#
+# Usage :
+#   docker compose up -d         # démarrage en arrière-plan
+#   docker compose logs -f       # suivre les logs
+#   docker compose down          # arrêt (préserve les volumes)
+#   docker compose down -v       # arrêt + reset complet des données
+
+name: mata-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mata-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mata
+      POSTGRES_PASSWORD: mata
+      POSTGRES_DB: mata
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mata -d mata']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Postgres séparé pour Keycloak (cf. ARCHITECTURE.md §2)
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: mata-keycloak-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+      POSTGRES_DB: keycloak
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U keycloak -d keycloak']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: mata-keycloak
+    restart: unless-stopped
+    command:
+      - start-dev
+      - --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      KC_HOSTNAME: localhost
+      KC_HTTP_ENABLED: 'true'
+      KC_HEALTH_ENABLED: 'true'
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./infra/keycloak:/opt/keycloak/data/import:ro
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: mata-mailhog
+    restart: unless-stopped
+    ports:
+      - '1025:1025' # SMTP
+      - '8025:8025' # UI web
+
+volumes:
+  postgres-data:
+  keycloak-db-data:
