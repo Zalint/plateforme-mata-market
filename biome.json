@@ -71,6 +71,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["**/*.tsx"],
+      "linter": {
+        "rules": {
+          "a11y": {
+            "useValidAriaRole": "off"
+          }
+        }
+      }
     }
   ]
 }

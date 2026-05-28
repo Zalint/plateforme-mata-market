@@ -1,4 +1,14 @@
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { z } from 'zod';
+
+// Chargement du .env local si présent (Node 22+ natif).
+// En production sur Render, les variables sont injectées directement
+// par la plateforme — pas de fichier .env.
+const envFile = resolve(process.cwd(), '.env');
+if (existsSync(envFile)) {
+  process.loadEnvFile(envFile);
+}
 
 /**
  * Validation des variables d'environnement au boot.
@@ -21,7 +31,7 @@ const envSchema = z.object({
   // Web URL pour CORS
   PUBLIC_WEB_URL: z.string().url().default('http://localhost:3000'),
 
-  // Optionnels à ce stade — durcis dans les lots dédiés
+  // Keycloak : requis dès le Lot 1 (hors tests unitaires qui posent NODE_ENV=test)
   KEYCLOAK_URL: z.string().url().optional(),
   KEYCLOAK_REALM: z.string().optional(),
   KEYCLOAK_CLIENT_API_AUDIENCE: z.string().optional(),

@@ -38,3 +38,7 @@ coverage/
 
 # Render local cache
 .render/
+
+# Scripts locaux (poste de Saliou, jamais commités)
+scripts/docker-reset.ps1
+

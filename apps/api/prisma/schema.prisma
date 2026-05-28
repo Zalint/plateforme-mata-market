@@ -1,12 +1,14 @@
-// Schéma Prisma · Lot 0 (minimal)
+// Schéma Prisma · Lot 1
 //
-// Volontairement minimal au Lot 0 : un seul modèle `HealthCheck` qui sert à
-// valider la chaîne complète Prisma (generate, migrate, query, déploiement
-// Render Pre-Deploy Command).
+// 3 tables : users (identité MATA + mapping Keycloak), audit_log (toutes
+// actions sensibles), notification_preferences (réservé Lot 7 push).
 //
-// Les 15 vraies tables (users, producer_profiles, offers, orders, payments,
-// pricing_snapshots, pickups, teleconsult_codes, audit_log, etc.) arrivent
-// dans leurs lots dédiés (cf. ARCHITECTURE.md §6).
+// Conventions :
+//  - Tables Postgres en snake_case via @map, code TS en camelCase
+//  - Pas de soft-delete générique, statuts métier explicites
+//  - 6 rôles miroir du realm Keycloak (cf. infra/keycloak/realm-export.json)
+//
+// Référence : ARCHITECTURE.md §6 « Modèle de données ».
 
 generator client {
   provider      = "prisma-client-js"
@@ -18,11 +20,106 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// Modèle bidon utilisé uniquement par `/v1/health` pour vérifier la connexion DB.
-/// Sera supprimé au Lot 1 quand les vraies tables arrivent.
-model HealthCheck {
-  id        Int      @id @default(autoincrement())
-  bootedAt  DateTime @default(now()) @map("booted_at")
+// ─────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────
 
-  @@map("health_check")
+enum UserRole {
+  producer
+  client_pro
+  client_particulier
+  admin
+  teleconsultant
+  super_admin
+
+  @@map("user_role")
+}
+
+enum UserStatus {
+  active
+  suspended
+  blacklisted
+
+  @@map("user_status")
+}
+
+enum PreferredLocale {
+  fr
+  wo // wolof
+  ff // pulaar
+
+  @@map("preferred_locale")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// users · identité MATA mappée vers Keycloak
+// ─────────────────────────────────────────────────────────────────
+
+model User {
+  id              String          @id @default(uuid()) @db.Uuid
+  keycloakId      String          @unique @map("keycloak_id")
+  email           String?         @unique
+  phone           String?         @unique
+  displayName     String          @map("display_name")
+  role            UserRole
+  status          UserStatus      @default(active)
+  preferredLocale PreferredLocale @default(fr) @map("preferred_locale")
+  lastLoginAt     DateTime?       @map("last_login_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  notificationPreferences NotificationPreference?
+  auditLogActor           AuditLog[]              @relation("audit_actor")
+  auditLogOnBehalfOf      AuditLog[]              @relation("audit_on_behalf_of")
+
+  @@index([role, status])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// audit_log · toutes les actions sensibles
+// ─────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id                 String   @id @default(uuid()) @db.Uuid
+  actorUserId        String   @map("actor_user_id") @db.Uuid
+  onBehalfOfUserId   String?  @map("on_behalf_of_user_id") @db.Uuid
+  action             String // ex: "offer.validate", "payout.trigger", "teleconsult.session.start"
+  targetType         String   @map("target_type") // ex: "offer", "order", "user"
+  targetId           String?  @map("target_id") // peut être null pour actions globales
+  oldValue           Json?    @map("old_value")
+  newValue           Json?    @map("new_value")
+  ipAddress          String?  @map("ip_address")
+  userAgent          String?  @map("user_agent")
+  requestId          String?  @map("request_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  // Relations
+  actor              User     @relation("audit_actor", fields: [actorUserId], references: [id])
+  onBehalfOf         User?    @relation("audit_on_behalf_of", fields: [onBehalfOfUserId], references: [id])
+
+  @@index([actorUserId, createdAt])
+  @@index([targetType, targetId])
+  @@index([onBehalfOfUserId, createdAt])
+  @@map("audit_log")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// notification_preferences · réservé Lot 7
+// ─────────────────────────────────────────────────────────────────
+
+model NotificationPreference {
+  userId     String   @id @map("user_id") @db.Uuid
+  // Préférences fines par catégorie d'événement, structure libre validée Zod
+  // au niveau service. ex: { order: true, pickup: true, payout: true }
+  categories Json     @default("{}")
+  pushEnabled Boolean @default(true) @map("push_enabled")
+  emailEnabled Boolean @default(true) @map("email_enabled")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
 }

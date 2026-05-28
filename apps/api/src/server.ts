@@ -2,6 +2,7 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import sensible from '@fastify/sensible';
+import { DomainError } from '@mata/shared/errors';
 import Fastify from 'fastify';
 import {
   serializerCompiler,
@@ -11,7 +12,26 @@ import {
 import { env } from './env.js';
 import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
+import { authPlugin, createKeycloakVerifier } from './modules/auth/index.js';
+import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
+
+function requireKeycloakConfig(): {
+  keycloakUrl: string;
+  realm: string;
+  audience: string;
+} {
+  if (!env.KEYCLOAK_URL || !env.KEYCLOAK_REALM || !env.KEYCLOAK_CLIENT_API_AUDIENCE) {
+    throw new Error(
+      'Keycloak config missing : KEYCLOAK_URL, KEYCLOAK_REALM et KEYCLOAK_CLIENT_API_AUDIENCE sont requis (hors NODE_ENV=test).',
+    );
+  }
+  return {
+    keycloakUrl: env.KEYCLOAK_URL,
+    realm: env.KEYCLOAK_REALM,
+    audience: env.KEYCLOAK_CLIENT_API_AUDIENCE,
+  };
+}
 
 async function buildServer(): Promise<void> {
   const app = Fastify({
@@ -35,10 +55,24 @@ async function buildServer(): Promise<void> {
     timeWindow: '1 minute',
   });
 
+  // Auth Keycloak — obligatoire dès le démarrage (refuse de booter sans).
+  const kcConfig = requireKeycloakConfig();
+  const verifier = createKeycloakVerifier(kcConfig);
+  await app.register(authPlugin, { verifier });
+
   await app.register(healthRoutes);
+  await app.register(authRoutes);
 
   app.setErrorHandler((err, req, reply) => {
     req.log.error({ err }, 'request.error');
+    if (err instanceof DomainError) {
+      return reply.code(err.statusCode).send({
+        error: err.code,
+        message: err.message,
+        details: err.details,
+        requestId: req.id,
+      });
+    }
     const statusCode = err.statusCode ?? 500;
     return reply.code(statusCode).send({
       error: err.name,
