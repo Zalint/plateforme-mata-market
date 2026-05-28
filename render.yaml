@@ -17,13 +17,13 @@ databases:
     plan: starter
     databaseName: mata
     user: mata
-    postgresMajorVersion: '16'
+    postgresMajorVersion: '18'
 
   - name: mata-keycloak-db
     plan: starter
     databaseName: keycloak
     user: keycloak
-    postgresMajorVersion: '16'
+    postgresMajorVersion: '18'
 
 services:
   # ────────────────────────────────────────────────────────────

@@ -13,7 +13,7 @@ name: mata-dev
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     container_name: mata-postgres
     restart: unless-stopped
     environment:
@@ -32,7 +32,7 @@ services:
 
   # Postgres séparé pour Keycloak (cf. ARCHITECTURE.md §2)
   keycloak-db:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     container_name: mata-keycloak-db
     restart: unless-stopped
     environment:

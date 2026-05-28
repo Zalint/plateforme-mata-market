@@ -24,13 +24,13 @@ Contexte d'exécution : Sénégal. Pas de RGPD applicable. Devise FCFA (XOF), en
 ### Backend
 - **Runtime** : Node.js 22 LTS
 - **Framework** : Fastify
-- **ORM** : Prisma
+- **ORM** : Prisma 7
 - **Validation** : Zod aux frontières (HTTP, env, webhooks)
 - **Logger** : pino (JSON structuré)
 - **Type provider** : `fastify-type-provider-zod`
 
 ### Base de données
-- **PostgreSQL 16** managé par Render (instance dédiée à MATA, instance séparée pour Keycloak)
+- **PostgreSQL 18** managé par Render (instance dédiée à MATA, instance séparée pour Keycloak)
 - Migrations versionnées via Prisma Migrate
 - Connection pool : `connection_limit=10` par instance API
 
