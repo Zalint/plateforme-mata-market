@@ -23,7 +23,7 @@ services:
     ports:
       - '5432:5432'
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U mata -d mata']
       interval: 5s
@@ -40,7 +40,7 @@ services:
       POSTGRES_PASSWORD: keycloak
       POSTGRES_DB: keycloak
     volumes:
-      - keycloak-db-data:/var/lib/postgresql/data
+      - keycloak-db-data:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U keycloak -d keycloak']
       interval: 5s

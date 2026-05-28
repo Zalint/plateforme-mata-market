@@ -35,7 +35,9 @@ function requireKeycloakConfig(): {
 
 async function buildServer(): Promise<void> {
   const app = Fastify({
-    logger,
+    // Fastify 5 : passer l'instance pino via `loggerInstance` (l'option
+    // `logger` accepte désormais uniquement un objet de configuration).
+    loggerInstance: logger,
     genReqId: () => `req_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
     disableRequestLogging: false,
     trustProxy: true,

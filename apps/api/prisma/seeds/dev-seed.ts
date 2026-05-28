@@ -10,9 +10,25 @@
  * Idempotent : utilise upsert sur `keycloak_id` pour pouvoir relancer sans
  * créer de doublons.
  */
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+// Charge le .env local pour récupérer DATABASE_URL (cf. src/env.ts).
+const envFile = resolve(process.cwd(), '.env');
+if (existsSync(envFile)) {
+  process.loadEnvFile(envFile);
+}
+
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is required to run the seed.');
+}
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: databaseUrl }),
+});
 
 const USERS = [
   {

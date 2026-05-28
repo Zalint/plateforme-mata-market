@@ -59,8 +59,22 @@ const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
+/**
+ * Normalise les chaînes vides en `undefined` AVANT validation Zod. Sinon
+ * `z.string().url().optional()` rejette `""` (string vide non valide en URL)
+ * au lieu de le traiter comme "non fourni". Pattern utile pour les `.env`
+ * où on laisse souvent des clés vides pour les intégrations pas encore prêtes.
+ */
+function normalizeEnv(raw: NodeJS.ProcessEnv): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    out[k] = v === '' ? undefined : v;
+  }
+  return out;
+}
+
 function parseEnv(): Env {
-  const parsed = envSchema.safeParse(process.env);
+  const parsed = envSchema.safeParse(normalizeEnv(process.env));
   if (!parsed.success) {
     const issues = parsed.error.issues
       .map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`)
