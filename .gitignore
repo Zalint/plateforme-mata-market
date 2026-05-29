@@ -15,9 +15,30 @@ desktop.ini
 # Old archives
 mockup.zip
 
-# Node (au cas où on ajoute du build plus tard)
+# Node / pnpm
 node_modules/
+.pnpm-store/
+
+# Build artefacts
 dist/
 build/
+.next/
+.turbo/
+coverage/
+*.tsbuildinfo
+
+# Prisma generated client
+**/prisma/generated/
+
+# Env files (jamais commit)
 .env
 .env.local
+.env.*.local
+!.env.example
+
+# Render local cache
+.render/
+
+# Scripts locaux (poste de Saliou, jamais commités)
+scripts/docker-reset.ps1
+

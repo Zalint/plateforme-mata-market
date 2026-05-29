@@ -1,0 +1,127 @@
+// Schéma Prisma · Lot 1
+//
+// 3 tables : users (identité MATA + mapping Keycloak), audit_log (toutes
+// actions sensibles), notification_preferences (réservé Lot 7 push).
+//
+// Conventions :
+//  - Tables Postgres en snake_case via @map, code TS en camelCase
+//  - Pas de soft-delete générique, statuts métier explicites
+//  - 6 rôles miroir du realm Keycloak (cf. infra/keycloak/realm-export.json)
+//
+// Référence : ARCHITECTURE.md §6 « Modèle de données ».
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+// Prisma 7 : la connection string passe désormais par `prisma.config.ts`
+// (pour Migrate) et par le `driverAdapter` côté client (cf. lib/prisma.ts).
+// Le bloc `datasource` ne déclare plus que le provider.
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  producer
+  client_pro
+  client_particulier
+  admin
+  teleconsultant
+  super_admin
+
+  @@map("user_role")
+}
+
+enum UserStatus {
+  active
+  suspended
+  blacklisted
+
+  @@map("user_status")
+}
+
+enum PreferredLocale {
+  fr
+  wo // wolof
+  ff // pulaar
+
+  @@map("preferred_locale")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// users · identité MATA mappée vers Keycloak
+// ─────────────────────────────────────────────────────────────────
+
+model User {
+  id              String          @id @default(uuid()) @db.Uuid
+  keycloakId      String          @unique @map("keycloak_id")
+  email           String?         @unique
+  phone           String?         @unique
+  displayName     String          @map("display_name")
+  role            UserRole
+  status          UserStatus      @default(active)
+  preferredLocale PreferredLocale @default(fr) @map("preferred_locale")
+  lastLoginAt     DateTime?       @map("last_login_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  notificationPreferences NotificationPreference?
+  auditLogActor           AuditLog[]              @relation("audit_actor")
+  auditLogOnBehalfOf      AuditLog[]              @relation("audit_on_behalf_of")
+
+  @@index([role, status])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// audit_log · toutes les actions sensibles
+// ─────────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id                 String   @id @default(uuid()) @db.Uuid
+  actorUserId        String   @map("actor_user_id") @db.Uuid
+  onBehalfOfUserId   String?  @map("on_behalf_of_user_id") @db.Uuid
+  action             String // ex: "offer.validate", "payout.trigger", "teleconsult.session.start"
+  targetType         String   @map("target_type") // ex: "offer", "order", "user"
+  targetId           String?  @map("target_id") // peut être null pour actions globales
+  oldValue           Json?    @map("old_value")
+  newValue           Json?    @map("new_value")
+  ipAddress          String?  @map("ip_address")
+  userAgent          String?  @map("user_agent")
+  requestId          String?  @map("request_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  // Relations
+  actor              User     @relation("audit_actor", fields: [actorUserId], references: [id])
+  onBehalfOf         User?    @relation("audit_on_behalf_of", fields: [onBehalfOfUserId], references: [id])
+
+  @@index([actorUserId, createdAt])
+  @@index([targetType, targetId])
+  @@index([onBehalfOfUserId, createdAt])
+  @@map("audit_log")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// notification_preferences · réservé Lot 7
+// ─────────────────────────────────────────────────────────────────
+
+model NotificationPreference {
+  userId     String   @id @map("user_id") @db.Uuid
+  // Préférences fines par catégorie d'événement, structure libre validée Zod
+  // au niveau service. ex: { order: true, pickup: true, payout: true }
+  categories Json     @default("{}")
+  pushEnabled Boolean @default(true) @map("push_enabled")
+  emailEnabled Boolean @default(true) @map("email_enabled")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
