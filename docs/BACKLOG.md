@@ -210,13 +210,27 @@ Décision prise en début de Lot 3 : repoussée au Lot 9 (cf. entrée active
 ## Setup local Keycloak
 
 Si la DB Keycloak est wipée (`docker compose down -v`), le realm `mata` doit
-être ré-importé manuellement via l'UI admin :
+être ré-importé via l'UI admin :
 
 1. http://localhost:8081/admin/master/console/ (login `admin`/`admin`)
 2. Create Realm → Browse → `infra/keycloak/realm-export.json`
-3. Recréer le user `mor.diop` (password `mata`, role `producer`).
-   Si son UUID Keycloak change, aligner avec :
-   `docker compose exec postgres psql -U mata -d mata -c "UPDATE users SET keycloak_id='<new-uuid>' WHERE display_name='Mor Diop';"`
+
+Depuis le Lot 3, le realm-export embarque deux users avec UUID stables
+et password `mata` (cf. `infra/keycloak/realm-export.json` § `users`) :
+
+| Username       | Role     | UUID Keycloak                          |
+|----------------|----------|----------------------------------------|
+| `mor.diop`     | producer | `6e426967-1bae-4280-8b7d-6597a020416c` |
+| `aissatou.sow` | admin    | `10a5b1c2-3d4e-4f56-8090-a1b2c3d4e5f6` |
+
+Les mêmes UUIDs sont câblés en dur dans `apps/api/prisma/seeds/dev-seed.ts`,
+donc un wipe complet (`docker compose down -v` + `pnpm db:seed` + re-import
+realm) restore un état fonctionnel sans manipulation manuelle SQL.
+
+Pour ajouter un user à postériori sans wipe (sans perdre l'UUID), passer
+par l'API admin avec `POST /admin/realms/mata/partialImport` et un body
+`{ "ifResourceExists": "OVERWRITE", "users": [{...avec id explicite...}] }`.
+Le POST direct sur `/users` ignore l'`id` fourni — partialImport le respecte.
 
 ## Port Keycloak sur cette machine
 
