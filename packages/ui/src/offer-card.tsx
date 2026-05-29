@@ -34,6 +34,8 @@ const STATUS_TONE: Record<OfferStatus, StatusTone> = {
   validated: 'success',
   rejected: 'danger',
   suspended: 'neutral',
+  reserved: 'info', // Lot 4 : stock épuisé temporairement
+  sold: 'neutral', // Lot 4 : épuisé définitivement
 };
 
 type OfferCardProps = {

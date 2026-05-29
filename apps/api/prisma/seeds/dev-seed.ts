@@ -45,16 +45,13 @@ const prisma = new PrismaClient({
 // Données
 
 // Les `keycloakId` ci-dessous correspondent aux `id` UUID définis dans
-// `infra/keycloak/realm-export.json` pour les users `mor.diop` (producer)
-// et `aissatou.sow` (admin). Tant qu'on importe le realm tel quel, les
-// UUIDs survivent aux wipes de la DB Keycloak (`docker compose down -v`).
+// `infra/keycloak/realm-export.json`. Tant qu'on importe le realm tel quel,
+// les UUIDs survivent aux wipes de la DB Keycloak (`docker compose down -v`).
 //
-// `la-calebasse` reste en stub (pas créé côté Keycloak car le mode invité
-// ou client_pro n'a pas encore d'écran de login utilisable au Lot 2-3).
-//
-// Identifiants de login (dev local) :
-//   mor.diop      / mata  → role producer
-//   aissatou.sow  / mata  → role admin
+// Identifiants de login (dev local, password commun `mata`) :
+//   mor.diop           / mata  → role producer
+//   aissatou.sow       / mata  → role admin
+//   lacalebasse.client / mata  → role client_pro
 const USERS = [
   {
     keycloakId: '6e426967-1bae-4280-8b7d-6597a020416c',
@@ -64,7 +61,7 @@ const USERS = [
     role: UserRole.producer,
   },
   {
-    keycloakId: 'dev:client_pro:la-calebasse',
+    keycloakId: '20a5b1c2-3d4e-4f56-8090-a1b2c3d4e5f6',
     email: 'contact@lacalebasse.sn',
     phone: '+221338691234',
     displayName: 'Resto La Calebasse',

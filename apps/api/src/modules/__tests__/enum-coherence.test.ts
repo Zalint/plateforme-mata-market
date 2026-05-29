@@ -10,8 +10,10 @@
  * Référence : ARCHITECTURE.md §6, CLAUDE.md §G2.
  */
 import {
+  DELIVERY_PERIODS,
   OFFER_STATUSES,
   OFFER_UNITS,
+  ORDER_STATUSES,
   PRICING_BASES,
   PRICING_MODELS,
   PRICING_SCOPES,
@@ -21,8 +23,10 @@ import {
   SITE_TYPES,
 } from '@mata/shared/constants';
 import {
+  DeliveryPeriod,
   OfferStatus,
   OfferUnit,
+  OrderStatus,
   PricingBase,
   PricingModel,
   PricingScope,
@@ -64,5 +68,11 @@ describe('Coherence enums Prisma ↔ @mata/shared/constants', () => {
   });
   it('PricingBase', () => {
     expect(valuesOf(PricingBase)).toEqual([...PRICING_BASES].sort());
+  });
+  it('OrderStatus', () => {
+    expect(valuesOf(OrderStatus)).toEqual([...ORDER_STATUSES].sort());
+  });
+  it('DeliveryPeriod', () => {
+    expect(valuesOf(DeliveryPeriod)).toEqual([...DELIVERY_PERIODS].sort());
   });
 });

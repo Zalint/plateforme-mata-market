@@ -58,28 +58,42 @@ exacts où ces dettes sont marquées en commentaire inline.
   consultable hors UI.
 - **Risque si non traité** : friction admin pour traçabilité. Pas bloquant.
 
-## [lot-2→lot-4] OfferStatus `reserved` et `sold` non créés
-
-- **Découvert** : Lot 2 (périmètre strict CLAUDE.md §E.4)
-- **Cible** : Lot 4 (orders)
-- **Pourquoi reporté** : aucune transition au Lot 2 ne les emprunte. Les
-  créer maintenant introduit du "code mort" et bloque le contrôle d'enum
-  cohérence (cf. `enum-coherence.test.ts`).
-- **Fichiers** : apps/api/prisma/schema.prisma:117-128 (commentaire inline)
-  + packages/shared/src/constants/enums.ts:78-89
-- **Garde-fou actuel** : tableau `[reserved · 1]` du mockup producer/offers
-  est vide au Lot 2 (acceptable car pas d'orders encore).
-- **Risque si non traité** : migration enum dédiée à prévoir Lot 4.
-
-## [lot-2→lot-4] Note moyenne producteur (★ 4.8 dans mockup) absente
+## [lot-2→lot-9] Note moyenne producteur (★ 4.8 dans mockup) absente
 
 - **Découvert** : Lot 2 (le mockup affiche `★ 4.8`)
-- **Cible** : Lot 4 (orders + reviews) ou Lot 9
-- **Pourquoi reporté** : pas de signal métier pour calculer une note tant
-  qu'on n'a pas de reviews post-livraison.
+- **Cible** : Lot 9 (post-reviews, repoussée Lot 4 → Lot 9 le 2026-05-30)
+- **Pourquoi reporté** : décision en début Lot 4 — il n'y a pas de reviews
+  post-livraison au Lot 4 (les orders se terminent à `delivered`, pas de
+  table reviews). Mettre un proxy basé sur le ratio livré/total tromperait
+  les clients. Le placeholder UI reste, l'entrée se traite Lot 9 quand la
+  feature reviews (post-livraison) sera spécifiée.
 - **Fichiers** : packages/ui/src/offer-card.tsx (UI placeholder "—")
 - **Garde-fou actuel** : aucun, juste placeholder.
 - **Risque si non traité** : différence visible avec mockup, à expliquer.
+
+## [lot-4→lot-5] `orders.payment_status` est un stub TEXT
+
+- **Découvert** : Lot 4 (modèle orders)
+- **Cible** : Lot 5 (intégration Bictorys)
+- **Pourquoi reporté** : Lot 4 livre le cycle de vie complet sans paiement.
+  Le champ `payment_status` est un TEXT borné par CHECK constraint à 4 valeurs
+  (`pending`, `paid`, `refunded`, `disputed`), seul `pending` est utilisé.
+  Lot 5 introduira un enum dédié + la logique webhook Bictorys.
+- **Fichiers** : apps/api/prisma/schema.prisma (model Order, paymentStatus)
+- **Garde-fou actuel** : CHECK constraint DB borne les valeurs autorisées.
+- **Risque si non traité** : migration enum à prévoir Lot 5.
+
+## [lot-4→lot-9] Cron cleanup `idempotency_records` TTL 24h
+
+- **Découvert** : Lot 4 (table idempotency_records)
+- **Cible** : Lot 9 (cron jobs Render)
+- **Pourquoi reporté** : la table grossit lentement (1 row par order créé).
+  Pas critique au MVP. Le cron sera ajouté avec les autres crons Render
+  (cleanup-expired-teleconsult, retry-outbox, process-payouts).
+- **Fichiers** : apps/api/src/modules/orders/idempotency.ts (commentaire),
+  apps/api/prisma/schema.prisma (model IdempotencyRecord, index createdAt)
+- **Garde-fou actuel** : index `created_at` posé pour permettre un cron rapide.
+- **Risque si non traité** : croissance lente (~30 rows/mois MVP), pas bloquant.
 
 ## [lot-2→lot-7] Coordonnées centroid_lat/lng des zones laissées NULL
 
@@ -202,6 +216,23 @@ exacts où ces dettes sont marquées en commentaire inline.
 
 Décision prise en début de Lot 3 : repoussée au Lot 9 (cf. entrée active
 `[lot-2→lot-9]` ci-dessus). Reformulation explicite plutôt que double-traitement.
+
+## [lot-2→lot-4] OfferStatus `reserved` et `sold` — résolue 2026-05-30 (Lot 4)
+
+Les deux valeurs ont été ajoutées à l'enum `OfferStatus` (cf. migration
+`lot4_orders` + commentaire schema.prisma). Transitions automatiques en
+service `orderService` :
+- `validated → reserved` quand `quantityReserved === quantity` après create
+- `reserved → validated` quand un cancel libère assez de stock
+- `sold` réservé Lot 5/9 (transition manuelle post-livraison définitive,
+  pas encore déclenchée automatiquement).
+
+L'enum-coherence test couvre les 7 valeurs OfferStatus.
+
+## [lot-2→lot-4] Note moyenne producteur — repoussée Lot 9 (Lot 4)
+
+Décision : pas de reviews au Lot 4, repoussée vers Lot 9 (cf. entrée active
+`[lot-2→lot-9]` Note moyenne producteur).
 
 ---
 

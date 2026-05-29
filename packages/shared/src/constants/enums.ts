@@ -78,10 +78,11 @@ export const SITE_VEHICLE_ACCESS_LABEL_FR: Record<SiteVehicleAccess, string> = {
 export const OFFER_STATUSES = [
   'draft', // brouillon producteur, modifiable
   'pending', // soumise à MATA pour validation
-  'validated', // visible au catalogue
+  'validated', // visible au catalogue, stock dispo
   'rejected', // refusée par MATA
   'suspended', // masquée par admin ou producteur
-  // Lot 2 : `reserved` / `sold` volontairement omis, ajoutés au Lot 4 (orders).
+  'reserved', // Lot 4 : stock épuisé temporairement (un cancel peut revenir validated)
+  'sold', // Lot 4 : épuisé définitivement (tout livré, retiré catalogue)
 ] as const;
 export type OfferStatus = (typeof OFFER_STATUSES)[number];
 
@@ -91,6 +92,8 @@ export const OFFER_STATUS_LABEL_FR: Record<OfferStatus, string> = {
   validated: 'Validée',
   rejected: 'Refusée',
   suspended: 'Suspendue',
+  reserved: 'Réservée',
+  sold: 'Vendue',
 };
 
 export const OFFER_UNITS = ['unit', 'kg', 'tray', 'crate', 'head'] as const;
@@ -194,4 +197,67 @@ export const PRICING_COMPONENT_LABEL_FR: Record<PricingComponentKey, string> = {
   storage: 'Coût stockage',
   safetyMargin: 'Marge sécurité',
   discount: 'Remise',
+};
+
+// ─────────────────────────────────────────────────────────────────
+// Orders (Lot 4)
+
+// Cycle nominal 7 étapes + cancelled. Statuts "lateral" payment_pending
+// et disputed réservés Lot 5 (paiements Bictorys).
+export const ORDER_STATUSES = [
+  'created', // panier validé, en attente confirmation MATA
+  'confirmed', // MATA accepte, producteurs notifiés, stock réservé
+  'collecting', // MLC en tournée chez les producteurs
+  'collected', // tous les items récupérés, en route vers dépôt
+  'stored', // entrée chambre froide, en attente tournée livraison
+  'delivering', // livreur en route vers client
+  'delivered', // client a confirmé la réception, déclenche reversement
+  'cancelled', // annulée client (avant collecte) OU MATA (rupture, problème)
+] as const;
+export type OrderStatus = (typeof ORDER_STATUSES)[number];
+
+export const ORDER_STATUS_LABEL_FR: Record<OrderStatus, string> = {
+  created: 'Créée',
+  confirmed: 'Confirmée',
+  collecting: 'En collecte',
+  collected: 'Collectée',
+  stored: 'Stockée',
+  delivering: 'En livraison',
+  delivered: 'Livrée',
+  cancelled: 'Annulée',
+};
+
+// Matrice des transitions valides. Source de vérité du state-machine guard
+// côté service (order-service.ts) et de l'UI (boutons disabled selon status).
+//
+//   created    → confirmed | cancelled
+//   confirmed  → collecting | cancelled
+//   collecting → collected
+//   collected  → stored
+//   stored     → delivering
+//   delivering → delivered
+//   delivered  → (terminal)
+//   cancelled  → (terminal)
+export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
+  created: ['confirmed', 'cancelled'],
+  confirmed: ['collecting', 'cancelled'],
+  collecting: ['collected'],
+  collected: ['stored'],
+  stored: ['delivering'],
+  delivering: ['delivered'],
+  delivered: [],
+  cancelled: [],
+};
+
+export function isValidOrderTransition(from: OrderStatus, to: OrderStatus): boolean {
+  return ORDER_TRANSITIONS[from].includes(to);
+}
+
+// Créneau livraison (cf. §I glossaire).
+export const DELIVERY_PERIODS = ['morning', 'afternoon'] as const;
+export type DeliveryPeriod = (typeof DELIVERY_PERIODS)[number];
+
+export const DELIVERY_PERIOD_LABEL_FR: Record<DeliveryPeriod, string> = {
+  morning: 'Matin (6h–12h)',
+  afternoon: 'Après-midi (14h–18h)',
 };
