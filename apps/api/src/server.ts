@@ -15,6 +15,7 @@ import { prisma } from './lib/prisma.js';
 import { authPlugin, createKeycloakVerifier } from './modules/auth/index.js';
 import { catalogRoutes } from './modules/catalog/index.js';
 import { offerRoutes } from './modules/offers/index.js';
+import { pricingRoutes } from './modules/pricing/index.js';
 import { producerRoutes } from './modules/producers/index.js';
 import { siteRoutes } from './modules/sites/index.js';
 import { uploadsRoutes } from './modules/uploads/index.js';
@@ -75,6 +76,7 @@ async function buildServer(): Promise<void> {
   await app.register(siteRoutes);
   await app.register(offerRoutes);
   await app.register(catalogRoutes);
+  await app.register(pricingRoutes);
   await app.register(uploadsRoutes);
 
   app.setErrorHandler((err, req, reply) => {

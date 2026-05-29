@@ -24,6 +24,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: 'layout-dashboard' },
   { href: '/admin/producers', label: 'Producteurs', icon: 'users' },
   { href: '/admin/offers', label: 'Validation offres', icon: 'badge-check' },
+  { href: '/admin/pricing', label: 'Pricing', icon: 'calculator' },
 ];
 
 /**

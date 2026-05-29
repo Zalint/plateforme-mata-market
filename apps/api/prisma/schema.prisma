@@ -1,4 +1,4 @@
-// Schéma Prisma · Lot 1 + Lot 2
+// Schéma Prisma · Lot 1 + Lot 2 + Lot 3
 //
 // Lot 1 — identité & audit :
 //  - users                       identité MATA + mapping Keycloak
@@ -12,11 +12,20 @@
 //  - offers                      offres produit + workflow validation
 //  - offer_photos                photos d'offre via Cloudinary public_id
 //
+// Lot 3 — pricing 7 composantes :
+//  - pricing_rules               règles configurables (par catégorie OU override par offre)
+//                                4 modèles économiques × 3 bases pct (producer / final / subtotal)
+//  - pricing_snapshots           fige les 7 composantes par order_item au moment de la commande
+//                                IMMUABLE après création (invariant comptable, cf. CLAUDE.md §G4)
+//                                Lot 3 : table créée SANS FK vers order_items (table absente).
+//                                Lot 4 : ajoutera order_items.pricing_snapshot_id (1:1 inverse).
+//
 // Conventions :
 //  - Tables Postgres en snake_case via @map, code TS en camelCase
 //  - Pas de soft-delete générique, statuts métier explicites
 //  - 6 rôles miroir du realm Keycloak (cf. infra/keycloak/realm-export.json)
 //  - bank_details (jsonb) chiffré applicatif AES-256-GCM côté service avant insertion
+//  - FCFA en entiers, pourcentages en entiers (0-100), jamais Decimal/Float
 //
 // Référence : ARCHITECTURE.md §6 « Modèle de données ».
 
@@ -136,6 +145,36 @@ enum OfferUnit {
   head // tête (bovin/ovin sur pied)
 
   @@map("offer_unit")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Enums · Lot 3 (pricing)
+// ─────────────────────────────────────────────────────────────────
+
+enum PricingModel {
+  commission_pct // commission = pct × base, marge fixe ignorée
+  fixed_margin // commission = montant FCFA fixe par unité, pct ignoré
+  mixed // commission = pct × base + montant fixe
+  negotiated // équivalent à fixed_margin côté math, étiquette métier "gros volume négocié"
+
+  @@map("pricing_model")
+}
+
+enum PricingScope {
+  category // règle par défaut pour une product_category
+  offer // override pour une offre précise (priorité sur category)
+
+  @@map("pricing_scope")
+}
+
+// Sur quelle base les pourcentages (commission %, marge sécurité %) s'appliquent.
+// Choix par champ (commission_base, safety_margin_base) → 9 combinaisons possibles.
+enum PricingBase {
+  producer_price // base = prix producteur (simple, recommandé MVP)
+  final_price // base = prix final client (formule circulaire, résolue algébriquement)
+  subtotal_pre_pct // base = producer + collecte + livraison + storage (compromis)
+
+  @@map("pricing_base")
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -294,21 +333,21 @@ model ProducerProfile {
 // ─────────────────────────────────────────────────────────────────
 
 model ProductionSite {
-  id            String     @id @default(uuid()) @db.Uuid
-  producerUserId    String     @map("producer_user_id") @db.Uuid
-  name          String // "Poulailler Pout 1"
-  type          SiteType
-  status        SiteStatus @default(active)
-  zoneId        String     @map("zone_id") @db.Uuid
-  addressLine   String?    @map("address_line") // rue / lieu-dit (libre)
-  geoLat        Float?     @map("geo_lat")
-  geoLng        Float?     @map("geo_lng")
-  vehicleAccess String?    @map("vehicle_access") // "moto", "tricycle", "utilitaire", "camion"
-  contactName   String?    @map("contact_name")
-  contactPhone  String?    @map("contact_phone")
-  pickupHours   String?    @map("pickup_hours") // "Matin · 6h-10h" (texte libre MVP)
-  createdAt     DateTime   @default(now()) @map("created_at")
-  updatedAt     DateTime   @updatedAt @map("updated_at")
+  id             String     @id @default(uuid()) @db.Uuid
+  producerUserId String     @map("producer_user_id") @db.Uuid
+  name           String // "Poulailler Pout 1"
+  type           SiteType
+  status         SiteStatus @default(active)
+  zoneId         String     @map("zone_id") @db.Uuid
+  addressLine    String?    @map("address_line") // rue / lieu-dit (libre)
+  geoLat         Float?     @map("geo_lat")
+  geoLng         Float?     @map("geo_lng")
+  vehicleAccess  String?    @map("vehicle_access") // "moto", "tricycle", "utilitaire", "camion"
+  contactName    String?    @map("contact_name")
+  contactPhone   String?    @map("contact_phone")
+  pickupHours    String?    @map("pickup_hours") // "Matin · 6h-10h" (texte libre MVP)
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
 
   // Relations
   producer ProducerProfile @relation(fields: [producerUserId], references: [userId], onDelete: Cascade)
@@ -336,7 +375,7 @@ model ProductionSite {
 
 model Offer {
   id               String          @id @default(uuid()) @db.Uuid
-  producerUserId       String          @map("producer_user_id") @db.Uuid
+  producerUserId   String          @map("producer_user_id") @db.Uuid
   siteId           String          @map("site_id") @db.Uuid
   category         ProductCategory
   status           OfferStatus     @default(draft)
@@ -361,9 +400,10 @@ model Offer {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  producer ProducerProfile @relation(fields: [producerUserId], references: [userId], onDelete: Cascade)
-  site     ProductionSite  @relation(fields: [siteId], references: [id], onDelete: Restrict)
-  photos   OfferPhoto[]
+  producer     ProducerProfile @relation(fields: [producerUserId], references: [userId], onDelete: Cascade)
+  site         ProductionSite  @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  photos       OfferPhoto[]
+  pricingRules PricingRule[] // Lot 3 : overrides éventuels pour cette offre
 
   @@index([producerUserId, status])
   @@index([category, status, createdAt(sort: Desc)])
@@ -390,4 +430,122 @@ model OfferPhoto {
 
   @@index([offerId, position])
   @@map("offer_photos")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// pricing_rules · règles configurables des 7 composantes (Lot 3)
+//
+// Scope :
+//  - `category` : rule par défaut pour une product_category (category NOT NULL, offer_id NULL)
+//  - `offer`    : override pour une offre précise   (category NULL, offer_id NOT NULL)
+// Contrainte XOR posée en SQL (CHECK constraint dans la migration).
+//
+// 4 modèles économiques (cf. mockup §2615 + ARCHITECTURE.md §6) :
+//  - commission_pct  : commission = base × commission_pct / 100
+//  - fixed_margin    : commission = commission_flat_fcfa (par unité)
+//  - mixed           : commission = base × pct / 100 + flat
+//  - negotiated      : équivalent fixed_margin côté math, étiquette métier
+//
+// Pourcentages stockés en entiers (0-100). Bases pct configurables par champ
+// (producer_price / final_price / subtotal_pre_pct) pour permettre de tester
+// les modèles économiques sans redéploiement.
+//
+// Lookup actif : findActiveRule(offerId, category, atDate) :
+//   1. Cherche override `offer` (offer_id = X, validFrom <= at, validUntil null OR >= at) — prioritaire
+//   2. Fallback rule `category` (category = X, mêmes filtres validité)
+//   3. Plusieurs rules valides → la plus récente (validFrom desc)
+// ─────────────────────────────────────────────────────────────────
+
+model PricingRule {
+  id       String           @id @default(uuid()) @db.Uuid
+  scope    PricingScope
+  // XOR : exactement un des deux non-null. Enforce par CHECK constraint (migration SQL).
+  category ProductCategory?
+  offerId  String?          @map("offer_id") @db.Uuid
+
+  model PricingModel
+
+  // Composantes "%" — stockées en entiers 0-100. Default 0 = inactif.
+  commissionPct      Int         @default(0) @map("commission_pct")
+  commissionBase     PricingBase @default(producer_price) @map("commission_base")
+  commissionFlatFcfa Int         @default(0) @map("commission_flat_fcfa")
+
+  safetyMarginPct  Int         @default(0) @map("safety_margin_pct")
+  safetyMarginBase PricingBase @default(producer_price) @map("safety_margin_base")
+
+  // Composantes fixes par unité (FCFA entier)
+  collectionFcfa Int @default(0) @map("collection_fcfa")
+  deliveryFcfa   Int @default(0) @map("delivery_fcfa")
+  storageFcfa    Int @default(0) @map("storage_fcfa")
+  discountFcfa   Int @default(0) @map("discount_fcfa")
+
+  // Période de validité. validFrom obligatoire (default now), validUntil nullable (ouvert).
+  validFrom  DateTime  @default(now()) @map("valid_from")
+  validUntil DateTime? @map("valid_until")
+
+  // Acteurs (audit_log écrit en plus côté service pour pricing.rule.update)
+  createdBy String  @map("created_by") @db.Uuid
+  updatedBy String? @map("updated_by") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  offer     Offer?            @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  snapshots PricingSnapshot[]
+
+  @@index([category, validFrom(sort: Desc)])
+  @@index([offerId, validFrom(sort: Desc)])
+  @@map("pricing_rules")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// pricing_snapshots · 7 composantes figées par unité (Lot 3)
+//
+// IMMUABLE après création (invariant comptable, cf. CLAUDE.md §G4).
+// Pas de @updatedAt volontaire. Aucune route UPDATE/DELETE exposée.
+// Le service interdit explicitement toute mutation (cf. pricing-snapshot-service.ts).
+//
+// Toutes les valeurs sont stockées PAR UNITÉ + quantity. Le total ligne
+// est obtenu en multipliant à l'affichage. Cela évite les drifts d'arrondi
+// si la quantité change en cours de cycle (en réalité Lot 4 impose qty figée
+// à la commande, mais le snapshot reste "par unité" pour faciliter les tests
+// d'invariant).
+//
+// Invariant comptable testé :
+//   producer_share_fcfa + platform_share_fcfa === final_price_fcfa
+//
+// Lot 4 ajoutera order_items.pricing_snapshot_id (FK 1:1 inverse).
+// ─────────────────────────────────────────────────────────────────
+
+model PricingSnapshot {
+  id        String       @id @default(uuid()) @db.Uuid
+  modelUsed PricingModel @map("model_used")
+
+  // 7 composantes figées (par unité, en FCFA entier)
+  producerPriceFcfa Int @map("producer_price_fcfa")
+  commissionFcfa    Int @map("commission_fcfa")
+  collectionFcfa    Int @map("collection_fcfa")
+  deliveryFcfa      Int @map("delivery_fcfa")
+  storageFcfa       Int @map("storage_fcfa")
+  safetyMarginFcfa  Int @map("safety_margin_fcfa")
+  discountFcfa      Int @map("discount_fcfa")
+
+  // Totaux par unité
+  finalPriceFcfa    Int @map("final_price_fcfa")
+  producerShareFcfa Int @map("producer_share_fcfa")
+  platformShareFcfa Int @map("platform_share_fcfa")
+
+  quantity Int // multiplication pour total ligne
+
+  // Référence à la rule utilisée. Nullable pour ne pas bloquer la suppression
+  // future éventuelle de la rule (le snapshot reste comptablement valide tel quel).
+  pricingRuleId String? @map("pricing_rule_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  pricingRule PricingRule? @relation(fields: [pricingRuleId], references: [id], onDelete: SetNull)
+
+  @@index([pricingRuleId, createdAt(sort: Desc)])
+  @@map("pricing_snapshots")
 }

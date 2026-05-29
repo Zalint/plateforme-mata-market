@@ -12,6 +12,9 @@
 import {
   OFFER_STATUSES,
   OFFER_UNITS,
+  PRICING_BASES,
+  PRICING_MODELS,
+  PRICING_SCOPES,
   PRODUCER_STATUSES,
   PRODUCER_TYPES,
   SITE_STATUSES,
@@ -20,6 +23,9 @@ import {
 import {
   OfferStatus,
   OfferUnit,
+  PricingBase,
+  PricingModel,
+  PricingScope,
   ProducerStatus,
   ProducerType,
   SiteStatus,
@@ -49,5 +55,14 @@ describe('Coherence enums Prisma ↔ @mata/shared/constants', () => {
   });
   it('OfferUnit', () => {
     expect(valuesOf(OfferUnit)).toEqual([...OFFER_UNITS].sort());
+  });
+  it('PricingModel', () => {
+    expect(valuesOf(PricingModel)).toEqual([...PRICING_MODELS].sort());
+  });
+  it('PricingScope', () => {
+    expect(valuesOf(PricingScope)).toEqual([...PRICING_SCOPES].sort());
+  });
+  it('PricingBase', () => {
+    expect(valuesOf(PricingBase)).toEqual([...PRICING_BASES].sort());
   });
 });

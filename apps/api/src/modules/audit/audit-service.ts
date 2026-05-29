@@ -44,6 +44,7 @@ export type AuditAction =
   | 'teleconsult.session.end'
   | 'teleconsult.session.action_forbidden'
   // Pricing
+  | 'pricing.rule.create'
   | 'pricing.rule.update'
   // Coordonnées bancaires
   | 'producer.bank_details.update'

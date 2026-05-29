@@ -29,18 +29,34 @@ exacts où ces dettes sont marquées en commentaire inline.
 
 # En cours
 
-## [lot-2→lot-3] Édition champs cosmétiques d'une offre validée
+## [lot-2→lot-9] Édition champs cosmétiques d'une offre validée
 
 - **Découvert** : Lot 2 (décision figée plan d'attaque)
-- **Cible** : Lot 3 ou plus tard si demandé
-- **Pourquoi reporté** : pour le MVP on bloque tout PATCH hors `draft`.
-  Modifier prix/qty/site d'une offre validée présente des risques de race
-  condition avec les orders (Lot 4). Éditer juste le `qualityNote` ou
-  réorganiser les photos serait safe et UX utile.
+- **Cible** : Lot 9 durcissement UX (repoussée Lot 3 → Lot 9 le 2026-05-29)
+- **Pourquoi reporté** : décision en début Lot 3 — le scope du Lot 3 est pur
+  pricing. Mélanger l'édition cosmétique offre (préoccupation offers) avec
+  les règles pricing ajouterait du scope sans bénéfice métier. Le workaround
+  (suspend → recréer) reste utilisable. La race condition citée au Lot 2
+  pourra être abordée au Lot 9 quand les orders (Lot 4) seront stables et
+  qu'on aura une vraie politique de verrouillage.
 - **Fichiers** : apps/api/src/modules/offers/offer-service.ts:152-156
   (refus 409 CONFLICT)
 - **Garde-fou actuel** : producteur peut suspend → créer nouvelle offre.
 - **Risque si non traité** : friction UX mineure pour le producteur.
+
+## [lot-3→lot-9] Bouton "Historique" /admin/pricing désactivé
+
+- **Découvert** : Lot 3 (page admin/pricing)
+- **Cible** : Lot 9 durcissement UX
+- **Pourquoi reporté** : l'historique des modifications d'une rule existe
+  déjà dans `audit_log` (`pricing.rule.create` + `pricing.rule.update`).
+  Ce qui manque c'est l'écran qui les liste : timeline `targetType='pricing_rule'`,
+  diff oldValue/newValue. Hors scope MVP — `audit_log` reste consultable
+  via Prisma Studio ou requête SQL en attendant.
+- **Fichiers** : apps/web/app/(chromed)/admin/pricing/page.tsx (bouton disabled)
+- **Garde-fou actuel** : audit_log écrit pour chaque create/update,
+  consultable hors UI.
+- **Risque si non traité** : friction admin pour traçabilité. Pas bloquant.
 
 ## [lot-2→lot-4] OfferStatus `reserved` et `sold` non créés
 
@@ -182,8 +198,10 @@ exacts où ces dettes sont marquées en commentaire inline.
 
 # Résolues
 
-(Vide pour le moment — les fixes Lot 2 ont été appliqués dans la même PR
-et sont visibles dans le commit, pas besoin de les recopier ici.)
+## [lot-2→lot-3] Édition cosmétique offre validée — résolue 2026-05-29 (Lot 3)
+
+Décision prise en début de Lot 3 : repoussée au Lot 9 (cf. entrée active
+`[lot-2→lot-9]` ci-dessus). Reformulation explicite plutôt que double-traitement.
 
 ---
 
