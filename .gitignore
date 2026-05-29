@@ -41,4 +41,5 @@ coverage/
 
 # Scripts locaux (poste de Saliou, jamais commités)
 scripts/docker-reset.ps1
+scriptForMeToIgnore.txt
 
