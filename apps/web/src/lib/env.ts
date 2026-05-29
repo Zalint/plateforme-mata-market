@@ -21,6 +21,10 @@ const envSchema = z.object({
   NEXT_PUBLIC_KEYCLOAK_URL: z.string().url(),
   NEXT_PUBLIC_KEYCLOAK_REALM: z.string().min(1),
   NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: z.string().min(1).default('mata-web'),
+  // URL de l'API métier MATA exposée au navigateur (CORS configuré côté API).
+  NEXT_PUBLIC_API_BASE_URL: z.string().url().default('http://localhost:4000'),
+  // Nom du compte Cloudinary pour construire les URLs publiques d'image.
+  NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -36,6 +40,8 @@ function parseEnv(): Env {
     NEXT_PUBLIC_KEYCLOAK_URL: process.env.NEXT_PUBLIC_KEYCLOAK_URL,
     NEXT_PUBLIC_KEYCLOAK_REALM: process.env.NEXT_PUBLIC_KEYCLOAK_REALM,
     NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID,
+    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL,
+    NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
   });
   if (!parsed.success) {
     const issues = parsed.error.issues

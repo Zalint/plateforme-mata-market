@@ -62,12 +62,14 @@ Toute déviation requiert une mise à jour explicite de `ARCHITECTURE.md` dans l
 ## F. Workflow agent
 
 1. Lis les fichiers concernés et les sections pertinentes de `ARCHITECTURE.md`
-2. Sur tâche non triviale, produis un plan et attends validation
-3. Écris en respectant les conventions du repo
-4. Génère les tests en même temps que le code
-5. Lance `pnpm typecheck && pnpm biome check . && pnpm test` avant de présenter
-6. Résume : fichiers touchés, décisions, tests, risques
-7. Marque les zones d'incertitude au lieu de les masquer
+2. **Lis `docs/BACKLOG.md` et cherche les entrées `[lot-X→lot-courant]`.** Traite-les dans le lot courant OU explicite pourquoi tu les repousses encore (en mettant à jour l'entrée). Toute dette nouvelle découverte pendant le lot doit y être consignée AVANT d'être présentée comme "risque résiduel".
+3. Sur tâche non triviale, produis un plan et attends validation
+4. Écris en respectant les conventions du repo
+5. Génère les tests en même temps que le code
+6. Lance `pnpm typecheck && pnpm biome check . && pnpm test` avant de présenter
+7. Résume : fichiers touchés, décisions, tests, risques
+8. Marque les zones d'incertitude au lieu de les masquer
+9. **À la fin du lot**, met à jour `docs/BACKLOG.md` (déplace les entrées traitées vers `## Résolues` avec date + lot)
 
 ## G. Règles par domaine
 

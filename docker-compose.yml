@@ -65,7 +65,11 @@ services:
       KC_HTTP_ENABLED: 'true'
       KC_HEALTH_ENABLED: 'true'
     ports:
-      - '8080:8080'
+      # Port hôte 8081 (8080 squatté par EnterpriseDB/Apache local sur cette
+      # machine dev). Le container expose toujours 8080 en interne. Si tu
+      # n'as pas EDB, repasse à 8080:8080 — il faudra aligner les env vars
+      # KEYCLOAK_URL côté apps/api/.env et apps/web/.env.local.
+      - '8081:8080'
     volumes:
       - ./infra/keycloak:/opt/keycloak/data/import:ro
     depends_on:

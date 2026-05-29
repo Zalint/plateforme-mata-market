@@ -13,10 +13,17 @@ type SidebarProps = {
 
 type NavItem = { href: string; label: string; icon: IconName };
 
-const PRODUCER_NAV: NavItem[] = [{ href: '/producer/home', label: 'Accueil', icon: 'home' }];
+const PRODUCER_NAV: NavItem[] = [
+  { href: '/producer/home', label: 'Accueil', icon: 'home' },
+  { href: '/producer/offers', label: 'Mes offres', icon: 'package' },
+  { href: '/producer/sites', label: 'Mes sites', icon: 'map-pin' },
+  { href: '/producer/setup', label: 'Mon profil', icon: 'user' },
+];
 const CLIENT_NAV: NavItem[] = [{ href: '/client/catalog', label: 'Catalogue', icon: 'grid-2x2' }];
 const ADMIN_NAV: NavItem[] = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: 'layout-dashboard' },
+  { href: '/admin/producers', label: 'Producteurs', icon: 'users' },
+  { href: '/admin/offers', label: 'Validation offres', icon: 'badge-check' },
 ];
 
 /**

@@ -22,6 +22,12 @@ export type AuditAction =
   | 'offer.validate'
   | 'offer.reject'
   | 'offer.suspend'
+  | 'offer.reactivate'
+  | 'offer.submit'
+  // Sites
+  | 'site.create'
+  | 'site.update'
+  | 'site.archive'
   // Commandes
   | 'order.create'
   | 'order.confirm'

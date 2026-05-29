@@ -50,7 +50,25 @@ const envSchema = z.object({
   VAPID_PRIVATE_KEY: z.string().optional(),
   VAPID_SUBJECT: z.string().optional(),
 
-  ENCRYPTION_KEY: z.string().optional(),
+  // Clé AES-256-GCM en base64 (32 bytes décodés). Requise pour chiffrer
+  // bank_details (Lot 2). Optionnelle en NODE_ENV=test pour permettre aux
+  // tests unitaires de tourner sans la setter ; les tests qui en ont besoin
+  // passent par `encryptWithKey`/`decryptWithKey` avec une clé jetable.
+  //
+  // Générer une clé : `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`
+  ENCRYPTION_KEY: z
+    .string()
+    .refine(
+      (val) => {
+        try {
+          return Buffer.from(val, 'base64').length === 32;
+        } catch {
+          return false;
+        }
+      },
+      { message: 'ENCRYPTION_KEY doit décoder en 32 bytes base64' },
+    )
+    .optional(),
 
   HCAPTCHA_SECRET: z.string().optional(),
 
