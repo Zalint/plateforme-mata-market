@@ -127,6 +127,34 @@ exacts où ces dettes sont marquées en commentaire inline.
   les requêtes admin (filtre "active"). Pas de surface sécurité car le
   plugin auth bloque l'usage.
 
+## [lot-6→lot-9] Audit `offer.*` lors d'une délégation téléconseil — actor distinct
+
+- **Découvert** : Lot 6 E2E approfondi (POST /v1/offers via ibrahima en
+  session déléguée → audit `offer.create` avec `actor_user_id = mor` au lieu
+  de `actor = ibrahima` + `on_behalf_of = mor`)
+- **Cible** : Lot 9 (durcissement audit + reporting)
+- **Pourquoi reporté** : `offer-service.create` (et autres routes producer
+  câblées via `requireProducerOrDelegate`) utilise `actorUserId = ownerUserId`
+  pour l'audit. Quand un téléconseiller agit pour un producteur, l'audit
+  loggue le producteur comme acteur — techniquement faux (l'acteur est le
+  téléconseiller, le producteur est juste le owner de la ressource).
+  
+  Compensation actuelle : l'outbox event `teleconsult.action.performed`
+  contient les DEUX UUIDs (teleconsultantUserId + producerUserId) — donc
+  la traçabilité existe, juste pas dans audit_log.
+  
+  Refactor : passer `actorUserId` + `onBehalfOfUserId` séparés à 
+  `offerService.create/update/suspend/reject/validate/etc.` + même pour
+  sites, stock, pickups (Lot 7).
+- **Fichiers** : apps/api/src/modules/offers/offer-service.ts:131
+  (audit.log actorUserId), apps/api/src/modules/offers/offer-routes.ts:60
+  (appel create), `requireProducerOrDelegate` qui retourne déjà
+  `{actorUserId, ownerUserId, onBehalfOf}` mais ce dernier n'est pas propagé.
+- **Garde-fou actuel** : outbox event `teleconsult.action.performed` capture
+  l'info complète. audit_log seul est partiellement correct.
+- **Risque si non traité** : audit log incomplet pour reporting téléconseil.
+  Acceptable au MVP car outbox event compense.
+
 ## [lot-6→lot-7] Outbox `teleconsult.action.performed` → push web + email
 
 - **Découvert** : Lot 6 (event outbox émis à chaque action déléguée mais
