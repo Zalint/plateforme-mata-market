@@ -9,8 +9,8 @@
   "packageManager": "pnpm@9.12.0",
   "scripts": {
     "dev": "turbo run dev",
-    "restart": "pwsh -File scripts/restart-dev.ps1",
-    "restart:reseed": "pwsh -File scripts/restart-dev.ps1 -Reseed",
+    "dev:up": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/restart-dev.ps1",
+    "dev:up:reseed": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/restart-dev.ps1 -Reseed",
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
