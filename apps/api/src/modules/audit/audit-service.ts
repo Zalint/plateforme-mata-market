@@ -35,7 +35,9 @@ export type AuditAction =
   | 'order.status_change'
   | 'order.idempotent_replay'
   // Paiements
+  | 'payment.intent_created'
   | 'payment.received'
+  | 'payment.refunded'
   | 'payment.disputed'
   | 'payout.trigger'
   | 'payout.block'

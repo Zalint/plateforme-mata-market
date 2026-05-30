@@ -30,6 +30,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: '/admin/producers', label: 'Producteurs', icon: 'users' },
   { href: '/admin/offers', label: 'Validation offres', icon: 'badge-check' },
   { href: '/admin/orders', label: 'Commandes', icon: 'shopping-bag' },
+  { href: '/admin/payments', label: 'Paiements', icon: 'wallet' },
   { href: '/admin/pricing', label: 'Pricing', icon: 'calculator' },
 ];
 

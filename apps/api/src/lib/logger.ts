@@ -8,11 +8,17 @@ export const logger = pino({
     paths: [
       'req.headers.authorization',
       'req.headers.cookie',
+      'req.headers["x-bictorys-signature"]',
       '*.password',
       '*.code',
       '*.secret',
       '*.apiKey',
       '*.bankDetails',
+      // Bictorys (Lot 5)
+      '*.bictorysApiSecret',
+      '*.webhookSecret',
+      '*.signature',
+      '*.providerSignature',
     ],
     censor: '[REDACTED]',
   },

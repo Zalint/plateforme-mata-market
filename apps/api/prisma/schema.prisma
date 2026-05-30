@@ -1,4 +1,4 @@
-// Schéma Prisma · Lot 1 + Lot 2 + Lot 3 + Lot 4
+// Schéma Prisma · Lot 1 + Lot 2 + Lot 3 + Lot 4 + Lot 5
 //
 // Lot 1 — identité & audit :
 //  - users                       identité MATA + mapping Keycloak
@@ -27,6 +27,21 @@
 //  - idempotency_records         (key, scope) → response cache 24h pour POST /v1/orders.
 //  - OfferStatus.reserved/sold   ajout des valeurs prévues Lot 2 (résolution backlog L2→L4).
 //  - SEQUENCE order_number_seq   numéro CMD-{YYYY}-{NNNN} atomique sans collision.
+//
+// Lot 5 — paiements Bictorys + reversements :
+//  - PaymentStatus enum          remplace orders.payment_status (TEXT stub Lot 4).
+//                                Migration EN DEUX TEMPS (part1 ajout+backfill, part2 drop+rename)
+//                                pour valider la procédure prod (cf. CLAUDE.md §G4, BACKLOG [lot-2→lot-9]).
+//  - PayoutStatus enum           états d'un reversement Bictorys disbursement.
+//  - payments                    1:1 inverse vers orders (provider_intent_id unique, raw_webhook_payload
+//                                jsonb pour audit post-mortem, idempotence par provider_intent_id).
+//  - payouts                     reversement producteur (montant agrégé, status sent/failed/blocked,
+//                                provider_disbursement_id côté Bictorys).
+//  - payout_items                table de liaison payout ↔ order_item, UNIQUE sur order_item_id
+//                                pour empêcher tout double-versement (idempotence cron payouts).
+//  - outbox_events               Pattern Outbox (CLAUDE.md §G3, ARCHITECTURE.md §7) : émission
+//                                d'events 'order.confirmed' au webhook payment.paid. Le cron
+//                                retry-outbox (Lot 7) les dispatchera vers n8n.
 //
 // Conventions :
 //  - Tables Postgres en snake_case via @map, code TS en camelCase
@@ -213,6 +228,39 @@ enum DeliveryPeriod {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Enums · Lot 5 (paiements + reversements Bictorys)
+// ─────────────────────────────────────────────────────────────────
+
+// PaymentStatus — état d'un payment intent Bictorys côté MATA.
+// Mapping vs statuts Bictorys :
+//   opened/pending → pending     (lien généré, en attente client)
+//   paid/succeeded → paid        (webhook reçu, order passe en `confirmed`)
+//   refunded       → refunded    (rare ; aussi mis si webhook 'paid' arrive APRÈS cancel order)
+//   disputed       → disputed    (chargeback ; payouts liés bloqués)
+enum PaymentStatus {
+  pending
+  paid
+  refunded
+  disputed
+
+  @@map("payment_status")
+}
+
+// PayoutStatus — état d'un disbursement Bictorys côté MATA.
+//   pending  → row créée côté MATA, en attente confirmation Bictorys
+//   sent     → Bictorys a confirmé le virement
+//   failed   → erreur (coordonnées invalides, plafond, réseau) — failure_reason rempli
+//   blocked  → bloqué manuellement par admin (dispute, KYC)
+enum PayoutStatus {
+  pending
+  sent
+  failed
+  blocked
+
+  @@map("payout_status")
+}
+
+// ─────────────────────────────────────────────────────────────────
 // users · identité MATA mappée vers Keycloak (Lot 1, relation ajoutée au Lot 2)
 // ─────────────────────────────────────────────────────────────────
 
@@ -236,6 +284,7 @@ model User {
   producerProfile         ProducerProfile?
   ordersAsClient          Order[]                 @relation("client_orders") // Lot 4
   orderItemsAsProducer    OrderItem[]             @relation("producer_items") // Lot 4 (dénormalisation)
+  payoutsAsProducer       Payout[]                @relation("producer_payouts") // Lot 5
 
   @@index([role, status])
   @@map("users")
@@ -633,9 +682,8 @@ model Order {
   // une rule pricing change après coup (les snapshots restent immuables).
   totalFcfa Int @map("total_fcfa")
 
-  // Stub Lot 5 — sera typé enum dédié lors de l'intégration Bictorys.
-  // Valeurs autorisées Lot 4 : "pending" (default) seulement.
-  paymentStatus String @default("pending") @map("payment_status")
+  // Lot 5 : enum dédié PaymentStatus (TEXT stub Lot 4 supprimé migration lot5_payments_part2).
+  paymentStatus PaymentStatus @default(pending) @map("payment_status")
 
   // Timestamps des transitions importantes.
   confirmedAt  DateTime? @map("confirmed_at")
@@ -649,9 +697,10 @@ model Order {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  client User?       @relation("client_orders", fields: [clientUserId], references: [id], onDelete: SetNull)
-  zone   Zone        @relation(fields: [deliveryZoneId], references: [id], onDelete: Restrict)
-  items  OrderItem[]
+  client  User?       @relation("client_orders", fields: [clientUserId], references: [id], onDelete: SetNull)
+  zone    Zone        @relation(fields: [deliveryZoneId], references: [id], onDelete: Restrict)
+  items   OrderItem[]
+  payment Payment? // Lot 5 : 1:1 inverse (un order a au plus un payment)
 
   @@index([status, createdAt(sort: Desc)])
   @@index([clientUserId, createdAt(sort: Desc)])
@@ -684,6 +733,7 @@ model OrderItem {
   offer           Offer           @relation(fields: [offerId], references: [id], onDelete: Restrict)
   producer        User            @relation("producer_items", fields: [producerUserId], references: [id], onDelete: Restrict)
   pricingSnapshot PricingSnapshot @relation(fields: [pricingSnapshotId], references: [id], onDelete: Restrict)
+  payoutItem      PayoutItem? // Lot 5 : 1:1 inverse (un item est couvert par au plus un payout)
 
   @@index([producerUserId, createdAt(sort: Desc)])
   @@index([orderId])
@@ -711,4 +761,145 @@ model IdempotencyRecord {
   @@id([key, scope])
   @@index([createdAt])
   @@map("idempotency_records")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// payments · payment intent Bictorys (Lot 5)
+//
+// 1:1 avec orders (FK orderId unique). Le `providerIntentId` est l'ID
+// Bictorys retourné à la création du checkout — clé d'idempotence
+// triple niveau (cf. ARCHITECTURE.md §7).
+//
+// `rawWebhookPayload` (jsonb) stocke le DERNIER payload webhook reçu,
+// brut, pour audit post-mortem (CLAUDE.md §G5). Aucune dépendance
+// applicative sur sa forme — Bictorys peut évoluer sans casser MATA.
+//
+// `paymentMethod` (wave/orange_money/card) rempli au passage en `paid`,
+// utile pour reporting interne et UI (badge mode paiement).
+// ─────────────────────────────────────────────────────────────────
+
+model Payment {
+  id      String @id @default(uuid()) @db.Uuid
+  orderId String @unique @map("order_id") @db.Uuid // 1:1 inverse avec orders
+
+  // ID Bictorys (paymentLink id). Index UNIQUE pour idempotence webhook.
+  providerIntentId String @unique @map("provider_intent_id")
+
+  amountFcfa Int           @map("amount_fcfa") // == orders.totalFcfa figé à la création
+  currency   String        @default("XOF") // FCFA = XOF (ISO 4217)
+  status     PaymentStatus @default(pending)
+  paymentUrl String        @map("payment_url") // URL Bictorys (checkout hosted)
+
+  paymentMethod      String? @map("payment_method") // wave / orange_money / card — rempli au paid
+  rawWebhookPayload  Json?   @map("raw_webhook_payload") // dernier webhook brut (audit)
+  providerCustomer   Json?   @map("provider_customer") // info client payeur (name/phone/email) côté Bictorys
+
+  paidAt     DateTime? @map("paid_at")
+  refundedAt DateTime? @map("refunded_at")
+  disputedAt DateTime? @map("disputed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt(sort: Desc)])
+  @@map("payments")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// payouts · reversement producteur via Bictorys disbursement (Lot 5)
+//
+// Un payout agrège TOUS les order_items éligibles d'un même producer_user_id
+// à l'instant t (status='delivered' AND payment_status='paid' AND non encore
+// couverts par un payout existant — table de liaison payout_items).
+//
+// `providerDisbursementId` rempli après call Bictorys. `failureReason`
+// rempli en cas d'erreur (coordonnées invalides, plafond, réseau).
+//
+// CRITIQUE : bank_details du producteur déchiffré UNIQUEMENT en mémoire au
+// moment du call Bictorys, jamais persisté en clair, jamais loggé (CLAUDE.md §G4).
+// ─────────────────────────────────────────────────────────────────
+
+model Payout {
+  id             String       @id @default(uuid()) @db.Uuid
+  producerUserId String       @map("producer_user_id") @db.Uuid
+  amountFcfa     Int          @map("amount_fcfa") // somme des producer_share_fcfa × quantity des items couverts
+  currency       String       @default("XOF")
+  status         PayoutStatus @default(pending)
+
+  providerDisbursementId String? @unique @map("provider_disbursement_id") // ID Bictorys retourné
+
+  sentAt        DateTime? @map("sent_at")
+  failedAt      DateTime? @map("failed_at")
+  failureReason String?   @map("failure_reason") @db.Text
+  blockedAt     DateTime? @map("blocked_at")
+  blockedReason String?   @map("blocked_reason") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  producer User         @relation("producer_payouts", fields: [producerUserId], references: [id], onDelete: Restrict)
+  items    PayoutItem[]
+
+  @@index([producerUserId, status])
+  @@index([status, createdAt(sort: Desc)])
+  @@map("payouts")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// payout_items · table de liaison payout ↔ order_item (Lot 5)
+//
+// UNIQUE sur order_item_id : garantit qu'aucun item n'est versé deux fois
+// (idempotence fondamentale du cron process-payouts). Le compute pending
+// devient un simple `WHERE order_item_id NOT IN (SELECT order_item_id FROM payout_items)`.
+//
+// Pas de status propre : suit le payout parent. Pas de soft-delete.
+// ─────────────────────────────────────────────────────────────────
+
+model PayoutItem {
+  id          String @id @default(uuid()) @db.Uuid
+  payoutId    String @map("payout_id") @db.Uuid
+  orderItemId String @unique @map("order_item_id") @db.Uuid // UNIQUE : un item ↔ un payout max
+
+  // Montant figé au moment du payout (snapshot anti-drift si pricing change).
+  // == order_items.pricing_snapshot.producer_share_fcfa × quantity au moment t.
+  amountFcfa Int @map("amount_fcfa")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  payout    Payout    @relation(fields: [payoutId], references: [id], onDelete: Cascade)
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+
+  @@index([payoutId])
+  @@map("payout_items")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// outbox_events · Pattern Outbox pour dispatch async vers n8n (Lot 5, init)
+//
+// CLAUDE.md §G3 / ARCHITECTURE.md §7 : « API écrit dans outbox_events,
+// cron retry vers n8n. Si n8n down, retry rattrape. »
+//
+// Lot 5 émet `order.confirmed` à la réception du webhook payment.paid.
+// Le cron retry-outbox (Lot 7) lira `WHERE dispatched_at IS NULL`
+// et appellera n8n. Au Lot 5, les events sont juste insérés en attente.
+//
+// `eventType` reste un TEXT libre (pas d'enum) pour permettre l'évolution
+// rapide des types d'events sans migration à chaque ajout.
+// ─────────────────────────────────────────────────────────────────
+
+model OutboxEvent {
+  id           String    @id @default(uuid()) @db.Uuid
+  eventType    String    @map("event_type") // ex: "order.confirmed", "payout.sent" (Lot 7)
+  payload      Json // payload arbitraire, validé Zod côté émetteur
+  dispatchedAt DateTime? @map("dispatched_at") // null tant que non dispatché
+  retryCount   Int       @default(0) @map("retry_count")
+  lastError    String?   @map("last_error") @db.Text
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  // Partial index sur les events en attente (le seul cas d'usage hot pour le cron).
+  @@index([createdAt], map: "outbox_events_pending_created_at_idx")
+  @@index([eventType, createdAt(sort: Desc)])
+  @@map("outbox_events")
 }

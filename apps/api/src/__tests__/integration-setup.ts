@@ -27,6 +27,14 @@ export async function setup(): Promise<void> {
   process.env.ENCRYPTION_KEY = randomBytes(32).toString('base64');
   process.env.NODE_ENV = 'test';
 
+  // Bictorys (Lot 5) : valeurs jetables pour permettre aux tests d'intégration
+  // de booter payment-service / payout-service. Les appels sortants sont
+  // toujours mockés via vi.stubGlobal('fetch') dans les tests.
+  process.env.BICTORYS_API_KEY = 'test-public-key';
+  process.env.BICTORYS_API_SECRET = 'test-secret-key-32chars-min!!!!!';
+  process.env.BICTORYS_WEBHOOK_SECRET = 'test-webhook-secret-32chars-min!';
+  process.env.BICTORYS_API_BASE_URL = 'https://api.test.bictorys.com';
+
   // Applique les migrations via la CLI Prisma. `pnpm --filter @mata/api
   // test:integration` est invoqué depuis apps/api donc `process.cwd()` y
   // pointe ; prisma.config.ts attend ce cwd pour trouver schema.prisma et

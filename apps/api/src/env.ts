@@ -36,8 +36,15 @@ const envSchema = z.object({
   KEYCLOAK_REALM: z.string().optional(),
   KEYCLOAK_CLIENT_API_AUDIENCE: z.string().optional(),
 
+  // Bictorys (Lot 5) — paiement (checkout hosted) + disbursement (reversements).
+  // Les 4 vars sont optionnelles ici (NODE_ENV=test peut tourner sans),
+  // mais `requireBictorysConfig()` côté lib/bictorys.ts refuse de booter
+  // en NODE_ENV=production si l'une des trois critiques manque
+  // (API_KEY, API_SECRET, WEBHOOK_SECRET). Cf. CLAUDE.md §G5.
   BICTORYS_API_KEY: z.string().optional(),
+  BICTORYS_API_SECRET: z.string().optional(),
   BICTORYS_WEBHOOK_SECRET: z.string().optional(),
+  BICTORYS_API_BASE_URL: z.string().url().optional(),
 
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),

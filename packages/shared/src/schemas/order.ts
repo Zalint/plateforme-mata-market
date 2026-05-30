@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { DELIVERY_PERIODS, ORDER_STATUSES } from '../constants/enums.js';
+import { DELIVERY_PERIODS, ORDER_STATUSES, PAYMENT_STATUSES } from '../constants/enums.js';
 import { FcfaAmountSchema, IsoDateSchema, IsoDateTimeSchema, UuidSchema } from './common.js';
 import { PricingSnapshotOutputSchema } from './pricing.js';
 
@@ -20,6 +20,7 @@ import { PricingSnapshotOutputSchema } from './pricing.js';
 
 export const OrderStatusSchema = z.enum(ORDER_STATUSES);
 export const DeliveryPeriodSchema = z.enum(DELIVERY_PERIODS);
+export const OrderPaymentStatusSchema = z.enum(PAYMENT_STATUSES);
 
 // ─────────────────────────────────────────────────────────────────
 // Helpers
@@ -136,8 +137,8 @@ export const OrderOutputSchema = z.object({
   // Total figé
   totalFcfa: FcfaAmountSchema,
 
-  // Stub Lot 5
-  paymentStatus: z.string(),
+  // Lot 5 : enum dédié PaymentStatus (TEXT stub Lot 4 supprimé migration lot5_payments_part2)
+  paymentStatus: OrderPaymentStatusSchema,
 
   // Items
   items: z.array(OrderItemOutputSchema),
