@@ -1,7 +1,15 @@
 'use client';
 
 import clsx from 'clsx';
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { Icon, type IconName } from './icon.js';
 
@@ -84,7 +92,12 @@ function ToastViewport({
   items: ToastItem[];
   onDismiss: (id: number) => void;
 }): React.JSX.Element | null {
-  if (typeof document === 'undefined') return null;
+  // Le portail ne peut viser document.body qu'après montage côté client. On
+  // attend l'effet pour que la PREMIÈRE passe client rende `null` comme le
+  // serveur (sinon mismatch d'hydratation : le serveur n'a rien rendu ici).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
   return createPortal(
     <section
       // Pile en bas (mobile-first) : zone d'annonce pour lecteurs d'écran.
