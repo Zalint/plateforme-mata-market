@@ -32,7 +32,7 @@ export default function PaymentReturnPage(): React.JSX.Element {
 function PaymentReturnInner(): React.JSX.Element {
   const params = useSearchParams();
   const paymentId = params?.get('paymentId') ?? null;
-  const { data: payment, isLoading, isError } = usePaymentPolling(paymentId);
+  const { data: payment } = usePaymentPolling(paymentId);
   const [pollingExpired, setPollingExpired] = useState(false);
 
   // Arrêt du polling après MAX_POLLING_MS si toujours pending.
@@ -45,40 +45,45 @@ function PaymentReturnInner(): React.JSX.Element {
   if (!paymentId) {
     return <ErrorScreen message="Aucun identifiant de paiement dans l'URL." />;
   }
-  if (isLoading) {
-    return <LoadingScreen />;
+
+  // Statut connu : on tranche selon le status du paiement.
+  if (payment) {
+    if (payment.status === 'paid') {
+      return <SuccessScreen orderId={payment.orderId} amountFcfa={payment.amountFcfa} />;
+    }
+    if (payment.status === 'refunded' || payment.status === 'disputed') {
+      return (
+        <ErrorScreen
+          message={
+            payment.status === 'refunded'
+              ? 'Paiement remboursé. La commande a été annulée.'
+              : 'Paiement contesté. MATA vous contactera.'
+          }
+          orderId={payment.orderId}
+        />
+      );
+    }
+    // status === 'pending' : selon que polling encore actif ou expiré.
+    if (pollingExpired) {
+      return (
+        <ErrorScreen
+          message="Paiement non confirmé après 30 secondes. Vérifie ton solde Wave/Orange Money. Si le débit a eu lieu, MATA traitera ta commande dès réception du callback."
+          orderId={payment.orderId}
+          retry
+        />
+      );
+    }
+    return <PendingScreen amountFcfa={payment.amountFcfa} orderId={payment.orderId} />;
   }
-  if (isError || !payment) {
+
+  // Pas encore de données : chargement initial, token pas encore prêt (retour de
+  // Bictorys), ou erreur transitoire pendant le polling. On garde l'écran de
+  // vérification tant que le polling n'a pas expiré — sinon flash « Problème de
+  // paiement » avant même la 1ʳᵉ réponse. Erreur dure seulement après timeout.
+  if (pollingExpired) {
     return <ErrorScreen message="Impossible de récupérer le statut du paiement." />;
   }
-
-  if (payment.status === 'paid') {
-    return <SuccessScreen orderId={payment.orderId} amountFcfa={payment.amountFcfa} />;
-  }
-  if (payment.status === 'refunded' || payment.status === 'disputed') {
-    return (
-      <ErrorScreen
-        message={
-          payment.status === 'refunded'
-            ? 'Paiement remboursé. La commande a été annulée.'
-            : 'Paiement contesté. MATA vous contactera.'
-        }
-        orderId={payment.orderId}
-      />
-    );
-  }
-
-  // status === 'pending' : selon que polling encore actif ou expiré.
-  if (pollingExpired) {
-    return (
-      <ErrorScreen
-        message="Paiement non confirmé après 30 secondes. Vérifie ton solde Wave/Orange Money. Si le débit a eu lieu, MATA traitera ta commande dès réception du callback."
-        orderId={payment.orderId}
-        retry
-      />
-    );
-  }
-  return <PendingScreen amountFcfa={payment.amountFcfa} orderId={payment.orderId} />;
+  return <LoadingScreen />;
 }
 
 // ─────────────────────────────────────────────────────────────────

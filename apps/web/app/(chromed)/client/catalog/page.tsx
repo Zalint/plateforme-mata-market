@@ -108,7 +108,7 @@ export default function ClientCatalogPage(): React.JSX.Element {
                 className="absolute bottom-2 right-2 px-2.5 py-1.5 bg-mata-700 hover:bg-mata-800 text-white rounded-lg text-xs font-bold shadow-soft flex items-center gap-1"
               >
                 <Icon name="plus" className="w-3 h-3" />
-                {inCart ? ` ${inCart.quantity}` : ' Panier'}
+                {inCart ? ` ${inCart.quantity}` : ''}
               </button>
             </div>
           );
