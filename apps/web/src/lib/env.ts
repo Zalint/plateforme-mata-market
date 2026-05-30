@@ -25,6 +25,10 @@ const envSchema = z.object({
   NEXT_PUBLIC_API_BASE_URL: z.string().url().default('http://localhost:4000'),
   // Nom du compte Cloudinary pour construire les URLs publiques d'image.
   NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: z.string().min(1).optional(),
+  // Clé VAPID PUBLIQUE (web push, Lot 7). Exposée au navigateur volontairement
+  // — seule la clé PRIVÉE (côté API) doit rester secrète (CLAUDE.md §G8).
+  // Absente = le push est simplement indisponible côté front (dégradation OK).
+  NEXT_PUBLIC_VAPID_PUBLIC_KEY: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -42,6 +46,7 @@ function parseEnv(): Env {
     NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID,
     NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL,
     NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
   });
   if (!parsed.success) {
     const issues = parsed.error.issues

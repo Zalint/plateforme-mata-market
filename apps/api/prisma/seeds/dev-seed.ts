@@ -112,20 +112,53 @@ const USERS = [
   },
 ] as const;
 
+// Centroïdes approximatifs (lat/lng WGS84) renseignés au Lot 7 (tournées) —
+// résout la dette BACKLOG [lot-2→lot-7]. Coordonnées indicatives des
+// localités sénégalaises, suffisantes pour grouper/ordonner les collectes.
 const ZONES = [
-  { slug: 'pout', name: 'Pout', region: 'Thiès' },
-  { slug: 'thies-ville', name: 'Thiès ville', region: 'Thiès' },
-  { slug: 'dahra', name: 'Dahra', region: 'Louga' },
-  { slug: 'niayes', name: 'Niayes', region: 'Thiès' },
-  { slug: 'mbour', name: 'Mbour', region: 'Thiès' },
-  { slug: 'joal', name: 'Joal-Fadiouth', region: 'Thiès' },
-  { slug: 'almadies', name: 'Almadies', region: 'Dakar' },
-  { slug: 'mermoz', name: 'Mermoz', region: 'Dakar' },
-  { slug: 'sicap-liberte', name: 'Sicap Liberté', region: 'Dakar' },
-  { slug: 'yoff', name: 'Yoff', region: 'Dakar' },
-  { slug: 'ouakam', name: 'Ouakam', region: 'Dakar' },
-  { slug: 'pikine', name: 'Pikine', region: 'Dakar' },
-  { slug: 'corniche', name: 'Corniche', region: 'Dakar' },
+  { slug: 'pout', name: 'Pout', region: 'Thiès', centroidLat: 14.7717, centroidLng: -17.0608 },
+  {
+    slug: 'thies-ville',
+    name: 'Thiès ville',
+    region: 'Thiès',
+    centroidLat: 14.7886,
+    centroidLng: -16.9246,
+  },
+  { slug: 'dahra', name: 'Dahra', region: 'Louga', centroidLat: 15.3478, centroidLng: -15.4775 },
+  { slug: 'niayes', name: 'Niayes', region: 'Thiès', centroidLat: 14.9667, centroidLng: -17.0833 },
+  { slug: 'mbour', name: 'Mbour', region: 'Thiès', centroidLat: 14.4198, centroidLng: -16.9636 },
+  {
+    slug: 'joal',
+    name: 'Joal-Fadiouth',
+    region: 'Thiès',
+    centroidLat: 14.1667,
+    centroidLng: -16.8333,
+  },
+  {
+    slug: 'almadies',
+    name: 'Almadies',
+    region: 'Dakar',
+    centroidLat: 14.7456,
+    centroidLng: -17.5147,
+  },
+  { slug: 'mermoz', name: 'Mermoz', region: 'Dakar', centroidLat: 14.7008, centroidLng: -17.4781 },
+  {
+    slug: 'sicap-liberte',
+    name: 'Sicap Liberté',
+    region: 'Dakar',
+    centroidLat: 14.7053,
+    centroidLng: -17.4575,
+  },
+  { slug: 'yoff', name: 'Yoff', region: 'Dakar', centroidLat: 14.7547, centroidLng: -17.4894 },
+  { slug: 'ouakam', name: 'Ouakam', region: 'Dakar', centroidLat: 14.7211, centroidLng: -17.4944 },
+  { slug: 'pikine', name: 'Pikine', region: 'Dakar', centroidLat: 14.7553, centroidLng: -17.3906 },
+  {
+    slug: 'corniche',
+    name: 'Corniche',
+    region: 'Dakar',
+    centroidLat: 14.6822,
+    centroidLng: -17.4678,
+  },
 ] as const;
 
 // ─────────────────────────────────────────────────────────────────
@@ -180,7 +213,12 @@ async function main(): Promise<void> {
   for (const zone of ZONES) {
     const created = await prisma.zone.upsert({
       where: { slug: zone.slug },
-      update: { name: zone.name, region: zone.region },
+      update: {
+        name: zone.name,
+        region: zone.region,
+        centroidLat: zone.centroidLat,
+        centroidLng: zone.centroidLng,
+      },
       create: zone,
     });
     zoneIdBySlug.set(zone.slug, created.id);

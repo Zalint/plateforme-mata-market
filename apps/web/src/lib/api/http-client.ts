@@ -68,4 +68,6 @@ export const apiClient = {
     request<T>('PATCH', path, { accessToken, body, signal }),
   put: <T>(path: string, body: unknown, accessToken: string | null, signal?: AbortSignal) =>
     request<T>('PUT', path, { accessToken, body, signal }),
+  del: <T>(path: string, body: unknown, accessToken: string | null, signal?: AbortSignal) =>
+    request<T>('DELETE', path, { accessToken, body, signal }),
 };

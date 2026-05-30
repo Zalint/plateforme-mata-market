@@ -35,6 +35,12 @@ export async function setup(): Promise<void> {
   process.env.BICTORYS_WEBHOOK_SECRET = 'test-webhook-secret-32chars-min!';
   process.env.BICTORYS_API_BASE_URL = 'https://api.test.bictorys.com';
 
+  // n8n (Lot 7) : valeurs jetables pour que `isN8nConfigured()` soit vrai dans
+  // le test d'intégration outbox. Les appels sortants `httpFetch` sont stubbés
+  // via `vi.stubGlobal('fetch')` dans ce test — aucun trafic réseau réel.
+  process.env.N8N_BASE_URL = 'https://n8n.test.local/webhook';
+  process.env.N8N_WEBHOOK_SECRET = 'test-n8n-secret-32chars-minimum!!';
+
   // Applique les migrations via la CLI Prisma. `pnpm --filter @mata/api
   // test:integration` est invoqué depuis apps/api donc `process.cwd()` y
   // pointe ; prisma.config.ts attend ce cwd pour trouver schema.prisma et

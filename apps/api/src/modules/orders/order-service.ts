@@ -10,6 +10,7 @@ import type { Prisma } from '@prisma/client';
 import type { FastifyRequest } from 'fastify';
 import { prisma } from '../../lib/prisma.js';
 import { auditService } from '../audit/index.js';
+import { notificationService } from '../notifications/index.js';
 import { pricingSnapshotService } from '../pricing/index.js';
 import { type OrderLoaded, orderInclude, toOrderOutput } from './mappers.js';
 import { generateOrderNumber } from './order-numbering.js';
@@ -150,6 +151,19 @@ async function createOrderInternal(args: CreateOrderArgs): Promise<OrderOutput> 
       include: orderInclude,
     });
 
+    // Outbox : order.created (dispatch async vers n8n par le cron Lot 7).
+    await tx.outboxEvent.create({
+      data: {
+        eventType: 'order.created',
+        payload: {
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          clientUserId,
+          totalFcfa: order.totalFcfa,
+        } satisfies Prisma.InputJsonValue,
+      },
+    });
+
     return order as OrderLoaded;
   });
 
@@ -215,6 +229,20 @@ async function transitionStatusInternal(args: TransitionArgs): Promise<OrderOutp
       include: orderInclude,
     });
 
+    // Outbox : order.delivered (notif client « commande livrée », dispatch n8n).
+    if (to === 'delivered') {
+      await tx.outboxEvent.create({
+        data: {
+          eventType: 'order.delivered',
+          payload: {
+            orderId: result.id,
+            orderNumber: result.orderNumber,
+            clientUserId: result.clientUserId,
+          } satisfies Prisma.InputJsonValue,
+        },
+      });
+    }
+
     return { result, from: current.status };
   });
 
@@ -227,6 +255,18 @@ async function transitionStatusInternal(args: TransitionArgs): Promise<OrderOutp
     newValue: { status: to },
     request,
   });
+
+  // Push web (Lot 7, hors chemin critique) : prévient le client à la livraison.
+  // `sendToUser` ne throw jamais (§G5) → await sûr après le commit. Mode invité :
+  // clientUserId null → pas de push (l'invité n'a pas de souscription liée).
+  if (to === 'delivered' && updated.result.clientUserId) {
+    await notificationService.sendToUser(updated.result.clientUserId, {
+      title: 'Commande livrée',
+      body: `Votre commande ${updated.result.orderNumber} a été livrée.`,
+      url: '/orders',
+      category: 'order',
+    });
+  }
 
   return toOrderOutput(updated.result as OrderLoaded);
 }

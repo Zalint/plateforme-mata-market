@@ -51,7 +51,16 @@ export type AuditAction =
   | 'pricing.rule.update'
   // Coordonnées bancaires
   | 'producer.bank_details.update'
-  | 'producer.bank_details.reveal';
+  | 'producer.bank_details.reveal'
+  // Tournées de collecte (Lot 7)
+  | 'pickup.create'
+  | 'pickup.status_change'
+  | 'pickup.cancel'
+  | 'pickup.item_check'
+  // Notifications push (Lot 7)
+  | 'notification.subscribe'
+  | 'notification.unsubscribe'
+  | 'notification.preferences_update';
 
 export type AuditLogInput = {
   actorUserId: string;
