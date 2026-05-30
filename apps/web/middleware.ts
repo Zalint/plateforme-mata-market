@@ -23,45 +23,38 @@ const PUBLIC_PREFIXES = [
   '/favicon.ico',
 ];
 
-export function middleware(request: NextRequest): NextResponse {
-  const { pathname } = request.nextUrl;
-  const isPublic = PUBLIC_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
+// hCaptcha (guest checkout, Lot 8) charge son script + iframe + assets depuis
+// hcaptcha.com et ses sous-domaines (js./newassets.). Hosts requis sur
+// script/frame/style/connect (cf. docs hCaptcha « Content Security Policy »).
+const HCAPTCHA = 'https://hcaptcha.com https://*.hcaptcha.com';
 
-  // Auth check : redirect vers login si pas de cookie refresh et route protégée
-  if (!isPublic && pathname !== '/') {
-    const hasRefresh = request.cookies.has(COOKIE_REFRESH);
-    if (!hasRefresh) {
-      const loginUrl = new URL('/auth/login', request.url);
-      return NextResponse.redirect(loginUrl);
-    }
-  }
-
-  const response = NextResponse.next();
-
-  // En dev, autoriser localhost:4000 (API), localhost:8081 (Keycloak), upload
-  // Cloudinary (api.cloudinary.com déjà listé). En prod, seuls les hosts
-  // mata.sn + Cloudinary + Keycloak prod sont autorisés.
-  const isDev = process.env.NODE_ENV !== 'production';
+/**
+ * Construit la CSP.
+ *
+ * `script-src` garde `'unsafe-inline'` en dev ET en prod. Raison : Next 15
+ * (App Router) émet des `<script>` inline de bootstrap RSC (`self.__next_f.push`)
+ * dans le HTML, y compris sur les pages PRÉRENDUES STATIQUEMENT (~90% de nos
+ * routes, cf. table de build `○ Static`). Un nonce par requête n'est PAS
+ * applicable au statique : Next ne tamponne le nonce que sur les pages rendues
+ * dynamiquement (`ƒ`). Une CSP nonce stricte casserait donc l'hydratation de
+ * la quasi-totalité de l'app en prod (vérifié empiriquement Lot 9 : 0/14 balises
+ * `<script>` portaient le nonce). On accepte `'unsafe-inline'` ; surface XSS
+ * faible (aucun `dangerouslySetInnerHTML`, échappement React, Zod aux frontières).
+ * Dette tracée dans docs/BACKLOG.md (migration nonce si bascule vers dynamique).
+ *
+ * Durcissement prod réel vs dev : on RETIRE `'unsafe-eval'` (utilisé seulement
+ * par React Refresh en dev) et on ajoute `upgrade-insecure-requests`.
+ * `'wasm-unsafe-eval'` conservé pour le WebAssembly éventuel sans rouvrir `eval()`.
+ */
+function buildCsp(isDev: boolean): string {
   const devConnect = isDev ? ' http://localhost:4000 http://localhost:8081' : '';
   const devFrame = isDev ? ' http://localhost:8081' : '';
 
-  // En dev, Next 15 utilise des `<script>` inline (RSC streaming + bootstrap)
-  // et `eval()` (React Refresh / Fast Refresh) — donc on doit autoriser
-  // `'unsafe-inline'` et `'unsafe-eval'` pour que React hydrate. En prod
-  // ces deux directives DOIVENT être retirées : on bascule sur des nonces
-  // Next (à câbler au Lot 9 durcissement, cf. ARCHITECTURE.md §9 CSP).
-  // hCaptcha (guest checkout, Lot 8) charge son script + iframe + assets depuis
-  // hcaptcha.com et ses sous-domaines (js./newassets.). Hosts requis sur
-  // script/frame/style/connect (cf. docs hCaptcha « Content Security Policy »).
-  const HCAPTCHA = 'https://hcaptcha.com https://*.hcaptcha.com';
-
   const scriptSrc = isDev
     ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' ${HCAPTCHA}`
-    : `script-src 'self' 'wasm-unsafe-eval' ${HCAPTCHA}`;
+    : `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' ${HCAPTCHA}`;
 
-  const csp = [
+  return [
     "default-src 'self'",
     scriptSrc,
     `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com ${HCAPTCHA}`,
@@ -78,6 +71,27 @@ export function middleware(request: NextRequest): NextResponse {
   ]
     .filter(Boolean)
     .join('; ');
+}
+
+export function middleware(request: NextRequest): NextResponse {
+  const { pathname } = request.nextUrl;
+  const isPublic = PUBLIC_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+
+  // Auth check : redirect vers login si pas de cookie refresh et route protégée
+  if (!isPublic && pathname !== '/') {
+    const hasRefresh = request.cookies.has(COOKIE_REFRESH);
+    if (!hasRefresh) {
+      const loginUrl = new URL('/auth/login', request.url);
+      return NextResponse.redirect(loginUrl);
+    }
+  }
+
+  const isDev = process.env.NODE_ENV !== 'production';
+  const csp = buildCsp(isDev);
+
+  const response = NextResponse.next();
 
   response.headers.set('Content-Security-Policy', csp);
   response.headers.set('X-Content-Type-Options', 'nosniff');

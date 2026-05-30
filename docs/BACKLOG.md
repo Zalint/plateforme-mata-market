@@ -189,22 +189,6 @@ exacts où ces dettes sont marquées en commentaire inline.
   par les tests integration (ex: hook qui ne câble pas correctement
   paymentUrl).
 
-## [lot-2→lot-9] CSP `'unsafe-inline'` et `'unsafe-eval'` autorisés en dev
-
-- **Découvert** : Lot 2 (test E2E manuel — DevTools console "Refused to
-  execute inline script")
-- **Cible** : Lot 9 durcissement
-- **Pourquoi reporté** : Next 15 RSC streaming + React Refresh exigent
-  ces directives en dev. Migration vers nonces Next demande un middleware
-  Edge runtime avec injection du nonce sur chaque script tag — non
-  triviale et non bloquante pour le MVP.
-- **Fichiers** : apps/web/middleware.ts:50-58 (commentaire inline)
-- **Garde-fou actuel** : override conditionnel `NODE_ENV !== 'production'`.
-  En prod le CSP retombe sur `script-src 'self' 'wasm-unsafe-eval'` strict.
-- **Risque si non traité** : si on déploie en prod sans valider que le
-  bundle Next prod load correctement avec le CSP strict, white screen.
-  À tester impérativement au Lot 9.
-
 ## [lot-2→lot-9] Règles a11y Biome désactivées
 
 - **Découvert** : Lot 2 (étape Fix 5)
@@ -324,6 +308,24 @@ exacts où ces dettes sont marquées en commentaire inline.
 ---
 
 # Résolues
+
+## [lot-2→lot-9] CSP prod : durcissement validé, nonce écarté — résolue 2026-05-30 (Lot 9)
+
+Vérification empirique au Lot 9 (build prod + serveur standalone + `curl`) : le
+CSP prod **strict** envisagé (`script-src 'self' 'wasm-unsafe-eval'`) aurait
+provoqué le white screen redouté — 0/14 balises `<script>` portaient le nonce.
+Cause : ~90% des routes sont **prérendues statiquement** (`○` dans la table de
+build) et Next ne tamponne le nonce que sur les pages rendues dynamiquement
+(`ƒ`). Le nonce par requête est donc incompatible avec notre rendu statique.
+
+**Décision** (sans régression) : `script-src` garde `'unsafe-inline'` en prod.
+Durcissement prod réel vs dev : `'unsafe-eval'` RETIRÉ (React Refresh dev only)
+et `upgrade-insecure-requests` ajouté. Surface XSS faible : aucun
+`dangerouslySetInnerHTML` (vérifié), échappement React, Zod aux frontières.
+Fichier : `apps/web/middleware.ts` (`buildCsp`, commentaire détaillé).
+
+Migration nonce future possible uniquement si bascule vers le rendu dynamique
+(coût perf pour une PWA mobile-first, non souhaité au MVP).
 
 ## [lot-4→lot-9] Cron cleanup `idempotency_records` TTL 24h — résolue 2026-05-30 (Lot 9)
 

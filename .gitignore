@@ -27,6 +27,11 @@ build/
 coverage/
 *.tsbuildinfo
 
+# Service worker généré par serwist (apps/web) — jamais commité, jamais linté
+apps/web/public/sw.js
+apps/web/public/sw.js.map
+apps/web/public/swe-worker-*.js
+
 # Prisma generated client
 **/prisma/generated/
 
