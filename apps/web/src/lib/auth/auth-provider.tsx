@@ -63,6 +63,11 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
       () => undefined,
     );
     setState({ status: 'anonymous' });
+    // Redirige vers la landing publique. Aucune garde de route ne réagit à
+    // l'état `anonymous`, donc sans cette navigation l'utilisateur resterait
+    // sur l'écran authentifié. Un reload complet purge aussi l'access token
+    // gardé en mémoire (ARCHITECTURE.md §9).
+    window.location.assign('/welcome');
   }, []);
 
   // Premier refresh au mount

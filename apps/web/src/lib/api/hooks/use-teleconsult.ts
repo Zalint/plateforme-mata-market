@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { apiClient } from '../http-client';
 import { setActiveTeleconsultSessionId } from '../teleconsult-session-storage';
 import { useAuthToken } from '../use-auth-token';
+import { useMe } from './use-auth-me';
 
 /**
  * Hooks TanStack pour le teleconseil (Lot 6).
@@ -69,6 +70,11 @@ export function useCloseTeleconsultSession() {
  */
 export function useActiveTeleconsultSession() {
   const token = useAuthToken();
+  const { data: me } = useMe();
+  // L'endpoint exige le rôle teleconsultant / admin (teleconsult-routes.ts).
+  // Sans ce gate, un client/producteur déclenche un 403 inutile à chaque page.
+  const canPoll =
+    me?.role === 'teleconsultant' || me?.role === 'admin' || me?.role === 'super_admin';
   const q = useQuery({
     queryKey: ['teleconsult', 'active'],
     queryFn: ({ signal }) =>
@@ -77,7 +83,7 @@ export function useActiveTeleconsultSession() {
         token,
         signal,
       ),
-    enabled: !!token,
+    enabled: !!token && canPoll,
     refetchInterval: 30_000,
   });
 

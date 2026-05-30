@@ -1,3 +1,4 @@
+import { AuthMeResponseSchema, type UserRoleValue } from '@mata/shared/schemas';
 import { type NextRequest, NextResponse } from 'next/server';
 import {
   COOKIE_PKCE,
@@ -7,6 +8,39 @@ import {
 } from '../../../../src/lib/auth/cookies';
 import { exchangeCode } from '../../../../src/lib/auth/keycloak-client';
 import { getEnv } from '../../../../src/lib/env';
+
+/** Espace d'atterrissage par rôle après login (chacun arrive chez lui). */
+const LANDING_BY_ROLE: Record<UserRoleValue, string> = {
+  producer: '/producer/home',
+  client_pro: '/client/catalog',
+  client_particulier: '/client/catalog',
+  admin: '/admin/dashboard',
+  super_admin: '/admin/dashboard',
+  teleconsultant: '/admin/teleconseil',
+};
+
+/**
+ * Résout l'espace d'atterrissage via `/v1/auth/me` avec le token frais (le rôle
+ * vient de la table `users`, pas du JWT). En cas d'échec on dégrade vers le
+ * catalogue (lisible par tout JWT) — le login ne doit pas échouer dur si `/me`
+ * est momentanément indisponible.
+ */
+async function resolveLanding(apiBaseUrl: string, accessToken: string): Promise<string> {
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5_000);
+    const res = await fetch(`${apiBaseUrl}/v1/auth/me`, {
+      headers: { authorization: `Bearer ${accessToken}` },
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return '/client/catalog';
+    const me = AuthMeResponseSchema.parse(await res.json());
+    return LANDING_BY_ROLE[me.role];
+  } catch {
+    return '/client/catalog';
+  }
+}
 
 /**
  * GET /api/auth/callback?code=XXX&state=YYY
@@ -52,7 +86,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     return NextResponse.redirect(new URL('/auth/login?error=exchange_failed', req.url));
   }
 
-  const response = NextResponse.redirect(new URL('/producer/home', req.url));
+  const landing = await resolveLanding(env.API_BASE_URL, tokens.access_token);
+  const response = NextResponse.redirect(new URL(landing, req.url));
   response.cookies.set(
     COOKIE_REFRESH,
     tokens.refresh_token,

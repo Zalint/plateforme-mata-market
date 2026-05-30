@@ -1,27 +1,7 @@
+import { AuthMeResponseSchema } from '@mata/shared/schemas';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { requireUser } from '../modules/auth/index.js';
-
-const AuthMeResponseSchema = z.object({
-  id: z.string().uuid(),
-  keycloakId: z.string(),
-  role: z.enum([
-    'producer',
-    'client_pro',
-    'client_particulier',
-    'admin',
-    'teleconsultant',
-    'super_admin',
-  ]),
-  status: z.enum(['active', 'suspended', 'blacklisted']),
-  displayName: z.string(),
-  actingOnBehalfOf: z
-    .object({
-      id: z.string().uuid(),
-      displayName: z.string(),
-    })
-    .nullable(),
-});
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.get(
