@@ -11,6 +11,8 @@
  * Référence : ARCHITECTURE.md §9.
  */
 
+import { getActiveTeleconsultSessionId } from './teleconsult-session-storage';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:4000';
 
 export class ApiError extends Error {
@@ -34,6 +36,13 @@ async function request<T>(method: string, path: string, opts: RequestOptions): P
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (opts.accessToken) headers.Authorization = `Bearer ${opts.accessToken}`;
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+
+  // Lot 6 — si une session teleconseil est active cote browser, injecter
+  // X-Teleconsult-Session-Id pour que l'API marque l'action `on_behalf_of`.
+  const teleconsultSessionId = getActiveTeleconsultSessionId();
+  if (teleconsultSessionId && !path.startsWith('/v1/teleconsult/')) {
+    headers['X-Teleconsult-Session-Id'] = teleconsultSessionId;
+  }
 
   const res = await fetch(`${API_BASE}${path}`, {
     method,

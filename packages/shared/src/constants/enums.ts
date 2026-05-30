@@ -299,3 +299,60 @@ export const PAYOUT_STATUS_LABEL_FR: Record<PayoutStatus, string> = {
   failed: 'Échec',
   blocked: 'Bloqué',
 };
+
+// ─────────────────────────────────────────────────────────────────
+// Téléconseil (Lot 6)
+
+// Raisons de fermeture d'une session déléguée (cf. ARCHITECTURE.md §9).
+//   expired                  → cron a fermé après expires_at < now
+//   closed_by_teleconsultant → le téléconseiller a cliqué "Fermer"
+//   revoked_by_producer      → le producteur a interrompu via son téléphone
+//   revoked_by_admin         → un super_admin a forcé la fin (fraude, dispute)
+export const TELECONSULT_CLOSE_REASONS = [
+  'expired',
+  'closed_by_teleconsultant',
+  'revoked_by_producer',
+  'revoked_by_admin',
+] as const;
+export type TeleconsultCloseReason = (typeof TELECONSULT_CLOSE_REASONS)[number];
+
+export const TELECONSULT_CLOSE_REASON_LABEL_FR: Record<TeleconsultCloseReason, string> = {
+  expired: 'Expirée (15 min)',
+  closed_by_teleconsultant: 'Fermée par téléconseiller',
+  revoked_by_producer: 'Interrompue par producteur',
+  revoked_by_admin: 'Bloquée par admin',
+};
+
+/**
+ * Whitelist d'actions INTERDITES en session déléguée téléconseil.
+ *
+ * Source : ARCHITECTURE.md §9 « Whitelist d'actions interdites en session
+ * déléguée » + CLAUDE.md §G8.
+ *
+ * Toute route qui exécute une de ces actions DOIT appeler
+ * `assertActionAllowedDuringTeleconsult(req, action)` AVANT d'agir. Si
+ * `req.actingOnBehalfOf` est défini (session active), l'action est refusée
+ * avec 403 + audit `teleconsult.session.action_forbidden`.
+ *
+ * Ne JAMAIS retirer une entrée sans validation explicite. Pour en ajouter :
+ * éditer ici + ajouter le câblage dans la route correspondante.
+ */
+export const TELECONSULT_FORBIDDEN_ACTIONS = [
+  'producer.bank_details.update',
+  'producer.phone.update',
+  'producer.delete',
+  'user.password.reset',
+  'teleconsult.session.start', // pas de session-dans-session
+] as const;
+export type TeleconsultForbiddenAction = (typeof TELECONSULT_FORBIDDEN_ACTIONS)[number];
+
+// Durée maximale d'une session (cf. ARCHITECTURE.md §9 + mockup §2898).
+export const TELECONSULT_SESSION_DURATION_MS = 15 * 60 * 1000;
+
+// Durée de vie d'un code 6 chiffres (cf. ARCHITECTURE.md §9).
+export const TELECONSULT_CODE_TTL_MS = 15 * 60 * 1000;
+
+// Lockout anti-bruteforce : 5 échecs en 1h → blocage 30 min.
+export const TELECONSULT_LOCKOUT_MAX_ATTEMPTS = 5;
+export const TELECONSULT_LOCKOUT_WINDOW_MS = 60 * 60 * 1000;
+export const TELECONSULT_LOCKOUT_DURATION_MS = 30 * 60 * 1000;

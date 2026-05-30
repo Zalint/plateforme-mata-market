@@ -19,6 +19,7 @@ const PRODUCER_NAV: NavItem[] = [
   { href: '/producer/received-orders', label: 'Commandes reçues', icon: 'inbox' },
   { href: '/producer/sites', label: 'Mes sites', icon: 'map-pin' },
   { href: '/producer/setup', label: 'Mon profil', icon: 'user' },
+  { href: '/producer/help', label: 'Me faire aider', icon: 'phone-call' },
 ];
 const CLIENT_NAV: NavItem[] = [
   { href: '/client/catalog', label: 'Catalogue', icon: 'grid-2x2' },
@@ -31,6 +32,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: '/admin/offers', label: 'Validation offres', icon: 'badge-check' },
   { href: '/admin/orders', label: 'Commandes', icon: 'shopping-bag' },
   { href: '/admin/payments', label: 'Paiements', icon: 'wallet' },
+  { href: '/admin/teleconseil', label: 'Téléconseil', icon: 'headphones' },
   { href: '/admin/pricing', label: 'Pricing', icon: 'calculator' },
 ];
 

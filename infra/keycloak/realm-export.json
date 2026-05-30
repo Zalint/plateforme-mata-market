@@ -139,6 +139,23 @@
         }
       ],
       "realmRoles": ["client_pro"]
+    },
+    {
+      "id": "30b6c2d3-4e5f-4067-9101-b2c3d4e5f607",
+      "username": "ibrahima.ndiaye",
+      "enabled": true,
+      "emailVerified": false,
+      "email": "ibrahima.ndiaye@mata.sn",
+      "firstName": "Ibrahima",
+      "lastName": "Ndiaye",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "mata",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["teleconsultant"]
     }
   ]
 }

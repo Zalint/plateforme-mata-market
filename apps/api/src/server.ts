@@ -22,6 +22,7 @@ import { payoutRoutes } from './modules/payouts/index.js';
 import { pricingRoutes } from './modules/pricing/index.js';
 import { producerRoutes } from './modules/producers/index.js';
 import { siteRoutes } from './modules/sites/index.js';
+import { teleconsultPlugin, teleconsultRoutes } from './modules/teleconsult/index.js';
 import { uploadsRoutes } from './modules/uploads/index.js';
 import { zoneRoutes } from './modules/zones/index.js';
 import { authRoutes } from './routes/auth.js';
@@ -89,6 +90,11 @@ async function buildServer(): Promise<void> {
   const verifier = createKeycloakVerifier(kcConfig);
   await app.register(authPlugin, { verifier });
 
+  // Lot 6 · Téléconseil : résout req.actingOnBehalfOf depuis l'en-tête
+  // X-Teleconsult-Session-Id (CLAUDE.md §G8). DOIT être enregistré APRÈS
+  // auth-plugin et AVANT toutes les routes métier.
+  await app.register(teleconsultPlugin);
+
   await app.register(healthRoutes);
   await app.register(authRoutes);
   await app.register(zoneRoutes);
@@ -100,6 +106,7 @@ async function buildServer(): Promise<void> {
   await app.register(orderRoutes);
   await app.register(paymentRoutes); // Lot 5
   await app.register(payoutRoutes); // Lot 5
+  await app.register(teleconsultRoutes); // Lot 6
   await app.register(uploadsRoutes);
 
   app.setErrorHandler((err, req, reply) => {

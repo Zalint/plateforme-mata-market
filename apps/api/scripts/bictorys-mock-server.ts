@@ -22,6 +22,7 @@ import Fastify from 'fastify';
 // Charge le .env local de apps/api/ pour BICTORYS_WEBHOOK_SECRET (alignement clé HMAC).
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+
 const envFile = resolve(process.cwd(), '.env');
 if (existsSync(envFile)) {
   process.loadEnvFile(envFile);
