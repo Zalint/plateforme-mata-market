@@ -84,6 +84,38 @@ services:
       - '1025:1025' # SMTP
       - '8025:8025' # UI web
 
+  # n8n (Lot 7) — destination réelle du dispatch outbox (cron retry-outbox).
+  # Le cron POST chaque event vers http://localhost:5678/webhook/<eventType>
+  # signé HMAC SHA-256 (X-Mata-Signature). DB SQLite embarquée (suffisant en
+  # dev). UI sur http://localhost:5678 (créer un owner au 1er lancement).
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: mata-n8n
+    restart: unless-stopped
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: '5678'
+      N8N_PROTOCOL: http
+      # URL de base utilisée pour générer les URLs de webhook (production mode).
+      WEBHOOK_URL: http://localhost:5678/
+      N8N_EDITOR_BASE_URL: http://localhost:5678/
+      # Cookie non-secure : login UI possible en HTTP sur localhost.
+      N8N_SECURE_COOKIE: 'false'
+      GENERIC_TIMEZONE: Africa/Dakar
+      # Clé de chiffrement des credentials n8n (dev fixe → persistance volume).
+      N8N_ENCRYPTION_KEY: mata-dev-n8n-encryption-key-change-me
+      # Évite les warnings de dépréciation au boot.
+      N8N_RUNNERS_ENABLED: 'true'
+      N8N_DIAGNOSTICS_ENABLED: 'false'
+      N8N_PERSONALIZATION_ENABLED: 'false'
+    ports:
+      - '5678:5678'
+    volumes:
+      - n8n-data:/home/node/.n8n
+      # Workflows MATA prêts à importer (cf. infra/n8n/README).
+      - ./infra/n8n:/import:ro
+
 volumes:
   postgres-data:
   keycloak-db-data:
+  n8n-data:
