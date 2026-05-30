@@ -87,7 +87,8 @@ async function logWebhookAudit(
 // Création du checkout (POST /v1/payments/intents)
 
 interface CreateCheckoutSessionArgs {
-  actorUserId: string;
+  /** `null` = commande invité (Lot 8) → audit `payment.intent_created` skippé. */
+  actorUserId: string | null;
   orderId: string;
   request?: FastifyRequest;
 }
@@ -182,19 +183,29 @@ async function createCheckoutSessionInternal(
     });
   });
 
-  await auditService.log({
-    actorUserId,
-    action: 'payment.intent_created',
-    targetType: 'payment',
-    targetId: created.id,
-    newValue: {
-      orderId: order.id,
-      orderNumber: order.orderNumber,
-      providerIntentId: created.providerIntentId,
-      amountFcfa: created.amountFcfa,
-    },
-    request,
-  });
+  // Audit `payment.intent_created` : seulement pour un client authentifié. Pour
+  // un invité (Lot 8) il n'y a pas de row `users` → on skip avec un warn (même
+  // politique que `logWebhookAudit`).
+  if (actorUserId) {
+    await auditService.log({
+      actorUserId,
+      action: 'payment.intent_created',
+      targetType: 'payment',
+      targetId: created.id,
+      newValue: {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        providerIntentId: created.providerIntentId,
+        amountFcfa: created.amountFcfa,
+      },
+      request,
+    });
+  } else {
+    logger.warn(
+      { event: 'payment.intent_created.guest_audit_skipped', paymentId: created.id },
+      'payment.intent_created.guest_audit_skipped',
+    );
+  }
 
   return {
     paymentId: created.id,

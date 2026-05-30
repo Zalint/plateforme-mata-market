@@ -1,5 +1,6 @@
 export * from './catalog.js';
 export * from './common.js';
+export * from './guest.js';
 export * from './health.js';
 export * from './notification.js';
 export * from './offer.js';

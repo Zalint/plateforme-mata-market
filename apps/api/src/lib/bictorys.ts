@@ -78,7 +78,12 @@ type HttpFetchOptions = {
   method: 'GET' | 'POST';
   url: string;
   headers?: Record<string, string>;
-  body?: unknown; // JSON-serialisable
+  body?: unknown; // JSON-serialisable (content-type: application/json)
+  // Corps `application/x-www-form-urlencoded` (mutuellement exclusif avec `body`).
+  // Utilisé pour les API qui n'acceptent pas de JSON (ex : hCaptcha siteverify).
+  // Les valeurs ne sont JAMAIS loggées (seule `url` l'est) — on garde donc les
+  // secrets dans le form, jamais en query string (CLAUDE.md §G8).
+  form?: Record<string, string>;
   timeoutMs?: number;
   maxRetries?: number;
   retryBaseMs?: number;
@@ -114,14 +119,21 @@ export async function httpFetch(opts: HttpFetchOptions): Promise<HttpFetchResult
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
+      // Corps : form-urlencoded si `form` fourni, sinon JSON (défaut).
+      const isForm = opts.form !== undefined;
+      const requestBody = isForm
+        ? new URLSearchParams(opts.form).toString()
+        : opts.body !== undefined
+          ? JSON.stringify(opts.body)
+          : undefined;
       const res = await fetch(opts.url, {
         method: opts.method,
         headers: {
-          'content-type': 'application/json',
+          'content-type': isForm ? 'application/x-www-form-urlencoded' : 'application/json',
           accept: 'application/json',
           ...opts.headers,
         },
-        body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+        body: requestBody,
         signal: controller.signal,
       });
       clearTimeout(timeout);

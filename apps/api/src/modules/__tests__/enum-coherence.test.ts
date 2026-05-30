@@ -14,6 +14,7 @@ import {
   OFFER_STATUSES,
   OFFER_UNITS,
   ORDER_STATUSES,
+  PAYMENT_METHODS,
   PAYMENT_STATUSES,
   PAYOUT_STATUSES,
   PICKUP_STATUSES,
@@ -31,6 +32,7 @@ import {
   OfferStatus,
   OfferUnit,
   OrderStatus,
+  PaymentMethod,
   PaymentStatus,
   PayoutStatus,
   PickupStatus,
@@ -94,5 +96,8 @@ describe('Coherence enums Prisma ↔ @mata/shared/constants', () => {
   });
   it('PickupStatus', () => {
     expect(valuesOf(PickupStatus)).toEqual([...PICKUP_STATUSES].sort());
+  });
+  it('PaymentMethod', () => {
+    expect(valuesOf(PaymentMethod)).toEqual([...PAYMENT_METHODS].sort());
   });
 });

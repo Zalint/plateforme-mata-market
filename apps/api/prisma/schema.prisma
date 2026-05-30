@@ -287,6 +287,22 @@ enum PickupStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Enums · Lot 8 (guest checkout)
+// ─────────────────────────────────────────────────────────────────
+
+// PaymentMethod — moyen de paiement choisi à la création de la commande.
+// Introduit au Lot 8 pour le guest checkout : un invité peut payer en ligne
+// (Bictorys, flux webhook existant) OU à la livraison (cash). Les commandes
+// `cash_on_delivery` sont confirmables sans payment intent. `online` reste le
+// défaut (rétro-compatible avec les commandes client authentifié du Lot 4).
+enum PaymentMethod {
+  online // paiement Bictorys avant confirmation (défaut)
+  cash_on_delivery // paiement cash à la livraison, confirmable sans intent
+
+  @@map("payment_method")
+}
+
+// ─────────────────────────────────────────────────────────────────
 // users · identité MATA mappée vers Keycloak (Lot 1, relation ajoutée au Lot 2)
 // ─────────────────────────────────────────────────────────────────
 
@@ -708,6 +724,18 @@ model Order {
   orderNumber  String      @unique @map("order_number") // ex: CMD-2026-0001
   clientUserId String?     @map("client_user_id") @db.Uuid // null = guest Lot 8
   status       OrderStatus @default(created)
+
+  // Lot 8 — guest checkout. Renseignés UNIQUEMENT quand client_user_id est null
+  // (commande invité, sans compte Keycloak). Pour un client authentifié ils
+  // restent null : l'identité vient de la relation `client`. `guest_phone_number`
+  // au format E.164 sénégalais (+221XXXXXXXXX) validé Zod à la frontière.
+  guestFullName    String? @map("guest_full_name")
+  guestPhoneNumber String? @map("guest_phone_number")
+
+  // Moyen de paiement choisi à la création. `online` (défaut) = flux Bictorys
+  // existant. `cash_on_delivery` = paiement à la livraison (guest), commande
+  // confirmable sans payment intent.
+  paymentMethod PaymentMethod @default(online) @map("payment_method")
 
   // Livraison
   deliveryZoneId      String         @map("delivery_zone_id") @db.Uuid

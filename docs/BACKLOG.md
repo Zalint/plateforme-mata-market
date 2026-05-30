@@ -366,6 +366,65 @@ exacts où ces dettes sont marquées en commentaire inline.
   `publicId` qui n'existent pas → erreur lors de l'affichage côté front
   (image cassée). Pas de risque sécurité grave car le folder est privé.
 
+## [lot-8→lot-9] hCaptcha invité scaffoldé mais désactivé (config prod requise)
+
+- **Découvert** : Lot 8 (anti-abus mode invité)
+- **Cible** : Lot 9 (durcissement sécurité + config infra Render)
+- **Pourquoi reporté** : le helper `verifyHcaptcha()` + le preHandler du plugin
+  invité sont livrés et testés (test integration : `HCAPTCHA_SECRET` défini +
+  token invalide → 403, 0 commande créée). Mais en dev/test `HCAPTCHA_SECRET`
+  est absent, donc `isHcaptchaConfigured()` renvoie `false` et le preHandler
+  laisse passer (scaffold désactivé). Activation prod = poser `HCAPTCHA_SECRET`
+  (+ sitekey côté web) dans le dashboard Render et câbler le widget hCaptcha
+  dans le formulaire `/guest/checkout` (champ `hcaptchaToken` déjà accepté par
+  le schéma `CreateGuestOrder`).
+- **Fichiers** : apps/api/src/lib/hcaptcha.ts, apps/api/src/modules/guest/guest-plugin.ts
+  (preHandler), apps/web/app/(chromeless)/guest/checkout/page.tsx (widget à câbler).
+- **Garde-fou actuel** : rate-limit strict `/v1/guest/*` (test integration :
+  11ᵉ POST → 429) protège déjà contre l'abus brut au MVP.
+- **Risque si non traité** : prod sans hCaptcha = formulaire invité soumis au
+  spam automatisé au-delà de ce que le rate-limit IP filtre. Acceptable au MVP,
+  à activer avant ouverture publique.
+
+## [lot-8→lot-9] Audit_log non écrit pour les commandes invité
+
+- **Découvert** : Lot 8 (création commande invité sans compte)
+- **Cible** : Lot 9 (durcissement audit + reporting)
+- **Pourquoi reporté** : `order.create` (et la confirmation paiement) loggue
+  normalement via `auditService.log({ actorUserId })`. Pour une commande
+  invité il n'y a PAS de row `users` (l'invité est identifié par
+  `guest_phone_number`), donc `actorUserId` serait null et la FK
+  `audit_log.actor_user_id → users.id` échouerait. Choix : skip l'audit pour
+  l'invité (cohérent avec le précédent `payment-service` webhook qui skip aussi
+  quand l'acteur est le prestataire). Refactor propre : rendre
+  `audit_log.actor_user_id` nullable + ajouter une colonne `guest_phone_number`
+  (ou `actor_kind`) pour tracer l'acteur invité.
+- **Fichiers** : apps/api/src/modules/guest/guest-service.ts (création order
+  sans audit), apps/api/src/modules/orders/order-service.ts (audit câblé au
+  parcours authentifié).
+- **Garde-fou actuel** : les rows `orders` invité portent `guest_full_name` +
+  `guest_phone_number` + `payment_method`, donc la commande reste traçable en
+  base ; seul le journal `audit_log` est muet.
+- **Risque si non traité** : reporting audit incomplet sur le canal invité.
+  Pas de surface sécurité (la commande elle-même est persistée et traçable).
+
+## [lot-8→lot-?] Mockup checkout : trois moyens de paiement → deux exposés
+
+- **Découvert** : Lot 8 (UI `/guest/checkout`, mockup §4712)
+- **Cible** : non urgent — à revoir si le backend expose un choix wallet explicite
+- **Pourquoi reporté** : le mockup présente trois options (Espèces / Wave /
+  Orange Money) mais l'enum backend `payment_method` n'expose que
+  `cash_on_delivery | online`. L'UI présente donc deux radios (Espèces +
+  Paiement en ligne) ; le choix Wave vs Orange Money se fait sur la page
+  hébergée Bictorys après redirection. Adaptation assumée du mockup contrainte
+  par l'enum.
+- **Fichiers** : apps/web/app/(chromeless)/guest/checkout/page.tsx
+  (`GUEST_PAYMENT_METHODS`).
+- **Garde-fou actuel** : le hint « Wave, Orange Money… via un lien sécurisé »
+  explicite la redirection au client.
+- **Risque si non traité** : léger écart visuel avec le mockup, sans impact
+  fonctionnel (Bictorys gère le sous-choix wallet).
+
 ## [lot-2→lot-?] Schemas Output exposent `displayName` partout
 
 - **Découvert** : Lot 2 (Fix 1, enrichissement mappers)
@@ -377,12 +436,25 @@ exacts où ces dettes sont marquées en commentaire inline.
 - **Fichiers** : packages/shared/src/schemas/producer.ts:120
 - **Garde-fou actuel** : seul `displayName` (déjà public sur Keycloak), pas
   le `phone`/`email` réservés à `ProducerProfileAdmin`.
-- **Risque si non traité** : aucun majeur. À documenter Lot 8 (guest)
-  pour décider si guest catalog masque les noms.
+- **Risque si non traité** : aucun majeur (le canal invité est tranché, cf.
+  `## Résolues` Lot 8 — masquage producteur). Reste à confirmer le comportement
+  voulu pour le catalogue authentifié `client_particulier`.
 
 ---
 
 # Résolues
+
+## [lot-2→lot-8] Catalogue invité : masquage de l'identité producteur — résolue 2026-05-30 (Lot 8)
+
+Décision tranchée au Lot 8 (suite à la note « À documenter Lot 8 (guest) pour
+décider si guest catalog masque les noms ») : **le catalogue invité MASQUE
+l'identité du producteur** (CLAUDE.md §G3). Les routes publiques
+`/v1/guest/catalog/offers` renvoient les offres SANS les champs `producer`/`site`
+(masquage côté serveur, vérifié par le test integration « offre a zoneId mais PAS
+de clé producer/site »). L'UI `/guest/checkout` affiche « Producteur MATA vérifié »
+au lieu du nom. L'entrée active `[lot-2→lot-?] displayName partout` reste ouverte
+uniquement pour le **catalogue authentifié** (`client_particulier`), distinct du
+canal invité désormais tranché.
 
 ## [lot-2→lot-3] Édition cosmétique offre validée — résolue 2026-05-29 (Lot 3)
 
