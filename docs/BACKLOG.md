@@ -155,25 +155,43 @@ exacts où ces dettes sont marquées en commentaire inline.
 - **Risque si non traité** : audit log incomplet pour reporting téléconseil.
   Acceptable au MVP car outbox event compense.
 
-## [lot-6→lot-7] Outbox `teleconsult.action.performed` → push web + email
+## [lot-7→lot-9] Config Render cron pour `retry-outbox`
 
-- **Découvert** : Lot 6 (event outbox émis à chaque action déléguée mais
-  non encore consommé par n8n)
-- **Cible** : Lot 7 (tournées + push + n8n)
-- **Pourquoi reporté** : Lot 6 livre l'émission de l'event (cf.
-  `teleconsult-plugin.ts` hook onResponse — chaque mutation 2xx avec
-  `req.actingOnBehalfOf` insère une row `outbox_events` typée
-  `teleconsult.action.performed`). Le dispatch vers n8n + push web producteur
-  + email récap fin de session relèvent du Lot 7 (cron retry-outbox + n8n
-  flows). En attendant, l'event est juste persistant, audit_log reste le
-  canal principal de traçabilité.
-- **Fichiers** : apps/api/src/modules/teleconsult/teleconsult-plugin.ts
-  (hook onResponse), table `outbox_events`.
-- **Garde-fou actuel** : audit_log capture déjà chaque action sensible avec
-  `on_behalf_of_user_id` — le producteur peut consulter à tout moment.
-  L'email récap fin de session viendra en bonus quand n8n sera câblé.
-- **Risque si non traité** : pas de notification push temps réel pour le
-  producteur. Acceptable au MVP (l'audit log reste consultable).
+- **Découvert** : Lot 7 (cron retry-outbox livré sans config Render)
+- **Cible** : Lot 9 (config infra Render — même PR que process-payouts +
+  cleanup-expired-teleconsult)
+- **Pourquoi reporté** : le job `apps/api/src/jobs/retry-outbox.ts` est livré
+  et invocable via `pnpm outbox:cron` (couvert par le test integration
+  `outbox-flow` : succès, idempotence, échec/retry, abandon). La config Render
+  Cron Job (schedule `*/1 * * * *` UTC, même image Docker que l'API, command
+  override) sera mutualisée avec les deux autres crons (process-payouts,
+  cleanup-expired-teleconsult) dans un render.yaml unifié.
+- **Fichiers** : apps/api/src/jobs/retry-outbox.ts, apps/api/package.json
+  (`outbox:cron` script).
+- **Garde-fou actuel** : MVP local, déclenchement manuel suffit. n8n hors
+  chemin critique : sans cron, les events s'accumulent dans `outbox_events`
+  sans bloquer aucune mutation métier. Le push web (déclenché DIRECTEMENT par
+  les services) fonctionne indépendamment du cron.
+- **Risque si non traité** : prod sans cron = emails/intégrations n8n
+  (order.created, payout.sent, etc.) jamais délivrés. Aucune perte de données
+  (events persistés), aucun impact sur le métier ni sur le push web.
+
+## [lot-7→lot-9] E2E Puppeteer push web réel (souscription navigateur)
+
+- **Découvert** : Lot 7 (notifications push web livrées + testées côté API)
+- **Cible** : Lot 9 (suite E2E browser complète)
+- **Pourquoi reporté** : les tests integration couvrent le service
+  (`notifications-flow` : subscribe/unsubscribe/preferences/sendToUser) et le
+  câblage du déclenchement (`pickup-flow` vérifie que `sendToUser` est appelé
+  avec le bon producteur). Le test E2E réel (permission navigateur → Service
+  Worker → souscription PushManager → réception d'une notification système)
+  demande un navigateur headless avec VAPID configuré + un SW enregistré.
+  C'est un travail Lot 9 (cf. E2E Playwright/Puppeteer global).
+- **Fichiers** : à créer apps/web/e2e/push-subscription.spec.ts (Lot 9).
+- **Garde-fou actuel** : service + déclenchement couverts par tests integration ;
+  `sendToUser` ne throw jamais (hors chemin critique).
+- **Risque si non traité** : régression possible dans le flux navigateur
+  (permission/SW/souscription) non détectée par les tests integration API.
 
 ## [lot-5→lot-9] KPIs admin/payments calculés côté front
 
@@ -222,17 +240,6 @@ exacts où ces dettes sont marquées en commentaire inline.
   apps/api/prisma/schema.prisma (model IdempotencyRecord, index createdAt)
 - **Garde-fou actuel** : index `created_at` posé pour permettre un cron rapide.
 - **Risque si non traité** : croissance lente (~30 rows/mois MVP), pas bloquant.
-
-## [lot-2→lot-7] Coordonnées centroid_lat/lng des zones laissées NULL
-
-- **Découvert** : Lot 2 (création table `zones`)
-- **Cible** : Lot 7 (tournées de collecte → calcul distance haversine)
-- **Pourquoi reporté** : pas d'usage métier au Lot 2. Saisir les
-  coordonnées à la main pour 13 zones prend du temps inutile.
-- **Fichiers** : apps/api/prisma/seeds/dev-seed.ts:60-72 (les `ZONES`)
-- **Garde-fou actuel** : champs `Float?` nullable, code Lot 7 doit gérer
-  le cas `null` avec fallback (ex: ignorer cette zone dans le routing).
-- **Risque si non traité** : Lot 7 bloqué si on lance les tournées.
 
 ## [lot-2→lot-9] CSP `'unsafe-inline'` et `'unsafe-eval'` autorisés en dev
 
@@ -376,6 +383,30 @@ Le schema.prisma reflète l'état final post-part2 : `paymentStatus PaymentStatu
 @default(pending) @map("payment_status")`. Test enum-coherence couvre les 4 valeurs
 (`pending`, `paid`, `refunded`, `disputed`). Lecture/écriture côté code uniformément
 via le type enum Prisma. CHECK constraint Lot 4 supprimée par DROP TEXT.
+
+## [lot-2→lot-7] Coordonnées centroid_lat/lng des zones — résolue 2026-05-30 (Lot 7)
+
+Les 13 zones du `dev-seed.ts` ont désormais `centroidLat`/`centroidLng`
+renseignés (cf. `apps/api/prisma/seeds/dev-seed.ts`). Le Lot 7 n'a finalement
+pas eu besoin de calcul haversine (les tournées groupent par `zoneId`, pas par
+distance géographique), mais les coordonnées sont en place pour un éventuel
+routing géographique ultérieur. Le code pickups gère les zones par id, sans
+dépendre des coordonnées — donc aucun fallback `null` requis.
+
+## [lot-6→lot-7] Outbox `teleconsult.action.performed` → n8n + email — résolue 2026-05-30 (Lot 7)
+
+Le cron `retry-outbox` (Lot 7) dispatche désormais TOUS les events
+`outbox_events` vers n8n, y compris `teleconsult.action.performed`, signés HMAC
+SHA-256 (`X-Mata-Signature`). Le workflow email récap / alerte interne est
+documenté côté n8n (cf. `docs/N8N_FLOWS.md` §4.7). Le payload porte les deux
+UUIDs (teleconsultant + producteur), suffisant pour le mail récap.
+
+Note de scope : le push web producteur a été câblé DIRECTEMENT dans les services
+(`notificationService.sendToUser`) pour les events à audience push pertinente
+(pickup.scheduled/confirmed → producteur, order.delivered → client, payout.sent
+→ producteur). Une notification push spécifique « un téléconseiller a agi en
+votre nom » n'a pas été ajoutée : l'audit_log (`on_behalf_of_user_id`) + l'email
+n8n couvrent ce besoin de traçabilité au MVP.
 
 ## [lot-4 fix] Seed dev idempotent + rules pricing par défaut — 2026-05-30 (Lot 4)
 

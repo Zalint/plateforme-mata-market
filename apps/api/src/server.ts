@@ -15,10 +15,12 @@ import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
 import { authPlugin, createKeycloakVerifier } from './modules/auth/index.js';
 import { catalogRoutes } from './modules/catalog/index.js';
+import { notificationRoutes } from './modules/notifications/index.js';
 import { offerRoutes } from './modules/offers/index.js';
 import { orderRoutes } from './modules/orders/index.js';
 import { paymentRoutes } from './modules/payments/index.js';
 import { payoutRoutes } from './modules/payouts/index.js';
+import { pickupRoutes } from './modules/pickups/index.js';
 import { pricingRoutes } from './modules/pricing/index.js';
 import { producerRoutes } from './modules/producers/index.js';
 import { siteRoutes } from './modules/sites/index.js';
@@ -107,6 +109,8 @@ async function buildServer(): Promise<void> {
   await app.register(paymentRoutes); // Lot 5
   await app.register(payoutRoutes); // Lot 5
   await app.register(teleconsultRoutes); // Lot 6
+  await app.register(pickupRoutes); // Lot 7
+  await app.register(notificationRoutes); // Lot 7
   await app.register(uploadsRoutes);
 
   app.setErrorHandler((err, req, reply) => {

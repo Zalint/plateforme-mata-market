@@ -22,6 +22,13 @@ export const logger = pino({
       // Téléconseil (Lot 6) — code 6 chiffres + hash bcrypt
       '*.codeHash',
       '*.code_hash',
+      // Web Push + n8n (Lot 7) — clés VAPID, secret HMAC, clés d'abonnement
+      '*.vapidPrivateKey',
+      '*.vapidPublicKey',
+      '*.p256dh',
+      '*.auth',
+      '*.n8nWebhookSecret',
+      '*.n8nSignature',
     ],
     censor: '[REDACTED]',
   },

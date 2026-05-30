@@ -16,6 +16,7 @@ import {
   ORDER_STATUSES,
   PAYMENT_STATUSES,
   PAYOUT_STATUSES,
+  PICKUP_STATUSES,
   PRICING_BASES,
   PRICING_MODELS,
   PRICING_SCOPES,
@@ -32,6 +33,7 @@ import {
   OrderStatus,
   PaymentStatus,
   PayoutStatus,
+  PickupStatus,
   PricingBase,
   PricingModel,
   PricingScope,
@@ -89,5 +91,8 @@ describe('Coherence enums Prisma ↔ @mata/shared/constants', () => {
   });
   it('TeleconsultCloseReason', () => {
     expect(valuesOf(TeleconsultCloseReason)).toEqual([...TELECONSULT_CLOSE_REASONS].sort());
+  });
+  it('PickupStatus', () => {
+    expect(valuesOf(PickupStatus)).toEqual([...PICKUP_STATUSES].sort());
   });
 });

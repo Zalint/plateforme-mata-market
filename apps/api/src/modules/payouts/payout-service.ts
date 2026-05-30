@@ -13,6 +13,7 @@ import { decrypt } from '../../lib/crypto.js';
 import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { auditService } from '../audit/index.js';
+import { notificationService } from '../notifications/index.js';
 import { type PayoutLoaded, payoutInclude, toPayoutOutput } from './mappers.js';
 
 /**
@@ -223,6 +224,21 @@ async function triggerPayoutInternal(args: TriggerPayoutArgs) {
           }),
         ),
       });
+      // Outbox : payout.sent (notif producteur « reversement effectué », n8n).
+      // Émis uniquement si le disbursement est confirmé envoyé côté provider.
+      if (providerStatusToMata(providerStatus) === 'sent') {
+        await tx.outboxEvent.create({
+          data: {
+            eventType: 'payout.sent',
+            payload: {
+              payoutId: payout.id,
+              producerUserId,
+              amountFcfa: summary.amountFcfa,
+            } satisfies Prisma.InputJsonValue,
+          },
+        });
+      }
+
       return tx.payout.findUniqueOrThrow({
         where: { id: payout.id },
         include: payoutInclude,
@@ -265,6 +281,17 @@ async function triggerPayoutInternal(args: TriggerPayoutArgs) {
     },
     'payout.created',
   );
+
+  // Push web (Lot 7, hors chemin critique) : prévient le producteur du reversement
+  // envoyé. `sendToUser` ne throw jamais (§G5) → await sûr après le commit.
+  if (created.status === 'sent') {
+    await notificationService.sendToUser(producerUserId, {
+      title: 'Reversement effectué',
+      body: `Votre reversement de ${summary.amountFcfa} FCFA a été envoyé.`,
+      url: '/producer/payouts',
+      category: 'payout',
+    });
+  }
 
   return toPayoutOutput(created);
 }

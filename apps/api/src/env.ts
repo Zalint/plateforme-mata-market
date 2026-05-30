@@ -57,6 +57,14 @@ const envSchema = z.object({
   VAPID_PRIVATE_KEY: z.string().optional(),
   VAPID_SUBJECT: z.string().optional(),
 
+  // n8n (Lot 7) — destination du dispatch outbox. Le cron retry-outbox POST
+  // chaque event vers `${N8N_BASE_URL}/<eventType>` avec une signature HMAC
+  // SHA-256 (clé N8N_WEBHOOK_SECRET) dans l'en-tête X-Mata-Signature.
+  // Optionnels : si absents, le cron log + skip (n8n jamais dans le chemin
+  // critique, CLAUDE.md §G3/§G5).
+  N8N_BASE_URL: z.string().url().optional(),
+  N8N_WEBHOOK_SECRET: z.string().optional(),
+
   // Clé AES-256-GCM en base64 (32 bytes décodés). Requise pour chiffrer
   // bank_details (Lot 2). Optionnelle en NODE_ENV=test pour permettre aux
   // tests unitaires de tourner sans la setter ; les tests qui en ont besoin

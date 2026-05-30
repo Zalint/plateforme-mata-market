@@ -261,6 +261,32 @@ enum PayoutStatus {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Enums · Lot 7 (tournées de collecte)
+// ─────────────────────────────────────────────────────────────────
+
+// PickupStatus — cycle d'une tournée de collecte (mockup §admin/pickup,
+// légende l.2575-2579 : Planifiée / À confirmer / Confirmée / En cours /
+// Effectuée) + `cancelled` pour l'annulation.
+//   scheduled  → to_confirm  (admin finalise les items, demande confirmation producteurs)
+//   scheduled  → cancelled
+//   to_confirm → confirmed   (producteurs ont confirmé la disponibilité)
+//   to_confirm → cancelled
+//   confirmed  → collecting  (chauffeur en route — émet outbox pickup.confirmed)
+//   confirmed  → cancelled
+//   collecting → collected   (tournée terminée, items cochés)
+//   collecting → cancelled
+enum PickupStatus {
+  scheduled // planifiée, créée par l'admin
+  to_confirm // en attente de confirmation des producteurs
+  confirmed // confirmée, prête à démarrer
+  collecting // en cours (chauffeur en tournée)
+  collected // effectuée (tous items traités)
+  cancelled // annulée (libère les order_items)
+
+  @@map("pickup_status")
+}
+
+// ─────────────────────────────────────────────────────────────────
 // users · identité MATA mappée vers Keycloak (Lot 1, relation ajoutée au Lot 2)
 // ─────────────────────────────────────────────────────────────────
 
@@ -294,6 +320,8 @@ model User {
   teleconsultCodes         TeleconsultCode[]    @relation("producer_codes")
   teleconsultSessionsAsTC  TeleconsultSession[] @relation("teleconsultant_sessions")
   teleconsultSessionsAsPro TeleconsultSession[] @relation("producer_sessions")
+  // Lot 7 — push web
+  pushSubscriptions PushSubscription[]
 
   @@index([role, status])
   @@map("users")
@@ -369,6 +397,7 @@ model Zone {
   producerProfiles ProducerProfile[]
   productionSites  ProductionSite[]
   orders           Order[]
+  pickups          Pickup[] // Lot 7 : tournées de collecte planifiées sur la zone
 
   @@index([active])
   @@map("zones")
@@ -743,6 +772,7 @@ model OrderItem {
   producer        User            @relation("producer_items", fields: [producerUserId], references: [id], onDelete: Restrict)
   pricingSnapshot PricingSnapshot @relation(fields: [pricingSnapshotId], references: [id], onDelete: Restrict)
   payoutItem      PayoutItem? // Lot 5 : 1:1 inverse (un item est couvert par au plus un payout)
+  pickupItem      PickupItem? // Lot 7 : 1:1 inverse (un item est rattaché à au plus une tournée)
 
   @@index([producerUserId, createdAt(sort: Desc)])
   @@index([orderId])
@@ -1018,4 +1048,103 @@ model TeleconsultSession {
   // Index : cleanup cron (sessions expirées à fermer).
   @@index([expiresAt, closedAt])
   @@map("teleconsult_sessions")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// pickups · tournées de collecte chez les producteurs (Lot 7)
+//
+// Une tournée regroupe N order_items à collecter dans une zone, à une date
+// et période données. Numéro `PKP-{YYYY}-{NNNN}` via SEQUENCE atomique
+// `pickup_number_seq` (cf. order_number_seq / teleconsult session_number_seq).
+//
+// `vehicleType` réutilise la même nomenclature que production_sites.vehicle_access
+// (moto / tricycle / utilitaire / camion — cf. SITE_VEHICLE_ACCESS) : pas de
+// nouvel enum (anti sur-typage, CLAUDE.md §E2). `scheduledPeriod` réutilise
+// DeliveryPeriod (morning / afternoon) — pas de nouvel enum non plus.
+//
+// Toute mutation émet l'event outbox correspondant (pickup.scheduled à la
+// création, pickup.confirmed au passage en `collecting`) — CLAUDE.md §G3.
+// ─────────────────────────────────────────────────────────────────
+
+model Pickup {
+  id                String         @id @default(uuid()) @db.Uuid
+  pickupNumber      String         @unique @map("pickup_number") // ex: PKP-2026-0001
+  zoneId            String         @map("zone_id") @db.Uuid
+  scheduledFor      DateTime       @map("scheduled_for") // date+heure prévue de la tournée
+  scheduledPeriod   DeliveryPeriod @map("scheduled_period") // morning / afternoon
+  vehicleType       String?        @map("vehicle_type") // moto / tricycle / utilitaire / camion
+  driverDisplayName String?        @map("driver_display_name") // nom affiché du chauffeur (texte libre MVP)
+  status            PickupStatus   @default(scheduled)
+
+  completedAt  DateTime? @map("completed_at")
+  cancelledAt  DateTime? @map("cancelled_at")
+  cancelReason String?   @map("cancel_reason") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  zone  Zone         @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  items PickupItem[]
+
+  @@index([zoneId, scheduledFor])
+  @@index([status, scheduledFor])
+  @@map("pickups")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// pickup_items · liaison tournée ↔ order_item (Lot 7)
+//
+// UNIQUE sur order_item_id : un item ne peut être rattaché qu'à une seule
+// tournée à la fois (un cancel de tournée libère ses items). `collected`
+// coché par le chauffeur item par item pendant la tournée.
+//
+// FK vers order_items en ON DELETE RESTRICT (PAS cascade) : on ne perd
+// jamais l'historique d'une commande même si une tournée est purgée
+// (CLAUDE.md / brief Lot 7 : « pas de DELETE CASCADE sur order_items »).
+// ─────────────────────────────────────────────────────────────────
+
+model PickupItem {
+  id          String  @id @default(uuid()) @db.Uuid
+  pickupId    String  @map("pickup_id") @db.Uuid
+  orderItemId String  @unique @map("order_item_id") @db.Uuid // UNIQUE : un item ↔ une tournée max
+  collected   Boolean @default(false) // coché par le chauffeur pendant la collecte
+  notes       String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  pickup    Pickup    @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+
+  @@index([pickupId])
+  @@map("pickup_items")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// push_subscriptions · abonnements Web Push (VAPID) par utilisateur (Lot 7)
+//
+// CLAUDE.md §G1 / §G5 : permission demandée APRÈS action signifiante.
+// Un utilisateur peut avoir N souscriptions (un par device/navigateur).
+// `endpoint` UNIQUE : ré-abonnement du même device = upsert.
+//
+// Un endpoint qui renvoie 410 Gone lors d'un envoi est supprimé
+// IMMÉDIATEMENT (CLAUDE.md §G5 : « endpoints 410 supprimés immédiatement »).
+//
+// p256dh + auth = clés de chiffrement du payload push (spec Web Push).
+// Jamais loggées en clair (pino redact).
+// ─────────────────────────────────────────────────────────────────
+
+model PushSubscription {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @map("user_id") @db.Uuid
+  endpoint   String    @unique // URL du push service (FCM / Mozilla / Apple)
+  p256dh     String // clé publique cliente (base64url)
+  auth       String // secret d'authentification (base64url)
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastUsedAt DateTime? @map("last_used_at") // mis à jour à chaque envoi réussi
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
 }

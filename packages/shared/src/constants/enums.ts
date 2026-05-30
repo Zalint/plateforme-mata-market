@@ -356,3 +356,69 @@ export const TELECONSULT_CODE_TTL_MS = 15 * 60 * 1000;
 export const TELECONSULT_LOCKOUT_MAX_ATTEMPTS = 5;
 export const TELECONSULT_LOCKOUT_WINDOW_MS = 60 * 60 * 1000;
 export const TELECONSULT_LOCKOUT_DURATION_MS = 30 * 60 * 1000;
+
+// ─────────────────────────────────────────────────────────────────
+// Tournées de collecte (Lot 7)
+
+// Cycle d'une tournée, aligné sur la légende mockup §admin/pickup
+// (l.2575-2579) + `cancelled` :
+//   scheduled  (Planifiée)  → to_confirm | cancelled
+//   to_confirm (À confirmer)→ confirmed | cancelled
+//   confirmed  (Confirmée)  → collecting | cancelled
+//   collecting (En cours)   → collected | cancelled
+//   collected  (Effectuée)  → (terminal)
+//   cancelled               → (terminal)
+export const PICKUP_STATUSES = [
+  'scheduled', // planifiée, créée par l'admin
+  'to_confirm', // en attente de confirmation des producteurs
+  'confirmed', // confirmée, prête à démarrer
+  'collecting', // en cours (chauffeur en tournée)
+  'collected', // effectuée (tous items traités)
+  'cancelled', // annulée (libère les order_items)
+] as const;
+export type PickupStatus = (typeof PICKUP_STATUSES)[number];
+
+export const PICKUP_STATUS_LABEL_FR: Record<PickupStatus, string> = {
+  scheduled: 'Planifiée',
+  to_confirm: 'À confirmer',
+  confirmed: 'Confirmée',
+  collecting: 'En cours',
+  collected: 'Effectuée',
+  cancelled: 'Annulée',
+};
+
+// Matrice des transitions valides. Source de vérité du guard côté service
+// (pickup-service.ts) et de l'UI (boutons disabled selon status).
+export const PICKUP_TRANSITIONS: Record<PickupStatus, readonly PickupStatus[]> = {
+  scheduled: ['to_confirm', 'cancelled'],
+  to_confirm: ['confirmed', 'cancelled'],
+  confirmed: ['collecting', 'cancelled'],
+  collecting: ['collected', 'cancelled'],
+  collected: [],
+  cancelled: [],
+};
+
+export function isValidPickupTransition(from: PickupStatus, to: PickupStatus): boolean {
+  return PICKUP_TRANSITIONS[from].includes(to);
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Notifications push (Lot 7)
+
+// Catégories d'événements notifiables. Stockées dans
+// notification_preferences.categories (JSON { [cat]: boolean }). Une catégorie
+// absente = activée par défaut (opt-out par catégorie).
+export const NOTIFICATION_CATEGORIES = [
+  'order', // transitions de commande (confirmée, livrée…)
+  'pickup', // tournées de collecte (planifiée, en cours)
+  'payout', // reversements producteur
+  'offer', // validation/refus d'offre
+] as const;
+export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
+
+export const NOTIFICATION_CATEGORY_LABEL_FR: Record<NotificationCategory, string> = {
+  order: 'Commandes',
+  pickup: 'Collectes',
+  payout: 'Reversements',
+  offer: 'Offres',
+};
