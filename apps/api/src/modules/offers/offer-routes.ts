@@ -20,6 +20,7 @@ import {
   requireProducerOrDelegate,
   requireRole,
   requireUser,
+  resolveAuditActor,
 } from '../auth/index.js';
 import { offerService } from './offer-service.js';
 
@@ -63,7 +64,7 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
       // mockup §2934 : "Créer/modifier/suspendre offre" est dans la whitelist
       // des actions AUTORISÉES en session déléguée.
       const { ownerUserId } = requireProducerOrDelegate(req);
-      const created = await offerService.create(ownerUserId, req.body, req);
+      const created = await offerService.create(ownerUserId, req.body, resolveAuditActor(req), req);
       return reply.code(201).send(created);
     },
   );
@@ -96,8 +97,7 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
     async (req) => {
       const owner = await loadOfferOwner(req.params.id);
       assertOwnership(req, owner);
-      const user = requireUser(req);
-      return offerService.update(user.id, req.params.id, req.body, req);
+      return offerService.update(resolveAuditActor(req), req.params.id, req.body, req);
     },
   );
 
@@ -113,8 +113,7 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
     async (req) => {
       const owner = await loadOfferOwner(req.params.id);
       assertOwnership(req, owner);
-      const user = requireUser(req);
-      return offerService.attachPhotos(user.id, req.params.id, req.body, req);
+      return offerService.attachPhotos(resolveAuditActor(req), req.params.id, req.body, req);
     },
   );
 
@@ -127,8 +126,11 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
     async (req) => {
       const owner = await loadOfferOwner(req.params.id);
       assertOwnership(req, owner);
-      const user = requireUser(req);
-      return offerService.submit({ actorUserId: user.id, offerId: req.params.id, request: req });
+      return offerService.submit({
+        ...resolveAuditActor(req),
+        offerId: req.params.id,
+        request: req,
+      });
     },
   );
 
@@ -137,8 +139,11 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
     { schema: { params: OfferIdParamSchema, response: { 200: OfferOutputSchema } } },
     async (req) => {
       requireRole(req, 'admin');
-      const user = requireUser(req);
-      return offerService.validate({ actorUserId: user.id, offerId: req.params.id, request: req });
+      return offerService.validate({
+        ...resolveAuditActor(req),
+        offerId: req.params.id,
+        request: req,
+      });
     },
   );
 
@@ -153,9 +158,8 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req) => {
       requireRole(req, 'admin');
-      const user = requireUser(req);
       return offerService.reject({
-        actorUserId: user.id,
+        ...resolveAuditActor(req),
         offerId: req.params.id,
         reason: req.body.reason,
         request: req,
@@ -176,9 +180,8 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
       // Owner OU admin
       const owner = await loadOfferOwner(req.params.id);
       assertOwnership(req, owner);
-      const user = requireUser(req);
       return offerService.suspend({
-        actorUserId: user.id,
+        ...resolveAuditActor(req),
         offerId: req.params.id,
         reason: req.body.reason,
         request: req,
@@ -192,9 +195,8 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
     async (req) => {
       const owner = await loadOfferOwner(req.params.id);
       assertOwnership(req, owner);
-      const user = requireUser(req);
       return offerService.reactivate({
-        actorUserId: user.id,
+        ...resolveAuditActor(req),
         offerId: req.params.id,
         request: req,
       });

@@ -40,24 +40,19 @@ function toCustomerJsonInput(
  * Le webhook n'a pas de FastifyRequest authentifié (route publique), donc
  * pas d'utilisateur courant. On utilise l'utilisateur client de l'order
  * comme acteur naturel. Si l'order est guest (clientUserId null, Lot 8),
- * on skip l'écriture audit (avec warn) plutôt que d'échouer la FK.
+ * `actorUserId` est null et l'on trace le téléphone de contact via
+ * `guestPhoneNumber` (Lot 9) — plus de skip silencieux.
  */
 async function logWebhookAudit(
-  args: Omit<AuditLogInput, 'actorUserId'> & { actorUserId: string | null; action: AuditAction },
+  args: Omit<AuditLogInput, 'actorUserId'> & {
+    actorUserId: string | null;
+    guestPhoneNumber?: string | null;
+    action: AuditAction;
+  },
 ): Promise<void> {
-  if (!args.actorUserId) {
-    logger.warn(
-      {
-        event: 'webhook.audit_skipped_no_client_user',
-        action: args.action,
-        targetId: args.targetId,
-      },
-      'webhook.audit_skipped_no_client_user',
-    );
-    return;
-  }
   await auditService.log({
     actorUserId: args.actorUserId,
+    guestPhoneNumber: args.actorUserId ? null : (args.guestPhoneNumber ?? null),
     action: args.action,
     targetType: args.targetType,
     targetId: args.targetId,
@@ -107,6 +102,7 @@ async function createCheckoutSessionInternal(
       status: true,
       paymentStatus: true,
       totalFcfa: true,
+      guestPhoneNumber: true,
       payment: { select: { id: true, paymentUrl: true, providerIntentId: true, status: true } },
     },
   });
@@ -183,29 +179,23 @@ async function createCheckoutSessionInternal(
     });
   });
 
-  // Audit `payment.intent_created` : seulement pour un client authentifié. Pour
-  // un invité (Lot 8) il n'y a pas de row `users` → on skip avec un warn (même
-  // politique que `logWebhookAudit`).
-  if (actorUserId) {
-    await auditService.log({
-      actorUserId,
-      action: 'payment.intent_created',
-      targetType: 'payment',
-      targetId: created.id,
-      newValue: {
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        providerIntentId: created.providerIntentId,
-        amountFcfa: created.amountFcfa,
-      },
-      request,
-    });
-  } else {
-    logger.warn(
-      { event: 'payment.intent_created.guest_audit_skipped', paymentId: created.id },
-      'payment.intent_created.guest_audit_skipped',
-    );
-  }
+  // Audit `payment.intent_created` écrit systématiquement (Lot 9). Pour un
+  // invité (Lot 8) `actorUserId` est null et le téléphone de contact est tracé
+  // via `guestPhoneNumber`.
+  await auditService.log({
+    actorUserId,
+    guestPhoneNumber: actorUserId ? null : (order.guestPhoneNumber ?? null),
+    action: 'payment.intent_created',
+    targetType: 'payment',
+    targetId: created.id,
+    newValue: {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      providerIntentId: created.providerIntentId,
+      amountFcfa: created.amountFcfa,
+    },
+    request,
+  });
 
   return {
     paymentId: created.id,
@@ -270,7 +260,15 @@ async function processWebhookInternal(args: ProcessWebhookArgs): Promise<Webhook
   const payment = await prisma.payment.findUnique({
     where: { providerIntentId: payload.id },
     include: {
-      order: { select: { id: true, status: true, paymentStatus: true, clientUserId: true } },
+      order: {
+        select: {
+          id: true,
+          status: true,
+          paymentStatus: true,
+          clientUserId: true,
+          guestPhoneNumber: true,
+        },
+      },
     },
   });
   if (!payment) {
@@ -316,15 +314,10 @@ async function processWebhookInternal(args: ProcessWebhookArgs): Promise<Webhook
   }
 
   // Pour les actions automatisées (webhook), audit_log.actorUserId est rempli
-  // avec le client de l'order (acteur naturel du checkout). Guest (Lot 8) à
-  // gérer là-bas (clientUserId null → audit skip avec warn). Garde-fou ici.
+  // avec le client de l'order (acteur naturel du checkout). Commande invité
+  // (Lot 8) : clientUserId null → audit écrit avec guestPhoneNumber (Lot 9).
   const webhookActorUserId = payment.order.clientUserId;
-  if (!webhookActorUserId) {
-    logger.warn(
-      { event: 'webhook.no_client_user', paymentId: payment.id, orderId: payment.order.id },
-      'webhook.no_client_user',
-    );
-  }
+  const webhookGuestPhoneNumber = payment.order.guestPhoneNumber;
 
   // CAS PARTICULIER · cancel race : webhook 'paid' après order cancellé.
   // Cf. décision Lot 5 (option « Laisser expirer + handler webhook ») —
@@ -357,6 +350,7 @@ async function processWebhookInternal(args: ProcessWebhookArgs): Promise<Webhook
     });
     await logWebhookAudit({
       actorUserId: webhookActorUserId,
+      guestPhoneNumber: webhookGuestPhoneNumber,
       action: 'payment.refunded',
       targetType: 'payment',
       targetId: payment.id,
@@ -429,6 +423,7 @@ async function processWebhookInternal(args: ProcessWebhookArgs): Promise<Webhook
   if (newStatus === 'paid') {
     await logWebhookAudit({
       actorUserId: webhookActorUserId,
+      guestPhoneNumber: webhookGuestPhoneNumber,
       action: 'payment.received',
       targetType: 'payment',
       targetId: payment.id,
@@ -443,6 +438,7 @@ async function processWebhookInternal(args: ProcessWebhookArgs): Promise<Webhook
   } else if (newStatus === 'disputed') {
     await logWebhookAudit({
       actorUserId: webhookActorUserId,
+      guestPhoneNumber: webhookGuestPhoneNumber,
       action: 'payment.disputed',
       targetType: 'payment',
       targetId: payment.id,
@@ -453,6 +449,7 @@ async function processWebhookInternal(args: ProcessWebhookArgs): Promise<Webhook
   } else if (newStatus === 'refunded') {
     await logWebhookAudit({
       actorUserId: webhookActorUserId,
+      guestPhoneNumber: webhookGuestPhoneNumber,
       action: 'payment.refunded',
       targetType: 'payment',
       targetId: payment.id,

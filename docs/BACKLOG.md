@@ -71,34 +71,6 @@ exacts où ces dettes sont marquées en commentaire inline.
 - **Garde-fou actuel** : aucun, juste placeholder.
 - **Risque si non traité** : différence visible avec mockup, à expliquer.
 
-## [lot-6→lot-9] Audit `offer.*` lors d'une délégation téléconseil — actor distinct
-
-- **Découvert** : Lot 6 E2E approfondi (POST /v1/offers via ibrahima en
-  session déléguée → audit `offer.create` avec `actor_user_id = mor` au lieu
-  de `actor = ibrahima` + `on_behalf_of = mor`)
-- **Cible** : Lot 9 (durcissement audit + reporting)
-- **Pourquoi reporté** : `offer-service.create` (et autres routes producer
-  câblées via `requireProducerOrDelegate`) utilise `actorUserId = ownerUserId`
-  pour l'audit. Quand un téléconseiller agit pour un producteur, l'audit
-  loggue le producteur comme acteur — techniquement faux (l'acteur est le
-  téléconseiller, le producteur est juste le owner de la ressource).
-  
-  Compensation actuelle : l'outbox event `teleconsult.action.performed`
-  contient les DEUX UUIDs (teleconsultantUserId + producerUserId) — donc
-  la traçabilité existe, juste pas dans audit_log.
-  
-  Refactor : passer `actorUserId` + `onBehalfOfUserId` séparés à 
-  `offerService.create/update/suspend/reject/validate/etc.` + même pour
-  sites, stock, pickups (Lot 7).
-- **Fichiers** : apps/api/src/modules/offers/offer-service.ts:131
-  (audit.log actorUserId), apps/api/src/modules/offers/offer-routes.ts:60
-  (appel create), `requireProducerOrDelegate` qui retourne déjà
-  `{actorUserId, ownerUserId, onBehalfOf}` mais ce dernier n'est pas propagé.
-- **Garde-fou actuel** : outbox event `teleconsult.action.performed` capture
-  l'info complète. audit_log seul est partiellement correct.
-- **Risque si non traité** : audit log incomplet pour reporting téléconseil.
-  Acceptable au MVP car outbox event compense.
-
 ## [lot-7→lot-?] E2E browser push web réel (souscription navigateur)
 
 - **Découvert** : Lot 7 (notifications push web livrées + testées côté API)
@@ -269,28 +241,6 @@ exacts où ces dettes sont marquées en commentaire inline.
   `publicId` qui n'existent pas → erreur lors de l'affichage côté front
   (image cassée). Pas de risque sécurité grave car le folder est privé.
 
-## [lot-8→lot-9] Audit_log non écrit pour les commandes invité
-
-- **Découvert** : Lot 8 (création commande invité sans compte)
-- **Cible** : Lot 9 (durcissement audit + reporting)
-- **Pourquoi reporté** : `order.create` (et la confirmation paiement) loggue
-  normalement via `auditService.log({ actorUserId })`. Pour une commande
-  invité il n'y a PAS de row `users` (l'invité est identifié par
-  `guest_phone_number`), donc `actorUserId` serait null et la FK
-  `audit_log.actor_user_id → users.id` échouerait. Choix : skip l'audit pour
-  l'invité (cohérent avec le précédent `payment-service` webhook qui skip aussi
-  quand l'acteur est le prestataire). Refactor propre : rendre
-  `audit_log.actor_user_id` nullable + ajouter une colonne `guest_phone_number`
-  (ou `actor_kind`) pour tracer l'acteur invité.
-- **Fichiers** : apps/api/src/modules/guest/guest-service.ts (création order
-  sans audit), apps/api/src/modules/orders/order-service.ts (audit câblé au
-  parcours authentifié).
-- **Garde-fou actuel** : les rows `orders` invité portent `guest_full_name` +
-  `guest_phone_number` + `payment_method`, donc la commande reste traçable en
-  base ; seul le journal `audit_log` est muet.
-- **Risque si non traité** : reporting audit incomplet sur le canal invité.
-  Pas de surface sécurité (la commande elle-même est persistée et traçable).
-
 ## [lot-8→lot-?] Mockup checkout : trois moyens de paiement → deux exposés
 
 - **Découvert** : Lot 8 (UI `/guest/checkout`, mockup §4712)
@@ -326,6 +276,39 @@ exacts où ces dettes sont marquées en commentaire inline.
 ---
 
 # Résolues
+
+## [lot-8→lot-9] Audit_log non écrit pour les commandes invité — résolue 2026-05-31 (Lot 9)
+
+Au Lot 8, les mutations du canal invité (`order.create`, `payment.intent_created`,
+transitions webhook) **sautaient** `auditService.log()` car `actor_user_id` était
+`NOT NULL` et un invité n'a pas de ligne `users`. La traçabilité du canal invité
+était donc absente d'`audit_log` (CLAUDE.md §G3/§G4 : toute action métier sensible
+doit être auditée).
+
+**Fix** : `audit_log.actor_user_id` rendu nullable + colonne `guest_phone_number`
+ajoutée (migration `20260530200736_lot9_audit_log_nullable_actor_guest`, purement
+additive/assouplissante — FK passe en `ON DELETE SET NULL`). `auditService.log`
+accepte désormais `actorUserId: string | null` + `guestPhoneNumber`. `order-service`
+et `payment-service` loggent toujours, avec `guestPhoneNumber` renseigné quand
+`actorUserId` est null. Couvert par `guest-flow.integration.test.ts` (audit
+`order.create` + `payment.intent_created` : actor null, guest_phone_number = N°).
+
+## [lot-6→lot-9] Audit `offer.*` en délégation téléconseil — actor distinct — résolue 2026-05-31 (Lot 9)
+
+`offerService.create` (et les transitions) loggaient `actor_user_id = ownerUserId`
+(le producteur) au lieu du **téléconseiller réel** en session déléguée — masquant
+qui avait réellement agi. Compensation Lot 6 : l'outbox event
+`teleconsult.action.performed` portait les deux UUIDs, mais `audit_log` seul était
+faux.
+
+**Fix** : introduction d'un type `AuditActor { actorUserId; onBehalfOfUserId }`.
+Les routes offres câblent `resolveAuditActor(req)` (nouveau helper
+`apps/api/src/modules/auth/resolve-audit-actor.ts` : `actorUserId = req.user.id`,
+`onBehalfOfUserId = req.actingOnBehalfOf?.id ?? null`) — l'acteur est TOUJOURS
+l'utilisateur réel, jamais le owner de la ressource. `create/update/attachPhotos`
+et `runTransition` propagent l'`onBehalfOf`. Couvert par
+`offer-delegation-audit.integration.test.ts` (3 cas : create direct, create
+délégué, submit délégué).
 
 ## [lot-5→lot-9] E2E Playwright checkout + admin payments — résolue 2026-05-30 (Lot 9)
 

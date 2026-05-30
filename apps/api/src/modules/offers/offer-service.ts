@@ -36,8 +36,17 @@ const offerInclude = {
   producer: { include: { user: { select: { displayName: true } } } },
 } as const;
 
-type TransitionInput = {
+/**
+ * Acteur d'audit d'une mutation d'offre. `actorUserId` est TOUJOURS l'utilisateur
+ * réel (jamais le producteur cible) ; `onBehalfOfUserId` porte le producteur en
+ * session déléguée téléconseil/admin (CLAUDE.md §G3 + §G6).
+ */
+type AuditActor = {
   actorUserId: string;
+  onBehalfOfUserId?: string | null;
+};
+
+type TransitionInput = AuditActor & {
   offerId: string;
   request?: FastifyRequest;
 };
@@ -98,6 +107,7 @@ export const offerService = {
   async create(
     producerUserId: string,
     input: OfferCreate,
+    actor: AuditActor,
     request?: FastifyRequest,
   ): Promise<OfferOutput> {
     // Vérifie que le site appartient bien à ce producteur (pas un site d'un autre).
@@ -129,7 +139,8 @@ export const offerService = {
       include: offerInclude,
     });
     await auditService.log({
-      actorUserId: producerUserId,
+      actorUserId: actor.actorUserId,
+      onBehalfOfUserId: actor.onBehalfOfUserId ?? null,
       action: 'offer.create',
       targetType: 'offer',
       targetId: created.id,
@@ -148,7 +159,7 @@ export const offerService = {
    * Update partiel. Refuse 409 si statut ≠ draft.
    */
   async update(
-    actorUserId: string,
+    actor: AuditActor,
     offerId: string,
     input: OfferUpdate,
     request?: FastifyRequest,
@@ -183,7 +194,8 @@ export const offerService = {
       include: offerInclude,
     });
     await auditService.log({
-      actorUserId,
+      actorUserId: actor.actorUserId,
+      onBehalfOfUserId: actor.onBehalfOfUserId ?? null,
       action: 'offer.update',
       targetType: 'offer',
       targetId: offerId,
@@ -266,7 +278,7 @@ export const offerService = {
   // Photos (attach après upload Cloudinary signé)
 
   async attachPhotos(
-    actorUserId: string,
+    actor: AuditActor,
     offerId: string,
     input: OfferAttachPhotosInput,
     request?: FastifyRequest,
@@ -293,7 +305,8 @@ export const offerService = {
       include: offerInclude,
     });
     await auditService.log({
-      actorUserId,
+      actorUserId: actor.actorUserId,
+      onBehalfOfUserId: actor.onBehalfOfUserId ?? null,
       action: 'offer.update',
       targetType: 'offer',
       targetId: offerId,
@@ -308,6 +321,7 @@ export const offerService = {
 
 async function runTransition(input: {
   actorUserId: string;
+  onBehalfOfUserId?: string | null;
   offerId: string;
   from: readonly OfferStatus[];
   action: 'offer.submit' | 'offer.validate' | 'offer.reject' | 'offer.suspend' | 'offer.reactivate';
@@ -330,6 +344,7 @@ async function runTransition(input: {
   });
   await auditService.log({
     actorUserId: input.actorUserId,
+    onBehalfOfUserId: input.onBehalfOfUserId ?? null,
     action: input.action,
     targetType: 'offer',
     targetId: input.offerId,

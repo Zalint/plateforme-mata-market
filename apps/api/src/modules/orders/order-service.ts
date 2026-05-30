@@ -12,7 +12,6 @@ import type {
 } from '@mata/shared/schemas';
 import type { Prisma } from '@prisma/client';
 import type { FastifyRequest } from 'fastify';
-import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { auditService } from '../audit/index.js';
 import { notificationService } from '../notifications/index.js';
@@ -191,28 +190,22 @@ async function createOrderInternal(args: CreateOrderArgs): Promise<OrderOutput> 
     return order as OrderLoaded;
   });
 
-  // Audit `order.create` : seulement pour un client authentifié. Un invité n'a
-  // pas de row `users` → FK actor impossible. On log un warn pour la traçabilité
-  // (même politique que le webhook payment, cf. payment-service `logWebhookAudit`).
-  if (clientUserId) {
-    await auditService.log({
-      actorUserId: clientUserId,
-      action: 'order.create',
-      targetType: 'order',
-      targetId: created.id,
-      newValue: {
-        orderNumber: created.orderNumber,
-        totalFcfa: created.totalFcfa,
-        itemsCount: created.items.length,
-      },
-      request,
-    });
-  } else {
-    logger.warn(
-      { event: 'order.create.guest_audit_skipped', orderId: created.id },
-      'order.create.guest_audit_skipped',
-    );
-  }
+  // Audit `order.create` écrit systématiquement (Lot 9). Pour un invité,
+  // `actorUserId` est null (pas de row `users`) et l'identité de contact est
+  // tracée via `guestPhoneNumber` — colonne nullable ajoutée Lot 9.
+  await auditService.log({
+    actorUserId: clientUserId,
+    guestPhoneNumber: clientUserId ? null : (guest?.phoneNumber ?? null),
+    action: 'order.create',
+    targetType: 'order',
+    targetId: created.id,
+    newValue: {
+      orderNumber: created.orderNumber,
+      totalFcfa: created.totalFcfa,
+      itemsCount: created.items.length,
+    },
+    request,
+  });
 
   return toOrderOutput(created);
 }

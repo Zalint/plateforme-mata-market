@@ -63,8 +63,11 @@ export type AuditAction =
   | 'notification.preferences_update';
 
 export type AuditLogInput = {
-  actorUserId: string;
+  /** `null` = acteur invité (sans row `users`). Renseigner alors `guestPhoneNumber`. */
+  actorUserId: string | null;
   onBehalfOfUserId?: string | null;
+  /** Téléphone de contact invité — à fournir quand `actorUserId` est null. */
+  guestPhoneNumber?: string | null;
   action: AuditAction;
   targetType: string;
   targetId?: string | null;
@@ -79,6 +82,7 @@ export const auditService = {
       data: {
         actorUserId: input.actorUserId,
         onBehalfOfUserId: input.onBehalfOfUserId ?? null,
+        guestPhoneNumber: input.guestPhoneNumber ?? null,
         action: input.action,
         targetType: input.targetType,
         targetId: input.targetId ?? null,

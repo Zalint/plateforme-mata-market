@@ -29,7 +29,7 @@ import { guestPlugin } from '../guest-plugin.js';
  * Vérifie :
  *  1. GET /v1/guest/zones + /v1/guest/catalog/offers accessibles sans JWT
  *  2. Catalogue invité MASQUE l'identité producteur (pas de `producer`/`site`)
- *  3. POST /v1/guest/orders `cash_on_delivery` → 201, commande invité, audit skip
+ *  3. POST /v1/guest/orders `cash_on_delivery` → 201, commande invité, audit guest (Lot 9)
  *  4. POST /v1/guest/orders `online` → intent Bictorys → webhook paid → confirmé
  *  5. Idempotence : même X-Idempotency-Key → 200 + même commande
  *  6. Ownership intent invité : mauvais téléphone → 403, commande cash → 409
@@ -187,7 +187,10 @@ afterEach(async () => {
   env.HCAPTCHA_SECRET = undefined;
 
   await prisma.outboxEvent.deleteMany({});
-  await prisma.auditLog.deleteMany({ where: { actorUserId: producer.id } });
+  // Inclut les audits invité (actorUserId null, tracés par guestPhoneNumber, Lot 9).
+  await prisma.auditLog.deleteMany({
+    where: { OR: [{ actorUserId: producer.id }, { guestPhoneNumber: GUEST_PHONE }] },
+  });
   await prisma.payment.deleteMany({});
   await prisma.orderItem.deleteMany({});
   await prisma.order.deleteMany({});
@@ -238,7 +241,7 @@ describe('Guest · lectures publiques (sans JWT)', () => {
 });
 
 describe('Guest · création de commande', () => {
-  it('POST /v1/guest/orders cash_on_delivery → 201, commande invité, audit skip', async () => {
+  it('POST /v1/guest/orders cash_on_delivery → 201, commande invité, audit guest (Lot 9)', async () => {
     const app = await buildApp();
     try {
       const res = await app.inject({
@@ -258,13 +261,16 @@ describe('Guest · création de commande', () => {
       expect(row?.guestFullName).toBe('Awa Ba');
       expect(row?.paymentMethod).toBe('cash_on_delivery');
 
-      // Pas de row `users` invité → audit `order.create` volontairement skippé.
+      // Lot 9 : l'audit `order.create` est désormais écrit même sans row `users`.
+      // `actorUserId` null + `guestPhoneNumber` rempli (traçabilité invité).
       const audit = await prisma.auditLog.findFirst({
         where: { action: 'order.create', targetId: body.id },
       });
-      expect(audit).toBeNull();
+      expect(audit).not.toBeNull();
+      expect(audit?.actorUserId).toBeNull();
+      expect(audit?.guestPhoneNumber).toBe(GUEST_PHONE);
 
-      // Stock réservé malgré l'absence d'audit.
+      // Stock réservé.
       const after = await prisma.offer.findUnique({ where: { id: offer.id } });
       expect(after?.quantityReserved).toBe(2);
     } finally {
@@ -344,6 +350,14 @@ describe('Guest · paiement en ligne (intent + webhook)', () => {
       const intent = intentRes.json() as { providerIntentId: string; paymentUrl: string };
       expect(intent.providerIntentId).toBe('intent_guest_123');
       expect(intent.paymentUrl).toMatch(/^https:\/\//);
+
+      // Lot 9 : audit `payment.intent_created` écrit pour l'invité (actor null +
+      // guestPhoneNumber), plus de skip silencieux.
+      const intentAudit = await prisma.auditLog.findFirst({
+        where: { action: 'payment.intent_created', guestPhoneNumber: GUEST_PHONE },
+      });
+      expect(intentAudit).not.toBeNull();
+      expect(intentAudit?.actorUserId).toBeNull();
 
       // 3. Webhook Bictorys paid → confirmation.
       const webhookBody = JSON.stringify({ id: 'intent_guest_123', status: 'paid' });

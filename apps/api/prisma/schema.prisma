@@ -349,8 +349,12 @@ model User {
 
 model AuditLog {
   id               String   @id @default(uuid()) @db.Uuid
-  actorUserId      String   @map("actor_user_id") @db.Uuid
+  // `null` = acteur sans row `users` (commande/paiement invité, cf. Lot 8/9).
+  // L'identité de contact invité est alors tracée dans `guestPhoneNumber`.
+  actorUserId      String?  @map("actor_user_id") @db.Uuid
   onBehalfOfUserId String?  @map("on_behalf_of_user_id") @db.Uuid
+  // Téléphone de contact invité quand `actorUserId` est null (traçabilité guest).
+  guestPhoneNumber String?  @map("guest_phone_number")
   action           String // ex: "offer.validate", "payout.trigger", "teleconsult.session.start"
   targetType       String   @map("target_type") // ex: "offer", "order", "user"
   targetId         String?  @map("target_id") // peut être null pour actions globales
@@ -362,7 +366,7 @@ model AuditLog {
   createdAt        DateTime @default(now()) @map("created_at")
 
   // Relations
-  actor      User  @relation("audit_actor", fields: [actorUserId], references: [id])
+  actor      User? @relation("audit_actor", fields: [actorUserId], references: [id])
   onBehalfOf User? @relation("audit_on_behalf_of", fields: [onBehalfOfUserId], references: [id])
 
   @@index([actorUserId, createdAt])
