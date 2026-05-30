@@ -261,3 +261,41 @@ export const DELIVERY_PERIOD_LABEL_FR: Record<DeliveryPeriod, string> = {
   morning: 'Matin (6h–12h)',
   afternoon: 'Après-midi (14h–18h)',
 };
+
+// ─────────────────────────────────────────────────────────────────
+// Payments (Lot 5)
+//
+// PaymentStatus traduit l'état d'un payment intent Bictorys côté MATA.
+// Mapping provider :
+//  - Bictorys `opened` / `pending`  → MATA `pending`
+//  - Bictorys `paid` / `succeeded`  → MATA `paid`
+//  - Bictorys `refunded`            → MATA `refunded`
+//  - Bictorys `disputed` / `chargeback` → MATA `disputed`
+// `expired` côté Bictorys reste `pending` côté MATA jusqu'au cancel order
+// (puis bascule `refunded` si webhook 'paid' arrive après cancel, sinon reste pending).
+
+export const PAYMENT_STATUSES = ['pending', 'paid', 'refunded', 'disputed'] as const;
+export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
+
+export const PAYMENT_STATUS_LABEL_FR: Record<PaymentStatus, string> = {
+  pending: 'En attente',
+  paid: 'Payé',
+  refunded: 'Remboursé',
+  disputed: 'Contesté',
+};
+
+// PayoutStatus traduit l'état d'un disbursement Bictorys côté MATA.
+//  - pending  : créé côté MATA, en attente d'envoi Bictorys (court terme)
+//  - sent     : Bictorys a confirmé le virement vers le producteur
+//  - failed   : Bictorys a refusé / erreur réseau / coordonnées invalides
+//  - blocked  : bloqué manuellement (dispute, fraude, KYC)
+
+export const PAYOUT_STATUSES = ['pending', 'sent', 'failed', 'blocked'] as const;
+export type PayoutStatus = (typeof PAYOUT_STATUSES)[number];
+
+export const PAYOUT_STATUS_LABEL_FR: Record<PayoutStatus, string> = {
+  pending: 'À envoyer',
+  sent: 'Envoyé',
+  failed: 'Échec',
+  blocked: 'Bloqué',
+};

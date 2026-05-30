@@ -14,6 +14,8 @@ import {
   OFFER_STATUSES,
   OFFER_UNITS,
   ORDER_STATUSES,
+  PAYMENT_STATUSES,
+  PAYOUT_STATUSES,
   PRICING_BASES,
   PRICING_MODELS,
   PRICING_SCOPES,
@@ -27,6 +29,8 @@ import {
   OfferStatus,
   OfferUnit,
   OrderStatus,
+  PaymentStatus,
+  PayoutStatus,
   PricingBase,
   PricingModel,
   PricingScope,
@@ -74,5 +78,11 @@ describe('Coherence enums Prisma ↔ @mata/shared/constants', () => {
   });
   it('DeliveryPeriod', () => {
     expect(valuesOf(DeliveryPeriod)).toEqual([...DELIVERY_PERIODS].sort());
+  });
+  it('PaymentStatus', () => {
+    expect(valuesOf(PaymentStatus)).toEqual([...PAYMENT_STATUSES].sort());
+  });
+  it('PayoutStatus', () => {
+    expect(valuesOf(PayoutStatus)).toEqual([...PAYOUT_STATUSES].sort());
   });
 });

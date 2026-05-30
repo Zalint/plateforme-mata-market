@@ -5,7 +5,7 @@ import { Icon, Money, StatusBadge, type StatusTone } from '@mata/ui';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
-import { useCancelOrder, useOrder } from '../../../../../src/lib/api';
+import { useCancelOrder, useCreatePaymentIntent, useOrder } from '../../../../../src/lib/api';
 
 /**
  * Client / Détail commande · timeline + items + actions.
@@ -39,6 +39,7 @@ export default function ClientOrderDetailPage(): React.JSX.Element {
   const orderId = params?.id ?? null;
   const { data: order, isLoading } = useOrder(orderId);
   const cancel = useCancelOrder();
+  const createIntent = useCreatePaymentIntent();
   const [showCancel, setShowCancel] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
 
@@ -50,7 +51,19 @@ export default function ClientOrderDetailPage(): React.JSX.Element {
   }
 
   const canCancel = order.status === 'created' || order.status === 'confirmed';
+  const canPay = order.status === 'created' && order.paymentStatus === 'pending';
   const currentStepIdx = order.status === 'cancelled' ? -1 : TIMELINE_STEPS.indexOf(order.status);
+
+  async function handlePay(): Promise<void> {
+    if (!order) return;
+    try {
+      const result = await createIntent.mutateAsync({ orderId: order.id });
+      // Redirect vers Bictorys (pattern MataPay-Payment.html).
+      window.location.href = result.paymentUrl;
+    } catch (err) {
+      alert(`Erreur paiement : ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
   async function handleCancel(): Promise<void> {
     if (cancelReason.trim().length < 3) {
@@ -195,6 +208,27 @@ export default function ClientOrderDetailPage(): React.JSX.Element {
               <br />
               Créneau : {order.deliverySlotPeriod === 'morning' ? 'Matin' : 'Après-midi'}
             </div>
+            {canPay && (
+              <button
+                type="button"
+                onClick={handlePay}
+                disabled={createIntent.isPending}
+                className="w-full py-3.5 rounded-lg bg-mata-700 hover:bg-mata-800 disabled:bg-stone-300 text-white text-base font-bold flex items-center justify-center gap-2"
+              >
+                <Icon name="wallet" className="w-5 h-5" />
+                {createIntent.isPending ? 'Connexion sécurisée…' : 'Payer maintenant'}
+              </button>
+            )}
+            {canPay && (
+              <div className="text-[11px] text-stone-500 text-center">
+                Paiement sécurisé Wave · Orange Money · Carte (via Bictorys)
+              </div>
+            )}
+            {createIntent.isError && (
+              <div className="text-xs text-red-700 p-2 bg-red-50 rounded-lg border border-red-200">
+                {createIntent.error.message}
+              </div>
+            )}
             {canCancel && !showCancel && (
               <button
                 type="button"

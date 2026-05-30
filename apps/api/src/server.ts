@@ -4,6 +4,7 @@ import rateLimit from '@fastify/rate-limit';
 import sensible from '@fastify/sensible';
 import { DomainError } from '@mata/shared/errors';
 import Fastify from 'fastify';
+import rawBody from 'fastify-raw-body';
 import {
   serializerCompiler,
   validatorCompiler,
@@ -16,6 +17,8 @@ import { authPlugin, createKeycloakVerifier } from './modules/auth/index.js';
 import { catalogRoutes } from './modules/catalog/index.js';
 import { offerRoutes } from './modules/offers/index.js';
 import { orderRoutes } from './modules/orders/index.js';
+import { paymentRoutes } from './modules/payments/index.js';
+import { payoutRoutes } from './modules/payouts/index.js';
 import { pricingRoutes } from './modules/pricing/index.js';
 import { producerRoutes } from './modules/producers/index.js';
 import { siteRoutes } from './modules/sites/index.js';
@@ -65,6 +68,22 @@ async function buildServer(): Promise<void> {
     timeWindow: '1 minute',
   });
 
+  // fastify-raw-body : capture le corps brut UNIQUEMENT pour les routes qui
+  // déclarent `config.rawBody = true` (CLAUDE.md §G5 « activé route par route »).
+  // Critique pour /v1/payments/webhook : la vérif HMAC se fait sur le RAW BODY.
+  //
+  // Options :
+  //  - global: false        → opt-in par route via config.rawBody
+  //  - runFirst: true       → capture AVANT le body parser JSON
+  //  - encoding: false      → retourne un Buffer (pas une string décodée)
+  //  - field: 'rawBody'     → req.rawBody
+  await app.register(rawBody, {
+    global: false,
+    runFirst: true,
+    encoding: false,
+    field: 'rawBody',
+  });
+
   // Auth Keycloak — obligatoire dès le démarrage (refuse de booter sans).
   const kcConfig = requireKeycloakConfig();
   const verifier = createKeycloakVerifier(kcConfig);
@@ -79,6 +98,8 @@ async function buildServer(): Promise<void> {
   await app.register(catalogRoutes);
   await app.register(pricingRoutes);
   await app.register(orderRoutes);
+  await app.register(paymentRoutes); // Lot 5
+  await app.register(payoutRoutes); // Lot 5
   await app.register(uploadsRoutes);
 
   app.setErrorHandler((err, req, reply) => {

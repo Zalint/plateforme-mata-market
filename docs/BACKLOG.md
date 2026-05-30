@@ -71,17 +71,77 @@ exacts où ces dettes sont marquées en commentaire inline.
 - **Garde-fou actuel** : aucun, juste placeholder.
 - **Risque si non traité** : différence visible avec mockup, à expliquer.
 
-## [lot-4→lot-5] `orders.payment_status` est un stub TEXT
+## [lot-5→lot-9] Déployer migration `lot5_payments_part2` en release séparée prod
 
-- **Découvert** : Lot 4 (modèle orders)
-- **Cible** : Lot 5 (intégration Bictorys)
-- **Pourquoi reporté** : Lot 4 livre le cycle de vie complet sans paiement.
-  Le champ `payment_status` est un TEXT borné par CHECK constraint à 4 valeurs
-  (`pending`, `paid`, `refunded`, `disputed`), seul `pending` est utilisé.
-  Lot 5 introduira un enum dédié + la logique webhook Bictorys.
-- **Fichiers** : apps/api/prisma/schema.prisma (model Order, paymentStatus)
-- **Garde-fou actuel** : CHECK constraint DB borne les valeurs autorisées.
-- **Risque si non traité** : migration enum à prévoir Lot 5.
+- **Découvert** : Lot 5 (migration deux temps payment_status TEXT → enum)
+- **Cible** : Lot 9 (procédure prod)
+- **Pourquoi reporté** : Pour la mise en prod du Lot 5, la migration `part2`
+  (drop colonne TEXT + rename enum → `payment_status`) doit être déployée
+  DANS UNE RELEASE DISTINCTE de `part1` (CLAUDE.md §G4 « DEUX déploiements »).
+  En local dev/test elles s'enchaînent en séquence via `prisma migrate deploy`.
+  En prod : `part1` au déploiement N (compatible avec le code N qui lit déjà
+  la nouvelle colonne mais garde la TEXT comme fallback), puis `part2` au
+  déploiement N+1 (drop TEXT) une fois le déploiement N validé stable.
+- **Fichiers** : apps/api/prisma/migrations/20260530100000_lot5_payments_part1_add_enum/,
+  apps/api/prisma/migrations/20260530100100_lot5_payments_part2_drop_text/
+- **Garde-fou actuel** : pas encore en prod. Local : OK les deux migrations
+  passent en séquence.
+- **Risque si non traité** : déploiement prod direct des deux migrations
+  ensemble = rollback impossible si bug applicatif post-déploiement N
+  (la TEXT a déjà été droppée).
+
+## [lot-5→lot-9] Config Render cron pour `process-payouts`
+
+- **Découvert** : Lot 5 (job process-payouts livré sans config Render)
+- **Cible** : Lot 9 (config infra Render)
+- **Pourquoi reporté** : le job `apps/api/src/jobs/process-payouts.ts` est
+  livré et invocable via `pnpm payouts:cron` (testé OK). La config Render
+  Cron Job (schedule `0 6 * * *` UTC, même image Docker que l'API, command
+  override) sera ajoutée avec les deux autres crons du Lot 9 (retry-outbox
+  Lot 7, cleanup-expired-teleconsult Lot 6) dans un docs/DEPLOYMENT.md
+  ou render.yaml unifié.
+- **Fichiers** : apps/api/src/jobs/process-payouts.ts, apps/api/package.json
+  (`payouts:cron` script), CRON_ACTOR_USER_ID env var optionnelle.
+- **Garde-fou actuel** : MVP local, déclenchement manuel suffit. Idempotent
+  par construction (`payout_items.order_item_id` UNIQUE).
+- **Risque si non traité** : prod sans cron = reversements non déclenchés
+  automatiquement, admin doit cliquer "Reverser (N)" manuellement chaque jour.
+
+## [lot-5→lot-9] KPIs admin/payments calculés côté front
+
+- **Découvert** : Lot 5 (page admin/payments)
+- **Cible** : Lot 9 (durcissement perf + agrégats côté API)
+- **Pourquoi reporté** : les KPIs « Encaissé mois / Commission MATA /
+  Frais logistique » sont calculés à la volée côté front depuis la liste
+  payments (avec approximation 10% commission et 5% frais — pas les vrais
+  pricing_snapshots). Pour le MVP c'est acceptable (volume faible).
+  En prod, calculer côté front sur 1000+ rows devient lent et imprécis :
+  exposer une route `/v1/payments/kpis?period=month` côté API avec
+  agrégation SQL (SUM des snapshot.commissionFcfa × quantity).
+- **Fichiers** : apps/web/app/(chromed)/admin/payments/page.tsx (KpiTile
+  calculs lignes 46-58)
+- **Garde-fou actuel** : approximation 10%/5% acceptable visuellement,
+  pas de décision financière basée dessus.
+- **Risque si non traité** : drift visible entre KPI affiché et compta
+  réelle quand pricing_rules varient par catégorie.
+
+## [lot-5→lot-9] E2E Playwright complet checkout + admin payments
+
+- **Découvert** : Lot 5 (E2E Puppeteer initialement prévu)
+- **Cible** : Lot 9 (suite E2E Playwright complète — cf. ARCHITECTURE.md §10)
+- **Pourquoi reporté** : les tests d'intégration testcontainers couvrent
+  déjà le flow API critique (8 tests payments + 8 tests payouts, mock fetch
+  Bictorys). Le test E2E browser (login Keycloak → catalogue → cart →
+  bouton « Payer maintenant » → simul webhook → retour /payment/return →
+  admin/payments voit la commande → admin déclenche reversement) demande
+  une orchestration Playwright + un realm Keycloak de test peuplé. C'est
+  un travail Lot 9 (cf. ARCHITECTURE.md §13 : « Lot 9 = Tests E2E
+  Playwright complet »).
+- **Fichiers** : à créer apps/web/e2e/payments-checkout.spec.ts (Lot 9)
+- **Garde-fou actuel** : tests integration API couvrent le métier critique.
+- **Risque si non traité** : régression UI checkout possible non détectée
+  par les tests integration (ex: hook qui ne câble pas correctement
+  paymentUrl).
 
 ## [lot-4→lot-9] Cron cleanup `idempotency_records` TTL 24h
 
@@ -233,6 +293,21 @@ L'enum-coherence test couvre les 7 valeurs OfferStatus.
 
 Décision : pas de reviews au Lot 4, repoussée vers Lot 9 (cf. entrée active
 `[lot-2→lot-9]` Note moyenne producteur).
+
+## [lot-4→lot-5] `orders.payment_status` stub TEXT → enum PaymentStatus — résolue 2026-05-30 (Lot 5)
+
+Migration en DEUX TEMPS livrée :
+- `20260530100000_lot5_payments_part1_add_enum` : crée enum `payment_status`,
+  ajoute colonne `payment_status_v2`, backfill depuis TEXT, NOT NULL + DEFAULT.
+  Garde la TEXT en place pour rollback applicatif possible.
+- `20260530100100_lot5_payments_part2_drop_text` : drop TEXT + rename v2 → `payment_status`.
+  Pour la prod, déployer dans une release distincte (entrée backlog
+  `[lot-5→lot-9]` Déployer migration `lot5_payments_part2` en release séparée).
+
+Le schema.prisma reflète l'état final post-part2 : `paymentStatus PaymentStatus
+@default(pending) @map("payment_status")`. Test enum-coherence couvre les 4 valeurs
+(`pending`, `paid`, `refunded`, `disputed`). Lecture/écriture côté code uniformément
+via le type enum Prisma. CHECK constraint Lot 4 supprimée par DROP TEXT.
 
 ## [lot-4 fix] Seed dev idempotent + rules pricing par défaut — 2026-05-30 (Lot 4)
 
