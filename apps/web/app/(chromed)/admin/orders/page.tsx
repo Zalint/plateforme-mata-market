@@ -36,6 +36,15 @@ const TONE: Record<OrderStatus, StatusTone> = {
 
 const FILTERS: (OrderStatus | 'all')[] = ['all', ...ORDER_STATUSES];
 
+// Transitions de collecte pilotées par la TOURNÉE (pickup-service), pas par
+// l'admin ici : créer/avancer/annuler une tournée fait suivre le statut commande
+// automatiquement. On masque donc ces boutons (sinon double pilotage / dérive).
+const PICKUP_DRIVEN_TRANSITIONS: ReadonlySet<string> = new Set([
+  'confirmed→collecting',
+  'collecting→collected',
+  'collecting→confirmed',
+]);
+
 export default function AdminOrdersPage(): React.JSX.Element {
   const [filter, setFilter] = useState<OrderStatus | 'all'>('all');
   const { data, isLoading } = useAdminOrders(filter === 'all' ? undefined : filter);
@@ -83,7 +92,10 @@ export default function AdminOrdersPage(): React.JSX.Element {
       <div className="space-y-3">
         {orders.map((o) => {
           const nextStates = ORDER_STATUSES.filter(
-            (s) => s !== 'cancelled' && isValidOrderTransition(o.status, s),
+            (s) =>
+              s !== 'cancelled' &&
+              isValidOrderTransition(o.status, s) &&
+              !PICKUP_DRIVEN_TRANSITIONS.has(`${o.status}→${s}`),
           );
           const canCancel = isValidOrderTransition(o.status, 'cancelled');
           return (

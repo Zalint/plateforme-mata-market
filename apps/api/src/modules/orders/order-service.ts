@@ -410,11 +410,41 @@ async function listAdminInternal(query: OrderAdminListQuery): Promise<OrderOutpu
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Transition pilotée par un autre module DANS sa transaction (couplage tournée).
+//
+// Le module pickups appelle ceci (via l'interface publique, §G3) pour faire
+// suivre le statut commande à la tournée, SANS casser l'atomicité (§G4) : on
+// reçoit le `tx` de l'appelant. Périmètre volontairement restreint aux
+// transitions de collecte (collecting / collected / confirmed-revert) ; l'outbox
+// `order.delivered` et les push restent dans `transitionStatus` (chemin admin).
+// L'audit est écrit par l'appelant APRÈS commit (même pattern que les services).
+async function transitionWithinTxInternal(
+  tx: Prisma.TransactionClient,
+  args: { orderId: string; to: OrderStatus },
+): Promise<{ orderId: string; from: OrderStatus; to: OrderStatus }> {
+  const current = await tx.order.findUnique({
+    where: { id: args.orderId },
+    select: { id: true, status: true },
+  });
+  if (!current) throw new DomainError('NOT_FOUND', 'Commande introuvable');
+  if (!isValidOrderTransition(current.status, args.to)) {
+    throw new DomainError('CONFLICT', `Transition impossible : ${current.status} → ${args.to}`, {
+      details: { from: current.status, to: args.to },
+    });
+  }
+  const data: Prisma.OrderUpdateInput = { status: args.to };
+  if (args.to === 'collected') data.collectedAt = new Date();
+  await tx.order.update({ where: { id: args.orderId }, data });
+  return { orderId: args.orderId, from: current.status, to: args.to };
+}
+
+// ─────────────────────────────────────────────────────────────────
 // Service exporté
 
 export const orderService = {
   create: createOrderInternal,
   transitionStatus: transitionStatusInternal,
+  transitionWithinTx: transitionWithinTxInternal,
   cancel: cancelOrderInternal,
   getById: getByIdInternal,
   listMine: listMineInternal,

@@ -232,16 +232,20 @@ export const ORDER_STATUS_LABEL_FR: Record<OrderStatus, string> = {
 //
 //   created    → confirmed | cancelled
 //   confirmed  → collecting | cancelled
-//   collecting → collected
+//   collecting → collected | confirmed   (retour si la tournée est annulée)
 //   collected  → stored
 //   stored     → delivering
 //   delivering → delivered
 //   delivered  → (terminal)
 //   cancelled  → (terminal)
+//
+// `collecting → confirmed` n'est PAS une action admin manuelle : il sert au
+// revert automatique quand une tournée de collecte est annulée (pickup-service),
+// pour que le statut commande reste vrai (collecting ⟺ tournée active).
 export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   created: ['confirmed', 'cancelled'],
   confirmed: ['collecting', 'cancelled'],
-  collecting: ['collected'],
+  collecting: ['collected', 'confirmed'],
   collected: ['stored'],
   stored: ['delivering'],
   delivering: ['delivered'],

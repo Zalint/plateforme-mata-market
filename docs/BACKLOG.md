@@ -29,6 +29,25 @@ exacts où ces dettes sont marquées en commentaire inline.
 
 # En cours
 
+## [lot-9→lot-?] Une commande répartie sur plusieurs tournées créées séparément
+
+- **Découvert** : Lot 9 (couplage commande ↔ tournée, Option 1)
+- **Cible** : ultérieur — si on observe des commandes multi-zones/multi-producteurs
+- **Pourquoi reporté** : décision validée « la commande passe `collecting` dès la
+  création d'une tournée ». Conséquence : `createPickup` exige `order.status =
+  confirmed`, donc une fois la 1re tournée créée (commande → `collecting`), on ne
+  peut plus rattacher d'AUTRES items de la même commande à une 2e tournée créée
+  plus tard. OK tant qu'une commande tient dans une seule tournée.
+- **Fichiers** : apps/api/src/modules/pickups/pickup-service.ts (garde
+  `order.status !== 'confirmed'` dans `createPickup`).
+- **Garde-fou actuel** : la transition `collecting → collected` ne se déclenche
+  que lorsque TOUS les items de la commande sont collectés (déjà géré) — donc le
+  modèle reste cohérent pour les commandes mono-tournée.
+- **Risque si non traité** : impossible de scinder la collecte d'une commande
+  entre deux tournées planifiées à des moments différents. Levée possible :
+  élargir l'éligibilité à `confirmed | collecting` (le check « tous collectés »
+  et le revert d'annulation gèrent déjà le multi-tournée).
+
 ## [lot-2→lot-?] Édition champs cosmétiques d'une offre validée
 
 - **Découvert** : Lot 2 (décision figée plan d'attaque)
