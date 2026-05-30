@@ -2,6 +2,7 @@
   "realm": "mata",
   "displayName": "MATA",
   "displayNameHtml": "<strong>MATA</strong> · Du champ à l'assiette",
+  "loginTheme": "mata",
   "enabled": true,
   "loginWithEmailAllowed": false,
   "registrationAllowed": false,

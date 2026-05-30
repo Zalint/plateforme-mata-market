@@ -16,7 +16,8 @@
       "!**/coverage",
       "!**/.vercel",
       "!**/prisma/generated",
-      "!**/mockup"
+      "!**/mockup",
+      "!**/infra/keycloak/themes"
     ]
   },
   "formatter": {

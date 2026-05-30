@@ -1,0 +1,217 @@
+/* Thème de login MATA — rebrand sobre/institutionnel de la page Keycloak.
+ * Palette `mata` (rouge boeuf #9b1c1c) + neutres stone, typo Inter.
+ * Chargé APRÈS css/login.css du thème parent → surcharge par cascade + !important
+ * (les classes PatternFly ont une forte spécificité). Le `login.ftl` custom ajoute
+ * logo + titre + champs à icône ; ici on style le tout. Aucun flux touché :
+ * OIDC + PKCE intact, Keycloak demeure l'unique fournisseur d'auth (§C / §G8).
+ */
+
+:root {
+  --mata-700: #9b1c1c;
+  --mata-800: #7f1d1d;
+  --mata-50: #fdf3f3;
+  --stone-100: #f5f5f4;
+  --stone-200: #e7e5e4;
+  --stone-400: #a8a29e;
+  --stone-500: #78716c;
+  --stone-700: #44403c;
+  --stone-900: #1c1917;
+}
+
+/* Fond clair et sobre — remplace l'image polygonale sombre par défaut. */
+html.login-pf,
+.login-pf body,
+body {
+  background: linear-gradient(160deg, #ffffff 0%, var(--mata-50) 100%) !important;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif !important;
+  color: var(--stone-900);
+}
+.login-pf body::before,
+html.login-pf::before {
+  background: none !important;
+  content: none !important;
+}
+
+/* Centrage vertical + horizontal de la carte dans la fenêtre. */
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+.login-pf-page {
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  width: 100%;
+  padding: 1.5rem !important;
+  margin: 0 !important;
+}
+
+/* On masque le header Keycloak par défaut (nom de realm + titre de page) :
+ * notre `login.ftl` affiche son propre bloc de marque (logo + titre + sous-titre). */
+#kc-header,
+#kc-header-wrapper,
+#kc-page-title {
+  display: none !important;
+}
+
+/* Carte unique : blanche, arrondie, ombre douce, bord stone. */
+.card-pf {
+  background: #ffffff !important;
+  border: 1px solid var(--stone-200) !important;
+  border-radius: 1.25rem !important;
+  box-shadow: 0 18px 40px -16px rgba(28, 25, 23, 0.22) !important;
+  padding: 2rem 1.75rem !important;
+}
+
+/* Bloc de marque (logo + titre + sous-titre). */
+.mata-brand {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+.mata-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: inline-block;
+}
+.mata-title {
+  margin: 0.85rem 0 0.15rem;
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--stone-900);
+  letter-spacing: -0.01em;
+}
+.mata-subtitle {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--stone-500);
+}
+
+/* Libellés. */
+label,
+.pf-c-form__label {
+  color: var(--stone-700) !important;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+/* Groupe de champ à icône (préfixe icône + champ, éventuel bouton œil à droite). */
+.mata-input-group {
+  display: flex;
+  align-items: stretch;
+  border: 2px solid var(--stone-200);
+  border-radius: 0.7rem;
+  background: #ffffff;
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+.mata-input-group:focus-within {
+  border-color: var(--mata-700);
+}
+.mata-input-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.85rem;
+  flex: 0 0 2.85rem;
+  color: var(--stone-400);
+  background: var(--stone-100);
+  border-right: 1px solid var(--stone-200);
+}
+.mata-input-icon svg {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+
+/* Champs : on neutralise le style PatternFly à l'intérieur du groupe. */
+.mata-input-group input,
+.mata-input-group input.pf-c-form-control,
+.mata-input-group input[type='text'],
+.mata-input-group input[type='password'] {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  color: var(--stone-900) !important;
+  padding: 0.7rem 0.85rem !important;
+  font-size: 0.95rem;
+}
+
+/* Bouton afficher/masquer le mot de passe (à droite du groupe). */
+.mata-input-group button[data-password-toggle] {
+  border: none !important;
+  border-left: 1px solid var(--stone-200) !important;
+  background: var(--stone-100) !important;
+  color: var(--stone-500) !important;
+  width: 2.85rem;
+  flex: 0 0 2.85rem;
+  border-radius: 0 !important;
+  cursor: pointer;
+}
+.mata-input-group button[data-password-toggle]:hover {
+  color: var(--mata-700) !important;
+}
+
+/* Espacement vertical entre groupes de champs. */
+#kc-form-login .pf-c-form__group,
+#kc-form-login > form > div,
+#kc-form-wrapper form > div {
+  margin-bottom: 1rem;
+}
+
+/* Bouton primaire « Connexion ». */
+.pf-c-button.pf-m-primary,
+input[type='submit'],
+button[type='submit'],
+#kc-login,
+.btn-primary {
+  width: 100%;
+  background: var(--mata-700) !important;
+  border-color: var(--mata-700) !important;
+  color: #ffffff !important;
+  border-radius: 0.8rem !important;
+  font-weight: 700 !important;
+  padding: 0.7rem 1rem !important;
+  text-shadow: none !important;
+  margin-top: 0.25rem;
+}
+.pf-c-button.pf-m-primary:hover,
+input[type='submit']:hover,
+button[type='submit']:hover,
+#kc-login:hover,
+.btn-primary:hover {
+  background: var(--mata-800) !important;
+  border-color: var(--mata-800) !important;
+}
+
+/* Liens (mot de passe oublié, etc.). */
+a {
+  color: var(--mata-700) !important;
+}
+a:hover {
+  color: var(--mata-800) !important;
+}
+
+/* Zone d'options (mot de passe oublié) alignée à droite. */
+#kc-form-options,
+.kc-form-options {
+  font-size: 0.85rem;
+}
+
+/* Case « se souvenir de moi ». */
+input[type='checkbox'] {
+  accent-color: var(--mata-700);
+}
+
+/* Message d'erreur. */
+#input-error,
+.pf-c-form__helper-text.pf-m-error,
+.kc-feedback-text {
+  color: var(--mata-800) !important;
+  font-size: 0.82rem;
+}
