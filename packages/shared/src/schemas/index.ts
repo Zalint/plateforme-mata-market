@@ -8,4 +8,5 @@ export * from './payout.js';
 export * from './pricing.js';
 export * from './producer.js';
 export * from './site.js';
+export * from './teleconsult.js';
 export * from './zone.js';

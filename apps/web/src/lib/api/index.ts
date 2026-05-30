@@ -6,6 +6,7 @@ export * from './hooks/use-payouts';
 export * from './hooks/use-pricing';
 export * from './hooks/use-producers';
 export * from './hooks/use-sites';
+export * from './hooks/use-teleconsult';
 export * from './hooks/use-uploads';
 export * from './hooks/use-zones';
 export { ApiError, apiClient } from './http-client';

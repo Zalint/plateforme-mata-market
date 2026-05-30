@@ -107,6 +107,46 @@ exacts où ces dettes sont marquées en commentaire inline.
 - **Risque si non traité** : prod sans cron = reversements non déclenchés
   automatiquement, admin doit cliquer "Reverser (N)" manuellement chaque jour.
 
+## [lot-6→lot-9] Config Render cron pour `cleanup-expired-teleconsult`
+
+- **Découvert** : Lot 6 (job cleanup livré sans config Render)
+- **Cible** : Lot 9 (config infra Render — même PR que process-payouts + retry-outbox)
+- **Pourquoi reporté** : le job `apps/api/src/jobs/cleanup-expired-teleconsult.ts`
+  est livré et invocable via `pnpm teleconsult:cleanup` (testé via les
+  tests integration `expireOverdue` + `cleanupExpired`). La config Render
+  Cron Job (schedule `*/5 * * * *` UTC, même image Docker, command override)
+  sera mutualisée avec les deux autres crons (process-payouts, retry-outbox).
+- **Fichiers** : apps/api/src/jobs/cleanup-expired-teleconsult.ts,
+  apps/api/package.json (`teleconsult:cleanup` script).
+- **Garde-fou actuel** : MVP local. Les sessions expirées sont quand même
+  refusées au plugin auth (resolveActiveForTeleconsultant verifie expires_at),
+  donc une session expirée ne peut pas continuer à agir même sans le cron.
+  Le cron ne sert qu'à libérer les rows et le UI badge "Session active".
+- **Risque si non traité** : prod sans cron = les sessions techniquement
+  expirées restent `closed_at NULL` dans `teleconsult_sessions`, polluant
+  les requêtes admin (filtre "active"). Pas de surface sécurité car le
+  plugin auth bloque l'usage.
+
+## [lot-6→lot-7] Outbox `teleconsult.action.performed` → push web + email
+
+- **Découvert** : Lot 6 (event outbox émis à chaque action déléguée mais
+  non encore consommé par n8n)
+- **Cible** : Lot 7 (tournées + push + n8n)
+- **Pourquoi reporté** : Lot 6 livre l'émission de l'event (cf.
+  `teleconsult-plugin.ts` hook onResponse — chaque mutation 2xx avec
+  `req.actingOnBehalfOf` insère une row `outbox_events` typée
+  `teleconsult.action.performed`). Le dispatch vers n8n + push web producteur
+  + email récap fin de session relèvent du Lot 7 (cron retry-outbox + n8n
+  flows). En attendant, l'event est juste persistant, audit_log reste le
+  canal principal de traçabilité.
+- **Fichiers** : apps/api/src/modules/teleconsult/teleconsult-plugin.ts
+  (hook onResponse), table `outbox_events`.
+- **Garde-fou actuel** : audit_log capture déjà chaque action sensible avec
+  `on_behalf_of_user_id` — le producteur peut consulter à tout moment.
+  L'email récap fin de session viendra en bonus quand n8n sera câblé.
+- **Risque si non traité** : pas de notification push temps réel pour le
+  producteur. Acceptable au MVP (l'audit log reste consultable).
+
 ## [lot-5→lot-9] KPIs admin/payments calculés côté front
 
 - **Découvert** : Lot 5 (page admin/payments)

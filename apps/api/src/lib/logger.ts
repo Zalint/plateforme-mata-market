@@ -19,6 +19,9 @@ export const logger = pino({
       '*.webhookSecret',
       '*.signature',
       '*.providerSignature',
+      // Téléconseil (Lot 6) — code 6 chiffres + hash bcrypt
+      '*.codeHash',
+      '*.code_hash',
     ],
     censor: '[REDACTED]',
   },

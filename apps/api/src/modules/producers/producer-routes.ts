@@ -16,6 +16,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { requireRole, requireUser } from '../auth/index.js';
+import { assertActionAllowedDuringTeleconsult } from '../teleconsult/index.js';
 import { bankDetailsService } from './bank-details-service.js';
 import { producerService } from './producer-service.js';
 
@@ -102,6 +103,10 @@ export async function producerRoutes(app: FastifyInstance): Promise<void> {
     async (req, reply) => {
       requireRole(req, 'producer');
       const user = requireUser(req);
+      // Lot 6 — refuse pendant session téléconseil (whitelist forbidden).
+      // Si un téléconseiller a un X-Teleconsult-Session-Id et tente cette
+      // route via délégation, c'est refusé + audité.
+      await assertActionAllowedDuringTeleconsult(req, 'producer.bank_details.update');
       await bankDetailsService.update(
         { actorUserId: user.id, targetUserId: user.id, request: req },
         req.body,

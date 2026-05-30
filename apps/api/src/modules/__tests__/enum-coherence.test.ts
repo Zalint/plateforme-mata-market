@@ -23,6 +23,7 @@ import {
   PRODUCER_TYPES,
   SITE_STATUSES,
   SITE_TYPES,
+  TELECONSULT_CLOSE_REASONS,
 } from '@mata/shared/constants';
 import {
   DeliveryPeriod,
@@ -38,6 +39,7 @@ import {
   ProducerType,
   SiteStatus,
   SiteType,
+  TeleconsultCloseReason,
 } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
 
@@ -84,5 +86,8 @@ describe('Coherence enums Prisma ↔ @mata/shared/constants', () => {
   });
   it('PayoutStatus', () => {
     expect(valuesOf(PayoutStatus)).toEqual([...PAYOUT_STATUSES].sort());
+  });
+  it('TeleconsultCloseReason', () => {
+    expect(valuesOf(TeleconsultCloseReason)).toEqual([...TELECONSULT_CLOSE_REASONS].sort());
   });
 });

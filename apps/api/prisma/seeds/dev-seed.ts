@@ -68,10 +68,16 @@ const prisma = new PrismaClient({
 //   mor.diop           / mata  → role producer
 //   aissatou.sow       / mata  → role admin
 //   lacalebasse.client / mata  → role client_pro
+//   ibrahima.ndiaye    / mata  → role teleconsultant (Lot 6)
+//
+// Le champ `username` (Lot 6) est utilisé par le lookup producteur lors du
+// démarrage d'une session téléconseil (cf. mockup §2888 — l'admin saisit
+// "mor.diop"). Doit matcher le `username` du realm-export.
 const USERS = [
   {
     slug: 'mor-diop',
     keycloakId: '6e426967-1bae-4280-8b7d-6597a020416c',
+    username: 'mor.diop',
     email: null,
     phone: '+221771234567',
     displayName: 'Mor Diop',
@@ -80,6 +86,7 @@ const USERS = [
   {
     slug: 'la-calebasse',
     keycloakId: '20a5b1c2-3d4e-4f56-8090-a1b2c3d4e5f6',
+    username: 'lacalebasse.client',
     email: 'contact@lacalebasse.sn',
     phone: '+221338691234',
     displayName: 'Resto La Calebasse',
@@ -88,10 +95,20 @@ const USERS = [
   {
     slug: 'aissatou-sow',
     keycloakId: '10a5b1c2-3d4e-4f56-8090-a1b2c3d4e5f6',
+    username: 'aissatou.sow',
     email: 'aissatou.sow@mata.sn',
     phone: null,
     displayName: 'Aïssatou Sow',
     role: UserRole.admin,
+  },
+  {
+    slug: 'ibrahima-ndiaye',
+    keycloakId: '30b6c2d3-4e5f-4067-9101-b2c3d4e5f607',
+    username: 'ibrahima.ndiaye',
+    email: 'ibrahima.ndiaye@mata.sn',
+    phone: null,
+    displayName: 'Ibrahima Ndiaye',
+    role: UserRole.teleconsultant,
   },
 ] as const;
 
@@ -147,6 +164,7 @@ async function main(): Promise<void> {
             displayName: user.displayName,
             role: user.role,
             keycloakId: user.keycloakId,
+            username: user.username, // Lot 6 — backfill pour lookup téléconseil
           },
         })
       : await prisma.user.create({ data: userDataForCreate });
@@ -218,10 +236,28 @@ async function main(): Promise<void> {
   if (morOfferIds.length > 0) {
     const orderItemsToDelete = await prisma.orderItem.findMany({
       where: { offerId: { in: morOfferIds } },
-      select: { orderId: true, pricingSnapshotId: true },
+      select: { id: true, orderId: true, pricingSnapshotId: true },
     });
+    const orderItemIds = orderItemsToDelete.map((i) => i.id);
     const orderIds = [...new Set(orderItemsToDelete.map((i) => i.orderId))];
     const snapshotIds = orderItemsToDelete.map((i) => i.pricingSnapshotId);
+    // Lot 5 — wipe en cascade des payout_items qui référencent ces order_items
+    // (FK RESTRICT). Sans ça, le DELETE order_items échoue avec violation FK.
+    const payoutIdsToDelete = (
+      await prisma.payoutItem.findMany({
+        where: { orderItemId: { in: orderItemIds } },
+        select: { payoutId: true },
+      })
+    ).map((pi) => pi.payoutId);
+    await prisma.payoutItem.deleteMany({ where: { orderItemId: { in: orderItemIds } } });
+    // On supprime aussi les payouts orphelins (plus aucun item couvert).
+    if (payoutIdsToDelete.length > 0) {
+      await prisma.payout.deleteMany({
+        where: { id: { in: [...new Set(payoutIdsToDelete)] } },
+      });
+    }
+    // Lot 5 — wipe payments des orders qu'on supprime (FK CASCADE depuis order).
+    await prisma.payment.deleteMany({ where: { orderId: { in: orderIds } } });
     await prisma.orderItem.deleteMany({ where: { offerId: { in: morOfferIds } } });
     await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
     await prisma.pricingSnapshot.deleteMany({ where: { id: { in: snapshotIds } } });

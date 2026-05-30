@@ -3,6 +3,7 @@
 import { Icon } from '@mata/ui';
 import { useState } from 'react';
 import { Sidebar } from './sidebar';
+import { TeleconsultBanner } from './teleconsult-banner';
 import { Topbar } from './topbar';
 
 type AppShellProps = {
@@ -39,6 +40,8 @@ export function AppShell({ children }: AppShellProps): React.JSX.Element {
           onMenuClick={() => setDrawerOpen(true)}
           menuIcon={<Icon name="menu" className="w-5 h-5" />}
         />
+        {/* Lot 6 — banniere session teleconseil (visible uniquement quand active). */}
+        <TeleconsultBanner />
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>
