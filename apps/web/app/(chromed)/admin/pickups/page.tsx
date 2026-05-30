@@ -8,8 +8,8 @@ import {
   type PickupStatus,
 } from '@mata/shared/constants';
 import type { PickupOutput } from '@mata/shared/schemas';
-import { FilterChip, Icon } from '@mata/ui';
-import { useMemo, useState } from 'react';
+import { FilterChip, Icon, usePrompt } from '@mata/ui';
+import { useId, useMemo, useState } from 'react';
 import {
   useAdminOrders,
   useAdminPickups,
@@ -337,17 +337,21 @@ function PickupActionPanel({
 }): React.JSX.Element {
   const transition = useTransitionPickupStatus();
   const cancel = useCancelPickup();
+  const prompt = usePrompt();
   const nextStates = PICKUP_TRANSITIONS[pickup.status].filter((s) => s !== 'cancelled');
   const canCancel = PICKUP_TRANSITIONS[pickup.status].includes('cancelled');
   const v = STATUS_VISUAL[pickup.status];
 
   async function handleCancel(): Promise<void> {
-    const reason = prompt("Raison de l'annulation ? (3 caractères min)");
-    if (!reason || reason.trim().length < 3) {
-      alert('Raison obligatoire (3 caractères min).');
-      return;
-    }
-    await cancel.mutateAsync({ id: pickup.id, reason: reason.trim() });
+    const reason = await prompt({
+      title: 'Annuler la tournée',
+      message: "Raison de l'annulation ? (3 caractères min)",
+      confirmLabel: 'Annuler la tournée',
+      cancelLabel: 'Retour',
+      minLength: 3,
+    });
+    if (!reason) return;
+    await cancel.mutateAsync({ id: pickup.id, reason });
     onClose();
   }
 
@@ -454,6 +458,7 @@ function CreatePickupModal({ onClose }: { onClose: () => void }): React.JSX.Elem
   const zones = zonesData?.zones ?? [];
   const { data: ordersData } = useAdminOrders('confirmed');
   const create = useCreatePickup();
+  const fid = useId();
 
   const [zoneId, setZoneId] = useState('');
   const [date, setDate] = useState('');
@@ -519,11 +524,14 @@ function CreatePickupModal({ onClose }: { onClose: () => void }): React.JSX.Elem
 
         <div className="p-4 space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-stone-600 mb-1" htmlFor="pk-zone">
+            <label
+              className="block text-xs font-semibold text-stone-600 mb-1"
+              htmlFor={`${fid}-zone`}
+            >
               Zone
             </label>
             <select
-              id="pk-zone"
+              id={`${fid}-zone`}
               value={zoneId}
               onChange={(e) => setZoneId(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-stone-200 text-sm"
@@ -539,11 +547,14 @@ function CreatePickupModal({ onClose }: { onClose: () => void }): React.JSX.Elem
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-stone-600 mb-1" htmlFor="pk-date">
+              <label
+                className="block text-xs font-semibold text-stone-600 mb-1"
+                htmlFor={`${fid}-date`}
+              >
                 Date
               </label>
               <input
-                id="pk-date"
+                id={`${fid}-date`}
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
@@ -553,12 +564,12 @@ function CreatePickupModal({ onClose }: { onClose: () => void }): React.JSX.Elem
             <div>
               <label
                 className="block text-xs font-semibold text-stone-600 mb-1"
-                htmlFor="pk-period"
+                htmlFor={`${fid}-period`}
               >
                 Période
               </label>
               <select
-                id="pk-period"
+                id={`${fid}-period`}
                 value={period}
                 onChange={(e) => setPeriod(e.target.value as DeliveryPeriod)}
                 className="w-full px-3 py-2 rounded-lg border border-stone-200 text-sm"

@@ -1,3 +1,4 @@
+import { ConfirmProvider, ToastProvider } from '@mata/ui';
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import { QueryProvider } from '../src/lib/api/query-provider';
@@ -44,7 +45,11 @@ export default function RootLayout({ children }: RootLayoutProps): React.JSX.Ele
     <html lang="fr" className={inter.variable} suppressHydrationWarning>
       <body className="font-sans antialiased" suppressHydrationWarning>
         <AuthProvider>
-          <QueryProvider>{children}</QueryProvider>
+          <QueryProvider>
+            <ToastProvider>
+              <ConfirmProvider>{children}</ConfirmProvider>
+            </ToastProvider>
+          </QueryProvider>
         </AuthProvider>
       </body>
     </html>

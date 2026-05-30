@@ -83,16 +83,7 @@
       "linter": {
         "rules": {
           "a11y": {
-            "useValidAriaRole": "off",
-            "noLabelWithoutControl": "off",
-            "noStaticElementInteractions": "off",
-            "useKeyWithClickEvents": "off"
-          },
-          "correctness": {
-            "useUniqueElementIds": "off"
-          },
-          "suspicious": {
-            "noAlert": "off"
+            "useValidAriaRole": "off"
           }
         }
       }

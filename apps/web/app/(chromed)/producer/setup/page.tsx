@@ -4,7 +4,7 @@ import { PRODUCER_TYPE_LABEL_FR, PRODUCER_TYPES, type ProducerType } from '@mata
 import type { BankDetailsClear } from '@mata/shared/schemas';
 import { Icon } from '@mata/ui';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import {
   useCreateMyProducerProfile,
   useMyProducerProfile,
@@ -30,6 +30,7 @@ export default function ProducerSetupPage(): React.JSX.Element {
   const createProfile = useCreateMyProducerProfile();
   const updateProfile = useUpdateMyProducerProfile();
   const updateBank = useUpdateMyBankDetails();
+  const fid = useId();
 
   const profile = profileData?.profile ?? null;
   const zones = zonesData?.zones ?? [];
@@ -110,13 +111,13 @@ export default function ProducerSetupPage(): React.JSX.Element {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label
-              htmlFor="setup-type"
+              htmlFor={`${fid}-type`}
               className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
             >
               Type de production
             </label>
             <select
-              id="setup-type"
+              id={`${fid}-type`}
               value={type}
               onChange={(e) => setType(e.target.value as ProducerType)}
               className="mt-1 w-full px-3 py-2.5 border-2 border-stone-200 rounded-lg outline-none focus:border-mata-700 text-sm"
@@ -131,13 +132,13 @@ export default function ProducerSetupPage(): React.JSX.Element {
 
           <div>
             <label
-              htmlFor="setup-zone"
+              htmlFor={`${fid}-zone`}
               className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
             >
               Zone principale
             </label>
             <select
-              id="setup-zone"
+              id={`${fid}-zone`}
               value={zoneId}
               onChange={(e) => setZoneId(e.target.value)}
               className="mt-1 w-full px-3 py-2.5 border-2 border-stone-200 rounded-lg outline-none focus:border-mata-700 text-sm"
@@ -152,13 +153,13 @@ export default function ProducerSetupPage(): React.JSX.Element {
 
           <div>
             <label
-              htmlFor="setup-whatsapp"
+              htmlFor={`${fid}-whatsapp`}
               className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
             >
               WhatsApp (optionnel)
             </label>
             <input
-              id="setup-whatsapp"
+              id={`${fid}-whatsapp`}
               type="tel"
               value={whatsappPhone}
               onChange={(e) => setWhatsappPhone(e.target.value)}
@@ -169,13 +170,13 @@ export default function ProducerSetupPage(): React.JSX.Element {
 
           <div className="sm:col-span-2">
             <label
-              htmlFor="setup-bio"
+              htmlFor={`${fid}-bio`}
               className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
             >
               Bio (optionnel)
             </label>
             <textarea
-              id="setup-bio"
+              id={`${fid}-bio`}
               value={bio}
               onChange={(e) => setBio(e.target.value)}
               rows={3}
@@ -213,13 +214,13 @@ export default function ProducerSetupPage(): React.JSX.Element {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label
-                htmlFor="bank-holder"
+                htmlFor={`${fid}-bank-holder`}
                 className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
               >
                 Bénéficiaire
               </label>
               <input
-                id="bank-holder"
+                id={`${fid}-bank-holder`}
                 type="text"
                 value={bankHolder}
                 onChange={(e) => setBankHolder(e.target.value)}
@@ -229,13 +230,13 @@ export default function ProducerSetupPage(): React.JSX.Element {
             </div>
             <div>
               <label
-                htmlFor="bank-name"
+                htmlFor={`${fid}-bank-name`}
                 className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
               >
                 Banque
               </label>
               <input
-                id="bank-name"
+                id={`${fid}-bank-name`}
                 type="text"
                 value={bankName}
                 onChange={(e) => setBankName(e.target.value)}
@@ -245,13 +246,13 @@ export default function ProducerSetupPage(): React.JSX.Element {
             </div>
             <div>
               <label
-                htmlFor="bank-iban"
+                htmlFor={`${fid}-bank-iban`}
                 className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
               >
                 IBAN
               </label>
               <input
-                id="bank-iban"
+                id={`${fid}-bank-iban`}
                 type="text"
                 value={bankIban}
                 onChange={(e) => setBankIban(e.target.value)}
@@ -261,13 +262,13 @@ export default function ProducerSetupPage(): React.JSX.Element {
             </div>
             <div>
               <label
-                htmlFor="bank-bic"
+                htmlFor={`${fid}-bank-bic`}
                 className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
               >
                 BIC (optionnel)
               </label>
               <input
-                id="bank-bic"
+                id={`${fid}-bank-bic`}
                 type="text"
                 value={bankBic}
                 onChange={(e) => setBankBic(e.target.value)}

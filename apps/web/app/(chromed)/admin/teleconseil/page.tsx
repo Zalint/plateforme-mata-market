@@ -1,7 +1,7 @@
 'use client';
 
-import { Icon } from '@mata/ui';
-import { useEffect, useState } from 'react';
+import { Icon, useConfirm, useToast } from '@mata/ui';
+import { useEffect, useRef, useState } from 'react';
 import {
   useActiveTeleconsultSession,
   useCloseTeleconsultSession,
@@ -21,10 +21,13 @@ export default function AdminTeleconseilPage(): React.JSX.Element {
   const { data: active, isLoading } = useActiveTeleconsultSession();
   const start = useStartTeleconsultSession();
   const close = useCloseTeleconsultSession();
+  const confirm = useConfirm();
+  const toast = useToast();
 
   const [username, setUsername] = useState('');
   const [digits, setDigits] = useState<string[]>(['', '', '', '', '', '']);
   const DIGIT_KEYS = ['d0', 'd1', 'd2', 'd3', 'd4', 'd5'] as const;
+  const digitRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   function setDigit(idx: number, val: string): void {
     const clean = val.replace(/\D/g, '').slice(0, 1);
@@ -33,15 +36,14 @@ export default function AdminTeleconseilPage(): React.JSX.Element {
     setDigits(next);
     if (clean) {
       // Auto-focus suivant.
-      const nextInput = document.getElementById(`tc-digit-${idx + 1}`);
-      nextInput?.focus();
+      digitRefs.current[idx + 1]?.focus();
     }
   }
 
   async function handleStart(): Promise<void> {
     const code = digits.join('');
     if (code.length !== 6 || !username.trim()) {
-      alert('Saisis le username producteur + les 6 chiffres');
+      toast.info('Saisis le username producteur + les 6 chiffres');
       return;
     }
     try {
@@ -49,13 +51,19 @@ export default function AdminTeleconseilPage(): React.JSX.Element {
       setDigits(['', '', '', '', '', '']);
       setUsername('');
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Erreur');
+      toast.error(err instanceof Error ? err.message : 'Erreur');
     }
   }
 
   async function handleClose(): Promise<void> {
     if (!active) return;
-    if (!confirm('Fermer la session en cours ?')) return;
+    const ok = await confirm({
+      title: 'Fermer la session ?',
+      message: 'La session de téléconseil en cours sera terminée.',
+      confirmLabel: 'Fermer',
+      tone: 'neutral',
+    });
+    if (!ok) return;
     await close.mutateAsync({ sessionId: active.id });
   }
 
@@ -122,7 +130,10 @@ export default function AdminTeleconseilPage(): React.JSX.Element {
                   {DIGIT_KEYS.map((k, idx) => (
                     <input
                       key={k}
-                      id={`tc-digit-${idx}`}
+                      ref={(el) => {
+                        digitRefs.current[idx] = el;
+                      }}
+                      aria-label={`Chiffre ${idx + 1} du code`}
                       maxLength={1}
                       inputMode="numeric"
                       value={digits[idx] ?? ''}
@@ -140,7 +151,7 @@ export default function AdminTeleconseilPage(): React.JSX.Element {
                   {start.isPending ? 'Demarrage…' : 'Valider le code'}
                 </button>
                 {start.isError && (
-                  <div className="mt-2 text-xs text-red-700 p-2 bg-red-50 rounded border border-red-200">
+                  <div className="mt-2 text-xs text-mata-700 p-2 bg-mata-50 rounded border border-mata-200">
                     {start.error.message}
                   </div>
                 )}

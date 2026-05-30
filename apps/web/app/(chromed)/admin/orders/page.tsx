@@ -6,7 +6,7 @@ import {
   ORDER_STATUSES,
   type OrderStatus,
 } from '@mata/shared/constants';
-import { FilterChip, Icon, Money, StatusBadge, type StatusTone } from '@mata/ui';
+import { FilterChip, Icon, Money, StatusBadge, type StatusTone, usePrompt } from '@mata/ui';
 import { useState } from 'react';
 import { useAdminOrders, useCancelOrder, useTransitionOrderStatus } from '../../../../src/lib/api';
 
@@ -41,15 +41,19 @@ export default function AdminOrdersPage(): React.JSX.Element {
   const { data, isLoading } = useAdminOrders(filter === 'all' ? undefined : filter);
   const transition = useTransitionOrderStatus();
   const cancel = useCancelOrder();
+  const prompt = usePrompt();
   const orders = data?.orders ?? [];
 
   async function handleCancel(id: string): Promise<void> {
-    const reason = prompt("Raison de l'annulation ?");
-    if (!reason || reason.trim().length < 3) {
-      alert('Raison obligatoire (3 caractères min).');
-      return;
-    }
-    await cancel.mutateAsync({ id, reason: reason.trim() });
+    const reason = await prompt({
+      title: 'Annuler la commande',
+      message: "Raison de l'annulation ? (3 caractères min)",
+      confirmLabel: 'Annuler la commande',
+      cancelLabel: 'Retour',
+      minLength: 3,
+    });
+    if (!reason) return;
+    await cancel.mutateAsync({ id, reason });
   }
 
   return (

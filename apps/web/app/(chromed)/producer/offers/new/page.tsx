@@ -8,10 +8,10 @@ import {
   type OfferUnit,
   type ProductCategory,
 } from '@mata/shared/constants';
-import { Icon } from '@mata/ui';
+import { Icon, useToast } from '@mata/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useCreateOffer, useMySites, useSubmitOffer } from '../../../../../src/lib/api';
 
 /**
@@ -32,6 +32,7 @@ export default function NewOfferPage(): React.JSX.Element {
   const { data: sitesData, isLoading: sitesLoading } = useMySites();
   const createOffer = useCreateOffer();
   const submitOffer = useSubmitOffer();
+  const toast = useToast();
 
   const [category, setCategory] = useState<ProductCategory>('poultry');
   const [unit, setUnit] = useState<OfferUnit>('unit');
@@ -42,6 +43,7 @@ export default function NewOfferPage(): React.JSX.Element {
   const [siteId, setSiteId] = useState<string>('');
   const [title, setTitle] = useState('');
   const [qualityNote, setQualityNote] = useState('');
+  const fid = useId();
 
   const sites = sitesData?.sites ?? [];
 
@@ -52,7 +54,7 @@ export default function NewOfferPage(): React.JSX.Element {
 
   async function handleSave(submit: boolean): Promise<void> {
     if (!siteId) {
-      alert('Sélectionnez un site de retrait.');
+      toast.info('Sélectionnez un site de retrait.');
       return;
     }
     try {
@@ -72,7 +74,7 @@ export default function NewOfferPage(): React.JSX.Element {
       }
       router.push('/producer/offers');
     } catch (err) {
-      alert(`Erreur : ${err instanceof Error ? err.message : 'inconnue'}`);
+      toast.error(`Erreur : ${err instanceof Error ? err.message : 'inconnue'}`);
     }
   }
 
@@ -117,10 +119,14 @@ export default function NewOfferPage(): React.JSX.Element {
           })}
         </div>
         <div className="mt-3">
-          <label className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+          <label
+            htmlFor={`${fid}-title`}
+            className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
+          >
             Titre (optionnel)
           </label>
           <input
+            id={`${fid}-title`}
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -135,7 +141,10 @@ export default function NewOfferPage(): React.JSX.Element {
         <StepHeader number={2} title="Quantité et prix" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+            <label
+              htmlFor={`${fid}-qty`}
+              className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
+            >
               Quantité
             </label>
             <div className="mt-2 flex items-center gap-2">
@@ -143,10 +152,12 @@ export default function NewOfferPage(): React.JSX.Element {
                 type="button"
                 onClick={() => setQuantity(Math.max(1, quantity - 1))}
                 className="w-12 h-12 rounded-xl bg-stone-100 text-stone-700 text-xl font-bold"
+                aria-label="Diminuer la quantité"
               >
                 −
               </button>
               <input
+                id={`${fid}-qty`}
                 type="number"
                 value={quantity}
                 min={1}
@@ -157,6 +168,7 @@ export default function NewOfferPage(): React.JSX.Element {
                 type="button"
                 onClick={() => setQuantity(quantity + 1)}
                 className="w-12 h-12 rounded-xl bg-mata-700 text-white text-xl font-bold"
+                aria-label="Augmenter la quantité"
               >
                 +
               </button>
@@ -183,11 +195,15 @@ export default function NewOfferPage(): React.JSX.Element {
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+            <label
+              htmlFor={`${fid}-price`}
+              className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
+            >
               Prix demandé / {OFFER_UNIT_LABEL_FR[unit]}
             </label>
             <div className="mt-2 flex items-center border-2 border-stone-200 rounded-xl bg-white overflow-hidden focus-within:border-mata-700 transition">
               <input
+                id={`${fid}-price`}
                 type="number"
                 value={priceFcfa}
                 min={1}
@@ -209,10 +225,14 @@ export default function NewOfferPage(): React.JSX.Element {
         <StepHeader number={3} title="Disponibilité et site" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+            <label
+              htmlFor={`${fid}-from`}
+              className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
+            >
               Disponible à partir du
             </label>
             <input
+              id={`${fid}-from`}
               type="date"
               value={availableFrom}
               onChange={(e) => setAvailableFrom(e.target.value)}
@@ -220,10 +240,14 @@ export default function NewOfferPage(): React.JSX.Element {
             />
           </div>
           <div>
-            <label className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+            <label
+              htmlFor={`${fid}-until`}
+              className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
+            >
               Date limite (optionnel)
             </label>
             <input
+              id={`${fid}-until`}
               type="date"
               value={availableUntil}
               onChange={(e) => setAvailableUntil(e.target.value)}
@@ -233,7 +257,10 @@ export default function NewOfferPage(): React.JSX.Element {
         </div>
 
         <div className="mt-4">
-          <label className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+          <label
+            htmlFor={`${fid}-site`}
+            className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
+          >
             Site de retrait
           </label>
           {sitesLoading && <p className="mt-2 text-sm text-stone-500">Chargement des sites…</p>}
@@ -248,6 +275,7 @@ export default function NewOfferPage(): React.JSX.Element {
           )}
           {!sitesLoading && sites.length > 0 && (
             <select
+              id={`${fid}-site`}
               value={siteId}
               onChange={(e) => setSiteId(e.target.value)}
               className="mt-2 w-full px-4 py-3 rounded-xl border-2 border-stone-200 bg-white text-stone-900 font-semibold outline-none focus:border-mata-700"

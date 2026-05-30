@@ -12,7 +12,7 @@ import {
 import type { OrderOutput } from '@mata/shared/schemas';
 import { Icon, type IconName, Money } from '@mata/ui';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { GuestHcaptcha } from '../../../../src/components/guest-hcaptcha';
 import {
   useCreateGuestOrder,
@@ -70,6 +70,7 @@ const GUEST_PAYMENT_METHODS: ReadonlyArray<{
 
 export default function GuestCheckoutPage(): React.JSX.Element {
   const cart = useCart();
+  const fid = useId();
 
   // Catalogue invité (masqué) pour résoudre les lignes du panier.
   const { data: catalogData } = useGuestCatalog({ page: 1, limit: 50 });
@@ -322,13 +323,13 @@ export default function GuestCheckoutPage(): React.JSX.Element {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label
-                      htmlFor="guest-name"
+                      htmlFor={`${fid}-name`}
                       className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
                     >
                       Prénom et nom *
                     </label>
                     <input
-                      id="guest-name"
+                      id={`${fid}-name`}
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       placeholder="Ex : Aïssatou Diop"
@@ -337,7 +338,7 @@ export default function GuestCheckoutPage(): React.JSX.Element {
                   </div>
                   <div>
                     <label
-                      htmlFor="guest-phone"
+                      htmlFor={`${fid}-phone`}
                       className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
                     >
                       Téléphone *
@@ -347,7 +348,7 @@ export default function GuestCheckoutPage(): React.JSX.Element {
                         +221
                       </span>
                       <input
-                        id="guest-phone"
+                        id={`${fid}-phone`}
                         type="tel"
                         inputMode="numeric"
                         value={phoneDigits}
@@ -372,13 +373,13 @@ export default function GuestCheckoutPage(): React.JSX.Element {
                 <div className="space-y-3">
                   <div>
                     <label
-                      htmlFor="guest-address"
+                      htmlFor={`${fid}-address`}
                       className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
                     >
                       Adresse complète *
                     </label>
                     <textarea
-                      id="guest-address"
+                      id={`${fid}-address`}
                       rows={2}
                       value={addressLine}
                       onChange={(e) => setAddressLine(e.target.value)}
@@ -388,13 +389,13 @@ export default function GuestCheckoutPage(): React.JSX.Element {
                   </div>
                   <div>
                     <label
-                      htmlFor="guest-zone"
+                      htmlFor={`${fid}-zone`}
                       className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
                     >
                       Zone *
                     </label>
                     <select
-                      id="guest-zone"
+                      id={`${fid}-zone`}
                       value={zoneId}
                       onChange={(e) => setZoneId(e.target.value)}
                       className="mt-1.5 w-full px-4 py-3 rounded-xl border-2 border-stone-200 bg-white font-semibold text-stone-900 text-sm outline-none focus:border-mata-700"

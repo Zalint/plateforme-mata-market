@@ -374,3 +374,72 @@ describe('paymentService.processWebhook', () => {
     expect(audit?.newValue).toMatchObject({ reason: 'paid_after_cancel' });
   });
 });
+
+describe('paymentService.getMonthlyKpis', () => {
+  /** Marque le payment d'un order comme `paid` à la date donnée. */
+  async function markPaid(orderId: string, paidAt: Date): Promise<void> {
+    await prisma.payment.update({
+      where: { orderId },
+      data: { status: 'paid', paidAt },
+    });
+  }
+
+  /** Sommes attendues depuis les snapshots figés d'un order. */
+  async function expectedFromSnapshots(
+    orderId: string,
+  ): Promise<{ commission: number; logistique: number }> {
+    const items = await prisma.orderItem.findMany({
+      where: { orderId },
+      select: { pricingSnapshot: true },
+    });
+    let commission = 0;
+    let logistique = 0;
+    for (const i of items) {
+      const s = i.pricingSnapshot;
+      commission += s.commissionFcfa * s.quantity;
+      logistique += (s.collectionFcfa + s.deliveryFcfa + s.storageFcfa) * s.quantity;
+    }
+    return { commission, logistique };
+  }
+
+  it('agrège commission/frais EXACTS depuis les snapshots, bornés au mois courant', async () => {
+    const now = new Date();
+    // Order A : payé ce mois-ci → compté.
+    const orderA = await createOrder();
+    mockBictorysFetch({ createIntent: { id: 'intent_kpi_a' } });
+    await paymentService.createCheckoutSession({ actorUserId: client.id, orderId: orderA.id });
+    await markPaid(orderA.id, now);
+
+    // Order B : payé le mois dernier → exclu.
+    const orderB = await createOrder();
+    mockBictorysFetch({ createIntent: { id: 'intent_kpi_b' } });
+    await paymentService.createCheckoutSession({ actorUserId: client.id, orderId: orderB.id });
+    const lastMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 15));
+    await markPaid(orderB.id, lastMonth);
+
+    const expected = await expectedFromSnapshots(orderA.id);
+    const kpis = await paymentService.getMonthlyKpis(now);
+
+    expect(kpis.paidCount).toBe(1);
+    expect(kpis.encaisseFcfa).toBe(orderA.totalFcfa);
+    expect(kpis.commissionFcfa).toBe(expected.commission);
+    expect(kpis.fraisLogistiqueFcfa).toBe(expected.logistique);
+    expect(kpis.period).toBe(
+      `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`,
+    );
+  });
+
+  it('ignore les paiements non payés (pending)', async () => {
+    const now = new Date();
+    const order = await createOrder();
+    mockBictorysFetch({ createIntent: { id: 'intent_kpi_pending' } });
+    await paymentService.createCheckoutSession({ actorUserId: client.id, orderId: order.id });
+    // Laissé `pending` (pas de markPaid).
+
+    const kpis = await paymentService.getMonthlyKpis(now);
+    expect(kpis.paidCount).toBe(0);
+    expect(kpis.encaisseFcfa).toBe(0);
+    expect(kpis.commissionFcfa).toBe(0);
+    expect(kpis.fraisLogistiqueFcfa).toBe(0);
+  });
+});

@@ -29,25 +29,28 @@ exacts où ces dettes sont marquées en commentaire inline.
 
 # En cours
 
-## [lot-2→lot-9] Édition champs cosmétiques d'une offre validée
+## [lot-2→lot-?] Édition champs cosmétiques d'une offre validée
 
 - **Découvert** : Lot 2 (décision figée plan d'attaque)
-- **Cible** : Lot 9 durcissement UX (repoussée Lot 3 → Lot 9 le 2026-05-29)
-- **Pourquoi reporté** : décision en début Lot 3 — le scope du Lot 3 est pur
-  pricing. Mélanger l'édition cosmétique offre (préoccupation offers) avec
-  les règles pricing ajouterait du scope sans bénéfice métier. Le workaround
-  (suspend → recréer) reste utilisable. La race condition citée au Lot 2
-  pourra être abordée au Lot 9 quand les orders (Lot 4) seront stables et
-  qu'on aura une vraie politique de verrouillage.
+- **Cible** : repoussée Lot 9 → ultérieur le 2026-05-31 (besoin d'une politique
+  de verrouillage non spécifiée)
+- **Pourquoi reporté** : revue au Lot 9 — autoriser l'édition d'une offre déjà
+  `validated`/`reserved` rouvre la race condition citée au Lot 2 (un champ
+  cosmétique modifié pendant qu'un order se crée sur le `pricing_snapshot`).
+  La résoudre proprement exige une politique de verrouillage (quels champs sont
+  éditables après validation, et sous quelle transaction) — décision produit
+  non tranchée, hors du périmètre durcissement du Lot 9. Le workaround
+  (suspend → recréer) reste utilisable et sûr.
 - **Fichiers** : apps/api/src/modules/offers/offer-service.ts:152-156
   (refus 409 CONFLICT)
 - **Garde-fou actuel** : producteur peut suspend → créer nouvelle offre.
 - **Risque si non traité** : friction UX mineure pour le producteur.
 
-## [lot-3→lot-9] Bouton "Historique" /admin/pricing désactivé
+## [lot-3→lot-?] Bouton "Historique" /admin/pricing désactivé
 
 - **Découvert** : Lot 3 (page admin/pricing)
-- **Cible** : Lot 9 durcissement UX
+- **Cible** : repoussée Lot 9 → ultérieur le 2026-05-31 (écran admin dédié,
+  hors slice durcissement)
 - **Pourquoi reporté** : l'historique des modifications d'une rule existe
   déjà dans `audit_log` (`pricing.rule.create` + `pricing.rule.update`).
   Ce qui manque c'est l'écran qui les liste : timeline `targetType='pricing_rule'`,
@@ -58,10 +61,11 @@ exacts où ces dettes sont marquées en commentaire inline.
   consultable hors UI.
 - **Risque si non traité** : friction admin pour traçabilité. Pas bloquant.
 
-## [lot-2→lot-9] Note moyenne producteur (★ 4.8 dans mockup) absente
+## [lot-2→lot-?] Note moyenne producteur (★ 4.8 dans mockup) absente
 
 - **Découvert** : Lot 2 (le mockup affiche `★ 4.8`)
-- **Cible** : Lot 9 (post-reviews, repoussée Lot 4 → Lot 9 le 2026-05-30)
+- **Cible** : repoussée Lot 9 → post-reviews le 2026-05-31 (aucune feature
+  reviews encore spécifiée — rien à agréger)
 - **Pourquoi reporté** : décision en début Lot 4 — il n'y a pas de reviews
   post-livraison au Lot 4 (les orders se terminent à `delivered`, pas de
   table reviews). Mettre un proxy basé sur le ratio livré/total tromperait
@@ -161,56 +165,6 @@ exacts où ces dettes sont marquées en commentaire inline.
 - **Risque si non traité** : diagnostic ralenti (faux indice « Bictorys » sur
   un incident n8n). Aucun impact fonctionnel.
 
-## [lot-5→lot-9] KPIs admin/payments calculés côté front
-
-- **Découvert** : Lot 5 (page admin/payments)
-- **Cible** : Lot 9 (durcissement perf + agrégats côté API)
-- **Pourquoi reporté** : les KPIs « Encaissé mois / Commission MATA /
-  Frais logistique » sont calculés à la volée côté front depuis la liste
-  payments (avec approximation 10% commission et 5% frais — pas les vrais
-  pricing_snapshots). Pour le MVP c'est acceptable (volume faible).
-  En prod, calculer côté front sur 1000+ rows devient lent et imprécis :
-  exposer une route `/v1/payments/kpis?period=month` côté API avec
-  agrégation SQL (SUM des snapshot.commissionFcfa × quantity).
-- **Fichiers** : apps/web/app/(chromed)/admin/payments/page.tsx (KpiTile
-  calculs lignes 46-58)
-- **Garde-fou actuel** : approximation 10%/5% acceptable visuellement,
-  pas de décision financière basée dessus.
-- **Risque si non traité** : drift visible entre KPI affiché et compta
-  réelle quand pricing_rules varient par catégorie.
-
-## [lot-2→lot-9] Règles a11y Biome désactivées
-
-- **Découvert** : Lot 2 (étape Fix 5)
-- **Cible** : Lot 9 durcissement UX/a11y
-- **Pourquoi reporté** : fixer tous les `<label>` orphelins, convertir
-  les `<div onClick>` en `<button>`, migrer vers `useId()` aurait gonflé
-  le PR Lot 2 sans valeur métier visible.
-- **Fichiers** : biome.json:80-95 (overrides `**/*.tsx`)
-- **Règles off** :
-  - `a11y/noLabelWithoutControl` — labels manuels reliés visuellement
-  - `a11y/noStaticElementInteractions` — div conteneurs interactifs
-  - `a11y/useKeyWithClickEvents` — pas de handlers clavier custom
-  - `correctness/useUniqueElementIds` — ids statiques (vs `useId()`)
-  - `suspicious/noAlert` — `alert()`/`confirm()` natifs MVP
-- **Garde-fou actuel** : aucun (la dette est sur l'a11y elle-même).
-- **Risque si non traité** : non-conformité accessibilité WCAG. Important
-  pour le contexte Sénégal où certains producteurs ont des téléphones
-  bas de gamme + lecteurs d'écran possibles.
-
-## [lot-2→lot-9] `alert()`/`confirm()` natifs (vs toast/dialog system)
-
-- **Découvert** : Lot 2 (étape Fix 4, /producer/sites archive + admin reveal)
-- **Cible** : Lot 9
-- **Pourquoi reporté** : pas de toast/dialog component dans `packages/ui`.
-  Construire un système Headless UI Dialog + portail prend du temps.
-- **Fichiers** : apps/web/app/(chromed)/producer/sites/page.tsx:34
-  + apps/web/app/(chromed)/admin/producers/[userId]/page.tsx:43,51,61
-  + apps/web/app/(chromed)/admin/offers/page.tsx:21
-- **Garde-fou actuel** : règle `suspicious/noAlert` désactivée dans biome.
-- **Risque si non traité** : UX inconsistante, mauvaise expérience mobile
-  (les alerts natives mobile sont pénibles).
-
 ## [lot-2→lot-?] Édition d'un site existant (PATCH /v1/sites/:id)
 
 - **Découvert** : Lot 2 (étape 4, bouton "Modifier" sur SiteCard est `disabled`)
@@ -276,6 +230,47 @@ exacts où ces dettes sont marquées en commentaire inline.
 ---
 
 # Résolues
+
+## [lot-5→lot-9] KPIs admin/payments calculés côté front — résolue 2026-05-31 (Lot 9)
+
+Les KPIs « Encaissé mois / Commission MATA / Frais logistique » de
+`/admin/payments` étaient calculés côté front avec une approximation grossière
+(10% du montant pour la commission, 5% pour la logistique) au lieu des vrais
+`pricing_snapshots`. En prod, drift visible avec la compta dès que les
+`pricing_rules` varient par catégorie.
+
+**Fix** : route `GET /v1/payments/kpis` (admin) →
+`paymentService.getMonthlyKpis()` qui agrège les `payments` `status=paid` du
+mois courant (borné `paidAt ∈ [monthStart, nextMonthStart)`) et somme les
+composantes EXACTES depuis chaque `pricing_snapshot` (commission, et
+collecte+livraison+stockage pour la logistique), pondérées par `quantity`.
+Schéma `PaymentKpisOutputSchema` (Zod), hook `usePaymentKpis()`. La page
+consomme désormais l'API (plus aucun `Math.round(x*0.1)`). Couvert par
+`payments-flow.integration.test.ts` (`describe getMonthlyKpis` : agrégation
+exacte bornée au mois + exclusion des `pending`).
+
+## [lot-2→lot-9] Règles a11y Biome désactivées — résolue 2026-05-31 (Lot 9)
+
+Les 5 règles a11y/correctness désactivées dans l'override `**/*.tsx` de
+`biome.json` (`noLabelWithoutControl`, `noStaticElementInteractions`,
+`useKeyWithClickEvents`, `useUniqueElementIds`, `noAlert`) sont TOUTES
+ré-activées. L'override ne désactive plus que `useValidAriaRole`.
+
+**Fix** : pattern `const fid = useId()` + `htmlFor={`${fid}-x`}` / `id={`${fid}-x`}`
+appliqué sur tous les formulaires (producer offers/new, sites, setup ;
+admin/pickups ; guest/checkout). Le `ConfirmDialog` (`packages/ui`) utilise
+`useId()` pour `aria-labelledby`/`aria-describedby` et le backdrop ferme au
+clic via `e.target === e.currentTarget` (fermeture clavier = Échap + bouton
+Annuler ; unique `biome-ignore noStaticElementInteractions` justifié).
+`pnpm biome check .` vert (260 fichiers, 0 erreur).
+
+## [lot-2→lot-9] `alert()`/`confirm()` natifs (vs toast/dialog system) — résolue 2026-05-31 (Lot 9)
+
+Les `alert()`/`confirm()` natifs (`/producer/sites`, `/admin/producers/[userId]`,
+`/admin/offers`) sont remplacés par un vrai système toast + dialog dans
+`packages/ui` (`ToastProvider`/`useToast`, `ConfirmProvider`/`useConfirm`),
+React pur + portail (pas de Headless UI au MVP, CLAUDE.md C). La règle
+`suspicious/noAlert` est ré-activée (cf. entrée a11y Biome ci-dessus).
 
 ## [lot-8→lot-9] Audit_log non écrit pour les commandes invité — résolue 2026-05-31 (Lot 9)
 

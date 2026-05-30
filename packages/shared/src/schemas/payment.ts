@@ -79,3 +79,22 @@ export const PaymentAdminListQuerySchema = z.object({
   status: PaymentStatusSchema.optional(),
 });
 export type PaymentAdminListQuery = z.infer<typeof PaymentAdminListQuerySchema>;
+
+/**
+ * KPIs admin agrégés côté API (GET /v1/payments/kpis) — Lot 9.
+ *
+ * Remplace le calcul front approximatif (commission 10 % / frais 5 % du brut)
+ * par des sommes EXACTES tirées des `pricing_snapshots` figés (commission =
+ * Σ commission_fcfa × quantity ; frais logistique = Σ (collecte + livraison +
+ * stockage) × quantity), bornées au mois en cours sur les paiements `paid`.
+ */
+export const PaymentKpisOutputSchema = z.object({
+  /** Mois agrégé, ISO `YYYY-MM` (UTC). */
+  period: z.string(),
+  encaisseFcfa: FcfaAmountSchema,
+  commissionFcfa: FcfaAmountSchema,
+  fraisLogistiqueFcfa: FcfaAmountSchema,
+  /** Nombre de paiements `paid` retenus dans la période. */
+  paidCount: z.number().int().nonnegative(),
+});
+export type PaymentKpisOutput = z.infer<typeof PaymentKpisOutputSchema>;

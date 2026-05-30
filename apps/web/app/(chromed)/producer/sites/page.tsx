@@ -1,9 +1,9 @@
 'use client';
 
 import { SITE_TYPE_LABEL_FR, SITE_TYPES, type SiteType } from '@mata/shared/constants';
-import { Icon, SiteCard } from '@mata/ui';
+import { Icon, SiteCard, useConfirm } from '@mata/ui';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import {
   useArchiveSite,
   useCreateSite,
@@ -22,6 +22,7 @@ export default function ProducerSitesPage(): React.JSX.Element {
   const { data, isLoading } = useMySites();
   const { data: zonesData } = useZones();
   const archive = useArchiveSite();
+  const confirm = useConfirm();
   const [showForm, setShowForm] = useState(false);
 
   if (profileLoading) return <p className="px-4 py-8 text-sm text-stone-500">Chargement…</p>;
@@ -32,7 +33,12 @@ export default function ProducerSitesPage(): React.JSX.Element {
   const zoneNameById = new Map(zones.map((z) => [z.id, `${z.name}, ${z.region}`]));
 
   async function handleArchive(id: string): Promise<void> {
-    if (!confirm('Archiver ce site ? Il ne sera plus visible pour de nouvelles offres.')) return;
+    const ok = await confirm({
+      title: 'Archiver ce site ?',
+      message: 'Il ne sera plus visible pour de nouvelles offres.',
+      confirmLabel: 'Archiver',
+    });
+    if (!ok) return;
     await archive.mutateAsync(id);
   }
 
@@ -84,7 +90,7 @@ export default function ProducerSitesPage(): React.JSX.Element {
               type="button"
               onClick={() => handleArchive(s.id)}
               disabled={archive.isPending}
-              className="w-full py-2 rounded-lg border border-stone-200 text-red-700 text-xs font-semibold hover:bg-red-50 flex items-center justify-center gap-1 disabled:opacity-50"
+              className="w-full py-2 rounded-lg border border-stone-200 text-mata-700 text-xs font-semibold hover:bg-mata-50 flex items-center justify-center gap-1 disabled:opacity-50"
             >
               <Icon name="x" className="w-3.5 h-3.5" /> Archiver
             </button>
@@ -121,6 +127,7 @@ type Zone = { id: string; name: string; region: string };
 
 function NewSiteForm({ zones, onDone }: { zones: Zone[]; onDone: () => void }): React.JSX.Element {
   const createSite = useCreateSite();
+  const fid = useId();
   const [name, setName] = useState('');
   const [type, setType] = useState<SiteType>('poulailler');
   const [zoneId, setZoneId] = useState(zones[0]?.id ?? '');
@@ -145,13 +152,13 @@ function NewSiteForm({ zones, onDone }: { zones: Zone[]; onDone: () => void }): 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label
-            htmlFor="site-name"
+            htmlFor={`${fid}-name`}
             className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
           >
             Nom
           </label>
           <input
-            id="site-name"
+            id={`${fid}-name`}
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -161,13 +168,13 @@ function NewSiteForm({ zones, onDone }: { zones: Zone[]; onDone: () => void }): 
         </div>
         <div>
           <label
-            htmlFor="site-type"
+            htmlFor={`${fid}-type`}
             className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
           >
             Type
           </label>
           <select
-            id="site-type"
+            id={`${fid}-type`}
             value={type}
             onChange={(e) => setType(e.target.value as SiteType)}
             className="mt-1 w-full px-3 py-2 border-2 border-stone-200 rounded-lg outline-none focus:border-mata-700 text-sm"
@@ -181,13 +188,13 @@ function NewSiteForm({ zones, onDone }: { zones: Zone[]; onDone: () => void }): 
         </div>
         <div>
           <label
-            htmlFor="site-zone"
+            htmlFor={`${fid}-zone`}
             className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
           >
             Zone
           </label>
           <select
-            id="site-zone"
+            id={`${fid}-zone`}
             value={zoneId}
             onChange={(e) => setZoneId(e.target.value)}
             className="mt-1 w-full px-3 py-2 border-2 border-stone-200 rounded-lg outline-none focus:border-mata-700 text-sm"
@@ -201,13 +208,13 @@ function NewSiteForm({ zones, onDone }: { zones: Zone[]; onDone: () => void }): 
         </div>
         <div>
           <label
-            htmlFor="site-contact"
+            htmlFor={`${fid}-contact`}
             className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
           >
             Téléphone contact
           </label>
           <input
-            id="site-contact"
+            id={`${fid}-contact`}
             type="tel"
             value={contactPhone}
             onChange={(e) => setContactPhone(e.target.value)}
@@ -217,13 +224,13 @@ function NewSiteForm({ zones, onDone }: { zones: Zone[]; onDone: () => void }): 
         </div>
         <div className="sm:col-span-2">
           <label
-            htmlFor="site-address"
+            htmlFor={`${fid}-address`}
             className="text-xs font-semibold text-stone-700 uppercase tracking-wider"
           >
             Adresse / lieu-dit (optionnel)
           </label>
           <input
-            id="site-address"
+            id={`${fid}-address`}
             type="text"
             value={addressLine}
             onChange={(e) => setAddressLine(e.target.value)}

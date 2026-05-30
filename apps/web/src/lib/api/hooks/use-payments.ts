@@ -3,6 +3,7 @@
 import type { PaymentStatus } from '@mata/shared/constants';
 import type {
   PaymentIntentResponse,
+  PaymentKpisOutput,
   PaymentListResponse,
   PaymentOutput,
 } from '@mata/shared/schemas';
@@ -27,6 +28,16 @@ export function useAdminPayments(status?: PaymentStatus) {
       const path = status ? `/v1/payments?status=${status}` : '/v1/payments';
       return apiClient.get<PaymentListResponse>(path, token, signal);
     },
+    enabled: !!token,
+  });
+}
+
+/** KPIs admin du mois (encaissé / commission exacte / frais logistique). */
+export function usePaymentKpis() {
+  const token = useAuthToken();
+  return useQuery({
+    queryKey: ['payments', 'kpis'],
+    queryFn: ({ signal }) => apiClient.get<PaymentKpisOutput>('/v1/payments/kpis', token, signal),
     enabled: !!token,
   });
 }

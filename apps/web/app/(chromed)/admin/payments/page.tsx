@@ -1,9 +1,14 @@
 'use client';
 
 import { PAYMENT_STATUS_LABEL_FR, type PaymentStatus } from '@mata/shared/constants';
-import { Icon, Money, StatusBadge, type StatusTone } from '@mata/ui';
+import { Icon, Money, StatusBadge, type StatusTone, useConfirm, useToast } from '@mata/ui';
 import { useState } from 'react';
-import { useAdminPayments, usePayoutsPending, useTriggerPayout } from '../../../../src/lib/api';
+import {
+  useAdminPayments,
+  usePaymentKpis,
+  usePayoutsPending,
+  useTriggerPayout,
+} from '../../../../src/lib/api';
 
 /**
  * Admin / Paiements & reversements · KPIs + tabs + table.
@@ -14,9 +19,9 @@ import { useAdminPayments, usePayoutsPending, useTriggerPayout } from '../../../
  *  - Table responsive avec colonnes #CMD / Client / Montant / Paiement /
  *    Commission / Frais / Part producteur / Reversement / Action
  *
- * Lot 5 : KPI mois calculés à la volée côté front depuis la liste payments.
- * Lot 9 : ces agrégats migreront côté API (route /v1/payments/kpis dédiée
- * pour éviter de charger toute la liste juste pour calculer des sommes).
+ * Lot 5 : KPI mois calculés à la volée côté front (approximation 10 %/5 %).
+ * Lot 9 : agrégats EXACTS côté API via GET /v1/payments/kpis (sommes des
+ * pricing_snapshots figés), consommés par `usePaymentKpis()`.
  */
 
 const PAYMENT_TONE: Record<PaymentStatus, StatusTone> = {
@@ -39,46 +44,48 @@ export default function AdminPaymentsPage(): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('orders');
   const [statusFilter, setStatusFilter] = useState<PaymentStatus | undefined>(undefined);
   const { data: paymentsData, isLoading } = useAdminPayments(statusFilter);
+  const { data: kpis } = usePaymentKpis();
   const { data: pending } = usePayoutsPending();
   const triggerPayout = useTriggerPayout();
+  const confirm = useConfirm();
+  const toast = useToast();
   const payments = paymentsData?.payments ?? [];
 
-  // KPIs calculés sur la liste (Lot 5 MVP — Lot 9 fera côté API).
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const monthlyPaid = payments.filter(
-    (p) => p.status === 'paid' && new Date(p.paidAt ?? p.createdAt) >= monthStart,
-  );
-  const encaisseFcfa = monthlyPaid.reduce((s, p) => s + p.amountFcfa, 0);
-  // Approx commission = 10% du brut (mockup affiche 843 200 sur 8 432 000).
-  // Calcul exact = somme(snapshot.commissionFcfa × qty) — exposé Lot 9 via API.
-  const commissionFcfa = Math.round(encaisseFcfa * 0.1);
-  const fraisLogistiqueFcfa = Math.round(encaisseFcfa * 0.05);
+  // KPIs du mois : sommes EXACTES côté API (Lot 9, GET /v1/payments/kpis).
+  const encaisseFcfa = kpis?.encaisseFcfa ?? 0;
+  const commissionFcfa = kpis?.commissionFcfa ?? 0;
+  const fraisLogistiqueFcfa = kpis?.fraisLogistiqueFcfa ?? 0;
   const aReverserFcfa = pending?.totalAmountFcfa ?? 0;
   const producerCount = pending?.producerCount ?? 0;
 
   async function handleTrigger(producerUserId: string, producerName: string): Promise<void> {
-    if (!confirm(`Déclencher le reversement pour ${producerName} ?`)) return;
+    const ok = await confirm({
+      title: 'Déclencher le reversement ?',
+      message: `Reversement pour ${producerName}.`,
+      confirmLabel: 'Déclencher',
+      tone: 'neutral',
+    });
+    if (!ok) return;
     try {
       await triggerPayout.mutateAsync({ producerUserId });
-      alert('Reversement déclenché.');
+      toast.success('Reversement déclenché.');
     } catch (err) {
-      alert(`Échec : ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`Échec : ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
   async function handleBulkTrigger(): Promise<void> {
     if (!pending || pending.summaries.length === 0) {
-      alert('Aucun reversement en attente.');
+      toast.info('Aucun reversement en attente.');
       return;
     }
-    if (
-      !confirm(
-        `Déclencher ${pending.summaries.length} reversement(s) pour un total de ${pending.totalAmountFcfa.toLocaleString('fr-FR')} F ?`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: 'Déclencher les reversements ?',
+      message: `${pending.summaries.length} reversement(s) pour un total de ${pending.totalAmountFcfa.toLocaleString('fr-FR')} F.`,
+      confirmLabel: 'Tout déclencher',
+      tone: 'neutral',
+    });
+    if (!ok) return;
     let success = 0;
     let failed = 0;
     for (const s of pending.summaries) {
@@ -89,7 +96,8 @@ export default function AdminPaymentsPage(): React.JSX.Element {
         failed++;
       }
     }
-    alert(`Reversements : ${success} OK, ${failed} échec.`);
+    if (failed === 0) toast.success(`Reversements : ${success} OK.`);
+    else toast.error(`Reversements : ${success} OK, ${failed} échec.`);
   }
 
   return (
@@ -175,8 +183,6 @@ export default function AdminPaymentsPage(): React.JSX.Element {
           payments={payments}
           pendingSummaries={pending?.summaries ?? []}
           isLoading={isLoading}
-          onTrigger={handleTrigger}
-          triggerPending={triggerPayout.isPending}
         />
       )}
       {tab === 'payouts' && (
@@ -269,16 +275,12 @@ type PaymentsTableProps = {
     : never;
   pendingSummaries: { producerUserId: string; producerDisplayName: string; amountFcfa: number }[];
   isLoading: boolean;
-  onTrigger: (producerUserId: string, producerName: string) => void;
-  triggerPending: boolean;
 };
 
 function PaymentsTable({
   payments,
   pendingSummaries,
   isLoading,
-  onTrigger,
-  triggerPending,
 }: PaymentsTableProps): React.JSX.Element {
   if (isLoading) {
     return <p className="text-sm text-stone-500 py-8 text-center">Chargement…</p>;
@@ -339,9 +341,6 @@ function PaymentsTable({
           pour déclencher.
         </div>
       )}
-      <p className="sr-only">
-        {triggerPending ? 'Déclenchement en cours' : 'Prêt à déclencher'} {onTrigger.name}
-      </p>
     </div>
   );
 }

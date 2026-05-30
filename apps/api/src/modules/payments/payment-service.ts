@@ -1,5 +1,9 @@
 import { DomainError } from '@mata/shared/errors';
-import type { PaymentAdminListQuery, PaymentIntentResponse } from '@mata/shared/schemas';
+import type {
+  PaymentAdminListQuery,
+  PaymentIntentResponse,
+  PaymentKpisOutput,
+} from '@mata/shared/schemas';
 import { Prisma } from '@prisma/client';
 import type { FastifyRequest } from 'fastify';
 import { env } from '../../env.js';
@@ -495,6 +499,68 @@ async function listAdminInternal(query: PaymentAdminListQuery) {
   return rows.map((r) => toPaymentOutput(r as PaymentLoaded));
 }
 
+/**
+ * KPIs admin du mois en cours (GET /v1/payments/kpis) — Lot 9.
+ *
+ * Sommes EXACTES depuis les `pricing_snapshots` figés (vs l'approximation
+ * front 10 %/5 % du Lot 5) : on borne aux paiements `paid` dont `paidAt`
+ * tombe dans le mois UTC courant, puis on agrège commission et frais
+ * logistique ligne par ligne (× quantity).
+ */
+async function getMonthlyKpisInternal(now: Date = new Date()): Promise<PaymentKpisOutput> {
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  const period = `${monthStart.getUTCFullYear()}-${String(monthStart.getUTCMonth() + 1).padStart(2, '0')}`;
+
+  const paidPayments = await prisma.payment.findMany({
+    where: {
+      status: 'paid',
+      paidAt: { gte: monthStart, lt: nextMonthStart },
+    },
+    select: {
+      amountFcfa: true,
+      order: {
+        select: {
+          items: {
+            select: {
+              pricingSnapshot: {
+                select: {
+                  commissionFcfa: true,
+                  collectionFcfa: true,
+                  deliveryFcfa: true,
+                  storageFcfa: true,
+                  quantity: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  let encaisseFcfa = 0;
+  let commissionFcfa = 0;
+  let fraisLogistiqueFcfa = 0;
+  for (const payment of paidPayments) {
+    encaisseFcfa += payment.amountFcfa;
+    for (const item of payment.order.items) {
+      const snap = item.pricingSnapshot;
+      commissionFcfa += snap.commissionFcfa * snap.quantity;
+      fraisLogistiqueFcfa +=
+        (snap.collectionFcfa + snap.deliveryFcfa + snap.storageFcfa) * snap.quantity;
+    }
+  }
+
+  return {
+    period,
+    encaisseFcfa,
+    commissionFcfa,
+    fraisLogistiqueFcfa,
+    paidCount: paidPayments.length,
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────
 // Export
 
@@ -504,6 +570,7 @@ export const paymentService = {
   getById: getByIdInternal,
   getByOrderId: getByOrderIdInternal,
   listAdmin: listAdminInternal,
+  getMonthlyKpis: getMonthlyKpisInternal,
 };
 
 export type { WebhookOutcome };

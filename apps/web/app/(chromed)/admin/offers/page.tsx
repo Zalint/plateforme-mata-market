@@ -1,7 +1,7 @@
 'use client';
 
 import { OFFER_STATUS_LABEL_FR, OFFER_STATUSES, type OfferStatus } from '@mata/shared/constants';
-import { FilterChip, Icon, OfferCard } from '@mata/ui';
+import { FilterChip, Icon, OfferCard, usePrompt, useToast } from '@mata/ui';
 import { useState } from 'react';
 import { useAdminOffers, useRejectOffer, useValidateOffer } from '../../../../src/lib/api';
 
@@ -15,16 +15,21 @@ export default function AdminOffersPage(): React.JSX.Element {
   const { data, isLoading } = useAdminOffers({ page: 1, limit: 50, status });
   const validate = useValidateOffer();
   const reject = useRejectOffer();
+  const prompt = usePrompt();
+  const toast = useToast();
 
   const offers = data?.offers ?? [];
 
   async function handleReject(id: string): Promise<void> {
-    const reason = prompt('Raison du refus ?');
-    if (!reason || reason.length < 5) {
-      alert('Raison obligatoire (5 caractères min).');
-      return;
-    }
+    const reason = await prompt({
+      title: "Refuser l'offre",
+      message: 'Raison du refus ? (5 caractères min)',
+      confirmLabel: 'Refuser',
+      minLength: 5,
+    });
+    if (!reason) return;
     await reject.mutateAsync({ id, reason });
+    toast.success('Offre refusée.');
   }
 
   return (
@@ -79,7 +84,7 @@ export default function AdminOffersPage(): React.JSX.Element {
                   type="button"
                   onClick={() => handleReject(o.id)}
                   disabled={reject.isPending}
-                  className="py-2 rounded-lg bg-white border border-stone-200 hover:bg-stone-50 text-red-700 text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  className="py-2 rounded-lg bg-white border border-stone-200 hover:bg-stone-50 text-mata-700 text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
                 >
                   <Icon name="x" className="w-4 h-4" /> Refuser
                 </button>

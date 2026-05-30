@@ -1,7 +1,7 @@
 'use client';
 
 import { ORDER_STATUS_LABEL_FR, type OrderStatus } from '@mata/shared/constants';
-import { Icon, Money, StatusBadge, type StatusTone } from '@mata/ui';
+import { Icon, Money, StatusBadge, type StatusTone, useToast } from '@mata/ui';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
@@ -40,6 +40,7 @@ export default function ClientOrderDetailPage(): React.JSX.Element {
   const { data: order, isLoading } = useOrder(orderId);
   const cancel = useCancelOrder();
   const createIntent = useCreatePaymentIntent();
+  const toast = useToast();
   const [showCancel, setShowCancel] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
 
@@ -61,13 +62,13 @@ export default function ClientOrderDetailPage(): React.JSX.Element {
       // Redirect vers Bictorys (pattern MataPay-Payment.html).
       window.location.href = result.paymentUrl;
     } catch (err) {
-      alert(`Erreur paiement : ${err instanceof Error ? err.message : String(err)}`);
+      toast.error(`Erreur paiement : ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
   async function handleCancel(): Promise<void> {
     if (cancelReason.trim().length < 3) {
-      alert('Raison obligatoire (3 caractères min).');
+      toast.info('Raison obligatoire (3 caractères min).');
       return;
     }
     if (!order) return;

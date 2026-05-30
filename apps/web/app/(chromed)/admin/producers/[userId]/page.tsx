@@ -1,7 +1,7 @@
 'use client';
 
 import { PRODUCER_STATUS_LABEL_FR, PRODUCER_TYPE_LABEL_FR } from '@mata/shared/constants';
-import { Icon, StatusBadge } from '@mata/ui';
+import { Icon, StatusBadge, useConfirm, usePrompt, useToast } from '@mata/ui';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
@@ -27,6 +27,9 @@ export default function AdminProducerDetailPage(): React.JSX.Element {
   const suspend = useSuspendProducer();
   const blacklist = useBlacklistProducer();
   const reveal = useRevealBankDetails();
+  const confirm = useConfirm();
+  const prompt = usePrompt();
+  const toast = useToast();
   const [revealed, setRevealed] = useState<null | {
     holder: string;
     iban: string;
@@ -37,28 +40,47 @@ export default function AdminProducerDetailPage(): React.JSX.Element {
   if (isLoading) return <p className="px-4 py-8 text-sm text-stone-500">Chargement…</p>;
   if (!producer)
     return (
-      <p className="px-4 py-8 text-sm text-red-700">Producteur introuvable ou accès refusé.</p>
+      <p className="px-4 py-8 text-sm text-mata-700">Producteur introuvable ou accès refusé.</p>
     );
 
   async function handleSuspend(): Promise<void> {
-    const reason = prompt('Raison de la suspension ?');
+    const reason = await prompt({
+      title: 'Suspendre le producteur',
+      message: 'Raison de la suspension ?',
+      confirmLabel: 'Suspendre',
+    });
     if (!reason) return;
     await suspend.mutateAsync({ userId, reason });
   }
 
   async function handleBlacklist(): Promise<void> {
-    const reason = prompt('Raison du blacklist (action TERMINALE) ?');
+    const reason = await prompt({
+      title: 'Blacklist (action TERMINALE)',
+      message: 'Raison du blacklist ?',
+      confirmLabel: 'Continuer',
+    });
     if (!reason) return;
-    if (!confirm('Confirmer le blacklist ?')) return;
+    const ok = await confirm({
+      title: 'Confirmer le blacklist ?',
+      message: 'Cette action est terminale et auditée.',
+      confirmLabel: 'Blacklister',
+    });
+    if (!ok) return;
     await blacklist.mutateAsync({ userId, reason });
   }
 
   async function handleReveal(): Promise<void> {
     if (!producer?.hasBankDetails) {
-      alert('Aucune coordonnée bancaire enregistrée.');
+      toast.info('Aucune coordonnée bancaire enregistrée.');
       return;
     }
-    if (!confirm('Reveal des coordonnées bancaires (action auditée). Continuer ?')) return;
+    const ok = await confirm({
+      title: 'Reveal des coordonnées bancaires',
+      message: 'Action auditée. Continuer ?',
+      confirmLabel: 'Reveal',
+      tone: 'neutral',
+    });
+    if (!ok) return;
     const bd = await reveal.mutateAsync(userId);
     setRevealed(bd);
   }
@@ -142,7 +164,7 @@ export default function AdminProducerDetailPage(): React.JSX.Element {
                 type="button"
                 onClick={handleBlacklist}
                 disabled={blacklist.isPending}
-                className="px-4 py-2.5 bg-white border border-stone-200 hover:bg-stone-50 text-red-700 rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                className="px-4 py-2.5 bg-white border border-stone-200 hover:bg-stone-50 text-mata-700 rounded-lg text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
               >
                 <Icon name="x" className="w-4 h-4" /> Blacklist
               </button>

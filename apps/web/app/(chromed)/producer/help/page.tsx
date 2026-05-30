@@ -1,6 +1,6 @@
 'use client';
 
-import { Icon } from '@mata/ui';
+import { Icon, useToast } from '@mata/ui';
 import { useRouter } from 'next/navigation';
 import { useGenerateTeleconsultCode } from '../../../../src/lib/api';
 
@@ -17,6 +17,7 @@ const SUPPORT_PHONE = '+221 33 800 00 00';
 export default function ProducerHelpPage(): React.JSX.Element {
   const router = useRouter();
   const generate = useGenerateTeleconsultCode();
+  const toast = useToast();
 
   async function handleGenerate(): Promise<void> {
     try {
@@ -28,7 +29,7 @@ export default function ProducerHelpPage(): React.JSX.Element {
         `/producer/help/code?code=${encodeURIComponent(result.code)}&expiresAt=${encodeURIComponent(result.expiresAt)}`,
       );
     } catch (err) {
-      alert(`Erreur generation code : ${err instanceof Error ? err.message : 'inconnue'}`);
+      toast.error(`Erreur generation code : ${err instanceof Error ? err.message : 'inconnue'}`);
     }
   }
 

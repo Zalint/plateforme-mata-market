@@ -3,6 +3,7 @@ import {
   PaymentAdminListQuerySchema,
   PaymentIntentCreateSchema,
   PaymentIntentResponseSchema,
+  PaymentKpisOutputSchema,
   PaymentListResponseSchema,
   PaymentOutputSchema,
   UuidSchema,
@@ -146,6 +147,25 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
       requireRole(req, 'admin');
       const payments = await paymentService.listAdmin(req.query);
       return { payments };
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────
+  // GET /v1/payments/kpis · agrégats du mois (admin)
+  //
+  // Déclaré AVANT `/v1/payments/:id` pour que `kpis` ne soit pas capturé
+  // comme un `:id`.
+
+  typed.get(
+    '/v1/payments/kpis',
+    {
+      schema: {
+        response: { 200: PaymentKpisOutputSchema },
+      },
+    },
+    async (req) => {
+      requireRole(req, 'admin');
+      return paymentService.getMonthlyKpis();
     },
   );
 
