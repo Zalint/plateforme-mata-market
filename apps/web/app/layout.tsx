@@ -34,9 +34,15 @@ type RootLayoutProps = {
 };
 
 export default function RootLayout({ children }: RootLayoutProps): React.JSX.Element {
+  // `suppressHydrationWarning` sur <html> et <body> : neutralise les faux
+  // positifs d'hydratation Next causés par les extensions navigateur qui
+  // injectent des attributs (Grammarly → data-gr-*, LanguageTool → data-lt-*,
+  // certains traducteurs, etc.) AVANT que React n'hydrate. L'app ne génère
+  // pas ces attributs côté serveur — c'est uniquement l'environnement client.
+  // Réf : https://nextjs.org/docs/messages/react-hydration-error
   return (
-    <html lang="fr" className={inter.variable}>
-      <body className="font-sans antialiased">
+    <html lang="fr" className={inter.variable} suppressHydrationWarning>
+      <body className="font-sans antialiased" suppressHydrationWarning>
         <AuthProvider>
           <QueryProvider>{children}</QueryProvider>
         </AuthProvider>

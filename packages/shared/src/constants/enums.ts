@@ -124,3 +124,74 @@ export const PRODUCER_DOCUMENT_TYPE_LABEL_FR: Record<ProducerDocumentType, strin
   farm_photo: 'Photo ferme',
   other: 'Autre',
 };
+
+// ─────────────────────────────────────────────────────────────────
+// Pricing (Lot 3)
+
+export const PRICING_MODELS = [
+  'commission_pct', // commission = base × pct / 100
+  'fixed_margin', // commission = montant FCFA fixe par unité
+  'mixed', // commission = base × pct / 100 + montant fixe
+  'negotiated', // étiquette métier "gros volume négocié", math = fixed_margin
+] as const;
+export type PricingModel = (typeof PRICING_MODELS)[number];
+
+export const PRICING_MODEL_LABEL_FR: Record<PricingModel, string> = {
+  commission_pct: 'Commission %',
+  fixed_margin: 'Marge fixe',
+  mixed: 'Mixte',
+  negotiated: 'Négocié gros volume',
+};
+
+export const PRICING_MODEL_DESCRIPTION_FR: Record<PricingModel, string> = {
+  commission_pct: '% sur la base configurée',
+  fixed_margin: 'Montant fixe par unité',
+  mixed: 'Commission + marge fixe',
+  negotiated: 'Prix client = prix proposé',
+};
+
+export const PRICING_SCOPES = ['category', 'offer'] as const;
+export type PricingScope = (typeof PRICING_SCOPES)[number];
+
+export const PRICING_SCOPE_LABEL_FR: Record<PricingScope, string> = {
+  category: 'Catégorie (défaut)',
+  offer: 'Offre (override)',
+};
+
+// Base sur laquelle s'applique un pourcentage (commission %, marge sécurité %).
+// 9 combinaisons possibles si commission_base et safety_margin_base diffèrent.
+export const PRICING_BASES = [
+  'producer_price', // base = prix producteur
+  'final_price', // base = prix final client (formule circulaire)
+  'subtotal_pre_pct', // base = producer + collecte + livraison + storage
+] as const;
+export type PricingBase = (typeof PRICING_BASES)[number];
+
+export const PRICING_BASE_LABEL_FR: Record<PricingBase, string> = {
+  producer_price: 'Sur prix producteur',
+  final_price: 'Sur prix final',
+  subtotal_pre_pct: 'Sur sous-total (hors %)',
+};
+
+// Les 7 composantes du prix (clés stables, utilisées en UI et en stockage).
+// L'ordre reflète celui du mockup §2656-2754.
+export const PRICING_COMPONENT_KEYS = [
+  'producerPrice',
+  'commission',
+  'collection',
+  'delivery',
+  'storage',
+  'safetyMargin',
+  'discount',
+] as const;
+export type PricingComponentKey = (typeof PRICING_COMPONENT_KEYS)[number];
+
+export const PRICING_COMPONENT_LABEL_FR: Record<PricingComponentKey, string> = {
+  producerPrice: 'Prix producteur',
+  commission: 'Commission plateforme',
+  collection: 'Coût collecte',
+  delivery: 'Coût livraison',
+  storage: 'Coût stockage',
+  safetyMargin: 'Marge sécurité',
+  discount: 'Remise',
+};
