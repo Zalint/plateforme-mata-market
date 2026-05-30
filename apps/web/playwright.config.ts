@@ -11,6 +11,9 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
+  // Les specs full-stack (e2e/fullstack/**) ont leur propre config + orchestration
+  // docker (playwright.fullstack.config.ts). Le smoke ne doit pas les ramasser.
+  testIgnore: '**/fullstack/**',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

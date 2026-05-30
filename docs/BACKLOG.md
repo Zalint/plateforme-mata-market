@@ -99,22 +99,58 @@ exacts où ces dettes sont marquées en commentaire inline.
 - **Risque si non traité** : audit log incomplet pour reporting téléconseil.
   Acceptable au MVP car outbox event compense.
 
-## [lot-7→lot-9] E2E Puppeteer push web réel (souscription navigateur)
+## [lot-7→lot-?] E2E browser push web réel (souscription navigateur)
 
 - **Découvert** : Lot 7 (notifications push web livrées + testées côté API)
-- **Cible** : Lot 9 (suite E2E browser complète)
-- **Pourquoi reporté** : les tests integration couvrent le service
-  (`notifications-flow` : subscribe/unsubscribe/preferences/sendToUser) et le
-  câblage du déclenchement (`pickup-flow` vérifie que `sendToUser` est appelé
-  avec le bon producteur). Le test E2E réel (permission navigateur → Service
-  Worker → souscription PushManager → réception d'une notification système)
-  demande un navigateur headless avec VAPID configuré + un SW enregistré.
-  C'est un travail Lot 9 (cf. E2E Playwright/Puppeteer global).
-- **Fichiers** : à créer apps/web/e2e/push-subscription.spec.ts (Lot 9).
-- **Garde-fou actuel** : service + déclenchement couverts par tests integration ;
-  `sendToUser` ne throw jamais (hors chemin critique).
+- **Cible** : repoussée Lot 9 → ultérieur le 2026-05-30 (3 blockers techniques
+  confirmés, cf. ci-dessous — un E2E déterministe n'est PAS faisable contre la
+  stack dev actuelle sans infra push supplémentaire)
+- **Pourquoi reporté** : tentative au Lot 9 d'écrire `push-subscription.spec.ts`
+  contre la stack full-stack (`playwright.fullstack.config.ts`). Trois blockers
+  rendent une souscription push réelle non déterministe (CLAUDE.md §G6 « tests
+  flaky interdits » + §D5 « jamais de test creux ») :
+  1. **Pas de Service Worker en dev** : `next.config.mjs:14` désactive serwist
+     (`disable: NODE_ENV === 'development'`) et la config full-stack lance
+     `pnpm --filter @mata/web dev`. Donc `navigator.serviceWorker.ready` ne
+     résout jamais → `subscribeToPush()` (web-push-client.ts) ne peut pas avancer.
+  2. **Pas de service push dans Chromium headless** : `PushManager.subscribe()`
+     exige un endpoint FCM réel (externe). Aucun en local → non déterministe et
+     dépendance externe interdite.
+  3. **Le prompt ne se monte pas** : `NotificationPermissionPrompt` n'est rendu
+     que si `pickups.length > 0` (producer/pickups/page.tsx:46) ET
+     `Notification.permission === 'default'` ; or le `dev-seed.ts` ne crée AUCUNE
+     tournée pour mor.diop, et pré-accorder la permission via Playwright bascule
+     `permission` à `granted` → le prompt disparaît (anti-nag voulu).
+- **Prérequis pour le faire proprement (ultérieur)** : build web PROD (SW
+  serwist actif) + un endpoint push mocké (ou Chrome-for-Testing avec service
+  push de test) + une tournée seedée pour mor.diop. Travail conséquent, hors
+  slice E2E du Lot 9.
+- **Fichiers** : non créé (push-subscription.spec.ts). web-push-client.ts,
+  notification-permission-prompt.tsx, next.config.mjs:14.
+- **Garde-fou actuel** : service + déclenchement couverts par tests integration
+  (`notifications-flow` : subscribe/unsubscribe/preferences/sendToUser ;
+  `pickup-flow` vérifie l'appel `sendToUser`) ; `sendToUser` ne throw jamais
+  (hors chemin critique). Le contrat serveur (POST/DELETE
+  /v1/notifications/push/subscribe + Zod) est donc verrouillé.
 - **Risque si non traité** : régression possible dans le flux navigateur
   (permission/SW/souscription) non détectée par les tests integration API.
+
+## [lot-9→lot-?] Suite E2E full-stack non câblée en CI
+
+- **Découvert** : Lot 9 (création `playwright.fullstack.config.ts` +
+  `global-setup.ts` + `payments-checkout.spec.ts`)
+- **Cible** : ultérieur (durcissement CI)
+- **Pourquoi reporté** : le job e2e GitHub Actions garde le smoke léger
+  (`playwright.config.ts`, `pnpm start`). Câbler la suite full-stack en CI
+  impose Postgres + Keycloak 26 + seed + mock Bictorys + 3 dev servers dans le
+  runner — lourd et lent. La suite est conçue LOCAL-ONLY (les deux configs sont
+  distinctes ; le smoke ignore `**/fullstack/**`).
+- **Fichiers** : apps/web/playwright.fullstack.config.ts, .github/workflows/*.
+- **Garde-fou actuel** : la suite full-stack tourne en local sur demande
+  (`pnpm --filter @mata/web test:e2e:fullstack`) ; le métier critique paiement
+  reste couvert en CI par les tests integration testcontainers.
+- **Risque si non traité** : une régression UI checkout n'est pas attrapée par
+  la CI (seulement au run local manuel).
 
 ## [lot-7→lot-9] Rejet HTTP 401 explicite côté récepteur n8n (durcissement HMAC)
 
@@ -170,24 +206,6 @@ exacts où ces dettes sont marquées en commentaire inline.
   pas de décision financière basée dessus.
 - **Risque si non traité** : drift visible entre KPI affiché et compta
   réelle quand pricing_rules varient par catégorie.
-
-## [lot-5→lot-9] E2E Playwright complet checkout + admin payments
-
-- **Découvert** : Lot 5 (E2E Puppeteer initialement prévu)
-- **Cible** : Lot 9 (suite E2E Playwright complète — cf. ARCHITECTURE.md §10)
-- **Pourquoi reporté** : les tests d'intégration testcontainers couvrent
-  déjà le flow API critique (8 tests payments + 8 tests payouts, mock fetch
-  Bictorys). Le test E2E browser (login Keycloak → catalogue → cart →
-  bouton « Payer maintenant » → simul webhook → retour /payment/return →
-  admin/payments voit la commande → admin déclenche reversement) demande
-  une orchestration Playwright + un realm Keycloak de test peuplé. C'est
-  un travail Lot 9 (cf. ARCHITECTURE.md §13 : « Lot 9 = Tests E2E
-  Playwright complet »).
-- **Fichiers** : à créer apps/web/e2e/payments-checkout.spec.ts (Lot 9)
-- **Garde-fou actuel** : tests integration API couvrent le métier critique.
-- **Risque si non traité** : régression UI checkout possible non détectée
-  par les tests integration (ex: hook qui ne câble pas correctement
-  paymentUrl).
 
 ## [lot-2→lot-9] Règles a11y Biome désactivées
 
@@ -308,6 +326,30 @@ exacts où ces dettes sont marquées en commentaire inline.
 ---
 
 # Résolues
+
+## [lot-5→lot-9] E2E Playwright checkout + admin payments — résolue 2026-05-30 (Lot 9)
+
+Suite E2E full-stack livrée et **verte en local** : `apps/web/e2e/fullstack/`
+(`payments-checkout.spec.ts`) pilotée par `playwright.fullstack.config.ts` +
+`global-setup.ts` (docker compose postgres/keycloak + `prisma migrate deploy` +
+`db:seed`) + helper `loginAs` (vrai flow Keycloak OIDC+PKCE). Le mock Bictorys
+local (`apps/api/scripts/bictorys-mock-server.ts`, port 4001) rejoue le callback
+webhook signé HMAC puis redirige vers `/payment/return`. Couvert :
+
+- **Test client** : login Keycloak → catalogue → panier → commande → « Payer
+  maintenant » → checkout mock → confirmation → `/payment/return` « Paiement réussi ».
+- **Test admin** : `/admin/payments` filtre « Payé » → la commande apparaît badge PAYÉ.
+
+Lancement : `pnpm --filter @mata/web test:e2e:fullstack`. Le smoke CI
+(`playwright.config.ts`) ignore `**/fullstack/**` et reste léger.
+
+**Jambe « admin déclenche reversement » volontairement HORS scope E2E** : un
+reversement exige une commande `delivered` + `bank_details` producteur, absents
+après un checkout frais (mor.diop n'a pas de bank_details au seed). Déjà couvert
+par `payouts-flow.integration.test.ts` (testcontainers). Câbler ce leg en E2E
+demanderait de forcer l'état `delivered` + seeder des bank_details — coût sans
+gain (le métier reversement est déjà testé). Non rouvert comme dette : couverture
+integration suffisante.
 
 ## [lot-2→lot-9] CSP prod : durcissement validé, nonce écarté — résolue 2026-05-30 (Lot 9)
 

@@ -27,6 +27,10 @@ build/
 coverage/
 *.tsbuildinfo
 
+# Playwright (artefacts de run E2E, jamais commités)
+apps/web/test-results/
+apps/web/playwright-report/
+
 # Service worker généré par serwist (apps/web) — jamais commité, jamais linté
 apps/web/public/sw.js
 apps/web/public/sw.js.map
