@@ -132,12 +132,19 @@ export async function guestPlugin(app: FastifyInstance): Promise<void> {
   // ───────────────────────────────────────────────────────────────
   // POST /v1/guest/payments/intents · payment intent Bictorys pour commande
   // invité `online` (ownership = orderId + guestPhoneNumber).
+  //
+  // PAS de preHandler hCaptcha ici : un token hCaptcha est à USAGE UNIQUE et a
+  // déjà été consommé à la création de la commande (POST /v1/guest/orders). Le
+  // flux `online` enchaîne create → intent avec un seul challenge résolu. Cette
+  // route reste protégée par (a) le rate-limit strict et (b) la preuve
+  // d'ownership : il faut connaître l'`orderId` généré serveur ET le
+  // `guestPhoneNumber` figé à la création — donc une commande déjà passée par
+  // le captcha. L'anti-bot est ainsi appliqué en amont, sans double challenge.
 
   typed.post(
     '/v1/guest/payments/intents',
     {
       config: { rateLimit: WRITE_RATE_LIMIT },
-      preHandler: verifyGuestHcaptcha,
       schema: {
         body: CreateGuestPaymentIntentSchema,
         response: { 201: PaymentIntentResponseSchema },

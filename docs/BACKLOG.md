@@ -366,26 +366,6 @@ exacts où ces dettes sont marquées en commentaire inline.
   `publicId` qui n'existent pas → erreur lors de l'affichage côté front
   (image cassée). Pas de risque sécurité grave car le folder est privé.
 
-## [lot-8→lot-9] hCaptcha invité scaffoldé mais désactivé (config prod requise)
-
-- **Découvert** : Lot 8 (anti-abus mode invité)
-- **Cible** : Lot 9 (durcissement sécurité + config infra Render)
-- **Pourquoi reporté** : le helper `verifyHcaptcha()` + le preHandler du plugin
-  invité sont livrés et testés (test integration : `HCAPTCHA_SECRET` défini +
-  token invalide → 403, 0 commande créée). Mais en dev/test `HCAPTCHA_SECRET`
-  est absent, donc `isHcaptchaConfigured()` renvoie `false` et le preHandler
-  laisse passer (scaffold désactivé). Activation prod = poser `HCAPTCHA_SECRET`
-  (+ sitekey côté web) dans le dashboard Render et câbler le widget hCaptcha
-  dans le formulaire `/guest/checkout` (champ `hcaptchaToken` déjà accepté par
-  le schéma `CreateGuestOrder`).
-- **Fichiers** : apps/api/src/lib/hcaptcha.ts, apps/api/src/modules/guest/guest-plugin.ts
-  (preHandler), apps/web/app/(chromeless)/guest/checkout/page.tsx (widget à câbler).
-- **Garde-fou actuel** : rate-limit strict `/v1/guest/*` (test integration :
-  11ᵉ POST → 429) protège déjà contre l'abus brut au MVP.
-- **Risque si non traité** : prod sans hCaptcha = formulaire invité soumis au
-  spam automatisé au-delà de ce que le rate-limit IP filtre. Acceptable au MVP,
-  à activer avant ouverture publique.
-
 ## [lot-8→lot-9] Audit_log non écrit pour les commandes invité
 
 - **Découvert** : Lot 8 (création commande invité sans compte)
@@ -443,6 +423,32 @@ exacts où ces dettes sont marquées en commentaire inline.
 ---
 
 # Résolues
+
+## [lot-8] hCaptcha invité câblé bout-en-bout — résolue 2026-05-30 (Lot 8)
+
+Le widget hCaptcha est désormais câblé de bout en bout (anti-bot guest checkout) :
+
+- **API** : helper `verifyHcaptcha()` + preHandler sur `POST /v1/guest/orders`
+  (test integration : token invalide → 403, 0 commande). Le preHandler a été
+  RETIRÉ de `POST /v1/guest/payments/intents` : un token hCaptcha est à usage
+  unique (consommé à la création), et le flux online enchaîne create → intent
+  avec un seul challenge. L'intent reste gardé par rate-limit + preuve
+  d'ownership (`orderId` serveur + `guest_phone_number` figé). Test integration
+  dédié : « la création d'intent N'EXIGE PAS de captcha ».
+- **Web** : composant typé `GuestHcaptcha` (script officiel `render=explicit`
+  via `next/script`, AUCUNE dépendance npm ajoutée), intégré au formulaire
+  `/guest/checkout` (token passé dans le body, submit gaté, reset sur échec via
+  nonce). CSP middleware élargie aux hosts `hcaptcha.com`/`*.hcaptcha.com`
+  (script/frame/style/connect).
+- **Config** : `NEXT_PUBLIC_HCAPTCHA_SITEKEY` (web) + `HCAPTCHA_SECRET` (api)
+  ajoutés à `env.ts`/`.env.example`/`render.yaml`. Tous deux optionnels :
+  absents (dev par défaut) → widget masqué + checkout non gardé (dégradation OK).
+
+**Reste un geste OPS, pas une dette code** : provisionner la paire de clés
+hCaptcha réelles dans le dashboard Render (`HCAPTCHA_SECRET` + sitekey) avant
+l'ouverture publique. La paire de test (`0x0000…0000` / `10000000-ffff-…-0001`)
+permet de valider le flux en local. Garde-fou en attendant : rate-limit strict
+`/v1/guest/*` (11ᵉ POST → 429).
 
 ## [lot-2→lot-8] Catalogue invité : masquage de l'identité producteur — résolue 2026-05-30 (Lot 8)
 

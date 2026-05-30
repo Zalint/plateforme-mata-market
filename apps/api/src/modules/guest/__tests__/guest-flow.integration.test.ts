@@ -469,4 +469,62 @@ describe('Guest · hCaptcha (anti-bot, activé si secret configuré)', () => {
       await app.close();
     }
   });
+
+  it("la création d'intent N'EXIGE PAS de captcha (token à usage unique consommé à l'order)", async () => {
+    // Secret configuré → le captcha garde POST /orders, mais PAS /intents : le
+    // token hCaptcha est à usage unique (consommé à la création). Le flux online
+    // enchaîne create → intent avec un seul challenge résolu côté navigateur.
+    env.HCAPTCHA_SECRET = 'test-hcaptcha-secret';
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('hcaptcha.com/siteverify')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+        );
+      }
+      if (url.includes('/charges')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'intent_guest_nocap',
+              paymentUrl: 'https://pay.bictorys.com/intent_guest_nocap',
+              status: 'opened',
+            }),
+            { status: 201, headers: { 'content-type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.reject(new Error(`Unexpected fetch call: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const app = await buildApp();
+    try {
+      // 1. Order online AVEC un token valide (siteverify success).
+      const orderRes = await app.inject({
+        method: 'POST',
+        url: '/v1/guest/orders',
+        headers: { 'x-idempotency-key': randomUUID() },
+        payload: guestOrderBody({ paymentMethod: 'online', hcaptchaToken: 'good-token' }),
+      });
+      expect(orderRes.statusCode).toBe(201);
+      const orderId = (orderRes.json() as { id: string }).id;
+
+      // 2. Intent SANS aucun token → accepté (route exemptée de captcha).
+      const intentRes = await app.inject({
+        method: 'POST',
+        url: '/v1/guest/payments/intents',
+        headers: { 'x-idempotency-key': randomUUID() },
+        payload: { orderId, guestPhoneNumber: GUEST_PHONE },
+      });
+      expect(intentRes.statusCode).toBe(201);
+      expect((intentRes.json() as { providerIntentId: string }).providerIntentId).toBe(
+        'intent_guest_nocap',
+      );
+    } finally {
+      await app.close();
+    }
+  });
 });

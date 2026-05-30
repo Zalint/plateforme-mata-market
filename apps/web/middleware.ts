@@ -52,20 +52,25 @@ export function middleware(request: NextRequest): NextResponse {
   // `'unsafe-inline'` et `'unsafe-eval'` pour que React hydrate. En prod
   // ces deux directives DOIVENT être retirées : on bascule sur des nonces
   // Next (à câbler au Lot 9 durcissement, cf. ARCHITECTURE.md §9 CSP).
+  // hCaptcha (guest checkout, Lot 8) charge son script + iframe + assets depuis
+  // hcaptcha.com et ses sous-domaines (js./newassets.). Hosts requis sur
+  // script/frame/style/connect (cf. docs hCaptcha « Content Security Policy »).
+  const HCAPTCHA = 'https://hcaptcha.com https://*.hcaptcha.com';
+
   const scriptSrc = isDev
-    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'"
-    : "script-src 'self' 'wasm-unsafe-eval'";
+    ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' ${HCAPTCHA}`
+    : `script-src 'self' 'wasm-unsafe-eval' ${HCAPTCHA}`;
 
   const csp = [
     "default-src 'self'",
     scriptSrc,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com ${HCAPTCHA}`,
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https://res.cloudinary.com",
-    `connect-src 'self' https://api.mata.sn https://keycloak.mata.sn https://api.cloudinary.com${devConnect}`,
+    `connect-src 'self' https://api.mata.sn https://keycloak.mata.sn https://api.cloudinary.com ${HCAPTCHA}${devConnect}`,
     "worker-src 'self'",
     "manifest-src 'self'",
-    `frame-src https://keycloak.mata.sn${devFrame}`,
+    `frame-src https://keycloak.mata.sn ${HCAPTCHA}${devFrame}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

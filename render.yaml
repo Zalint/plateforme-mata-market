@@ -117,6 +117,10 @@ services:
         value: mata
       - key: NEXT_PUBLIC_KEYCLOAK_CLIENT_ID
         value: mata-web
+      # Sitekey hCaptcha PUBLIQUE (guest checkout, Lot 8). Pendant front de
+      # HCAPTCHA_SECRET (mata-api). Vide → widget masqué (checkout non gardé).
+      - key: NEXT_PUBLIC_HCAPTCHA_SITEKEY
+        sync: false
 
   # ────────────────────────────────────────────────────────────
   # mata-keycloak · SSO

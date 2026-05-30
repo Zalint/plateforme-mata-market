@@ -13,6 +13,7 @@ import type { OrderOutput } from '@mata/shared/schemas';
 import { Icon, type IconName, Money } from '@mata/ui';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
+import { GuestHcaptcha } from '../../../../src/components/guest-hcaptcha';
 import {
   useCreateGuestOrder,
   useCreateGuestPaymentIntent,
@@ -20,6 +21,11 @@ import {
   useGuestZones,
 } from '../../../../src/lib/api';
 import { useCart } from '../../../../src/lib/cart/use-cart';
+
+// Sitekey hCaptcha PUBLIQUE (Lot 8). Absente (dev par défaut) → widget masqué
+// et checkout non gardé par captcha. `process.env.NEXT_PUBLIC_*` est inliné par
+// Next au build, donc lisible dans ce Client Component.
+const HCAPTCHA_SITEKEY = process.env.NEXT_PUBLIC_HCAPTCHA_SITEKEY;
 
 /**
  * Guest / Checkout · commande rapide sans compte (Lot 8).
@@ -92,6 +98,13 @@ export default function GuestCheckoutPage(): React.JSX.Element {
   const createIntent = useCreateGuestPaymentIntent();
   const [confirmed, setConfirmed] = useState<OrderOutput | null>(null);
 
+  // hCaptcha : actif seulement si la sitekey est configurée. Le token est à
+  // usage unique → on le réinitialise après un échec (nonce force un nouveau
+  // challenge en remontant le widget).
+  const hcaptchaEnabled = Boolean(HCAPTCHA_SITEKEY);
+  const [hcaptchaToken, setHcaptchaToken] = useState<string | null>(null);
+  const [captchaNonce, setCaptchaNonce] = useState(0);
+
   // Récap local (le serveur revalide tout au POST).
   const lines = cart.items
     .map((item) => {
@@ -115,6 +128,7 @@ export default function GuestCheckoutPage(): React.JSX.Element {
     zoneId !== '' &&
     addressLine.trim().length >= 3 &&
     consent &&
+    (!hcaptchaEnabled || hcaptchaToken !== null) &&
     !busy;
 
   const errorMessage = createOrder.error?.message ?? createIntent.error?.message ?? null;
@@ -136,6 +150,8 @@ export default function GuestCheckoutPage(): React.JSX.Element {
           guestPhoneNumber: phoneNumber,
           paymentMethod,
           consent: true,
+          // Token à usage unique, présent seulement si le widget est affiché.
+          hcaptchaToken: hcaptchaToken ?? undefined,
         },
       });
 
@@ -155,6 +171,12 @@ export default function GuestCheckoutPage(): React.JSX.Element {
       setConfirmed(order);
     } catch {
       // Erreur affichée via errorMessage (createOrder/createIntent.error).
+      // Le token hCaptcha est consommé même en cas d'échec → on force un
+      // nouveau challenge pour permettre une nouvelle tentative.
+      if (hcaptchaEnabled) {
+        setHcaptchaToken(null);
+        setCaptchaNonce((n) => n + 1);
+      }
     }
   }
 
@@ -474,6 +496,18 @@ export default function GuestCheckoutPage(): React.JSX.Element {
                   utilise mes coordonnées uniquement pour la livraison.
                 </span>
               </label>
+
+              {/* Anti-robot — affiché seulement si la sitekey est configurée. */}
+              {hcaptchaEnabled && HCAPTCHA_SITEKEY && (
+                <div className="flex justify-center">
+                  <GuestHcaptcha
+                    key={captchaNonce}
+                    sitekey={HCAPTCHA_SITEKEY}
+                    onVerify={setHcaptchaToken}
+                    onExpire={() => setHcaptchaToken(null)}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Récap latéral */}
