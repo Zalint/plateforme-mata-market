@@ -104,6 +104,18 @@ services:
       GENERIC_TIMEZONE: Africa/Dakar
       # Clé de chiffrement des credentials n8n (dev fixe → persistance volume).
       N8N_ENCRYPTION_KEY: mata-dev-n8n-encryption-key-change-me
+      # Secret HMAC partagé avec l'API (apps/api/.env : N8N_WEBHOOK_SECRET). Le
+      # nœud Code « Vérifier signature HMAC » du workflow le lit via $env pour
+      # valider X-Mata-Signature en temps constant. Interpolé depuis le shell si
+      # défini, sinon défaut dev (identique à infra/n8n/README). NE PAS utiliser
+      # en prod : injecter un vrai secret via l'environnement.
+      MATA_N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET:-mata-dev-n8n-webhook-secret-32chars!!}
+      # Autorise `require('crypto')` dans le nœud Code (sandbox verrouillée par
+      # défaut) — nécessaire pour createHmac / timingSafeEqual.
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto
+      # Autorise `$env` dans le nœud Code pour lire MATA_N8N_WEBHOOK_SECRET
+      # (bloqué par défaut). Le secret n'est exposé qu'au workflow, pas au client.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: 'false'
       # Évite les warnings de dépréciation au boot.
       N8N_RUNNERS_ENABLED: 'true'
       N8N_DIAGNOSTICS_ENABLED: 'false'

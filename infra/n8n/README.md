@@ -28,7 +28,31 @@ N8N_WEBHOOK_SECRET=mata-dev-n8n-webhook-secret-32chars!!
 `mata-outbox-workflow.json` contient un nœud Webhook par eventType
 (`pickup.scheduled`, `pickup.confirmed`, `order.created`, `order.confirmed`,
 `order.delivered`, `payout.sent`, `teleconsult.action.performed`), chacun
-répondant 200. Le fichier est monté dans le conteneur sous `/import`.
+répondant 200, puis un nœud Code **« Vérifier signature HMAC (temps
+constant) »** partagé qui valide `X-Mata-Signature` avant le nœud de
+traitement. Le fichier est monté dans le conteneur sous `/import`.
+
+### Vérification HMAC (§G5)
+
+Le nœud Code recalcule `HMAC_SHA256(secret, JSON.stringify({eventType,
+payload}))` (hex) et le compare à l'en-tête `X-Mata-Signature` reçu via
+`crypto.timingSafeEqual` (temps constant). Symétrique de `signN8nPayload()`
+côté API. Si la signature est absente ou invalide, le nœud `throw` →
+l'exécution échoue (visible en rouge dans Executions) et le nœud de
+traitement n'est **jamais** atteint.
+
+Pré-requis docker-compose (déjà posés) :
+
+- `MATA_N8N_WEBHOOK_SECRET` = même valeur que `N8N_WEBHOOK_SECRET` côté API
+  (interpolé depuis le shell, défaut dev sinon).
+- `NODE_FUNCTION_ALLOW_BUILTIN=crypto` pour autoriser `require('crypto')`
+  dans la sandbox du nœud Code.
+
+> Limite démo : `responseMode: onReceived` répond 200 **avant** d'exécuter le
+> workflow (ack rapide, n8n hors chemin critique §G3). La vérif gate donc le
+> *traitement*, pas le code HTTP. Pour rejeter en **401** au niveau HTTP (vrai
+> durcissement prod), passer le webhook en `responseMode: lastNode` + nœud
+> *Respond to Webhook* renvoyant 401 sur la branche d'erreur.
 
 ```bash
 # Import (le workflow arrive inactif dans la DB n8n)
@@ -75,6 +99,7 @@ Réponse `200` = webhook actif.
 
 - DB n8n : SQLite embarquée (volume `n8n-data`). `docker compose down -v`
   réinitialise tout (workflow à ré-importer).
-- Le nœud récepteur ne vérifie pas la signature HMAC (démo réception). En
-  prod, n8n DOIT vérifier `X-Mata-Signature` en temps constant (cf. §G5) —
-  ajouter un Code node de vérification avant traitement.
+- Le nœud Code « Vérifier signature HMAC » valide `X-Mata-Signature` en temps
+  constant avant traitement (cf. §G5). Reste à durcir pour la prod : rejet HTTP
+  401 explicite (cf. encart « Vérification HMAC » plus haut) au lieu du seul
+  échec d'exécution.
