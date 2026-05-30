@@ -422,3 +422,17 @@ export const NOTIFICATION_CATEGORY_LABEL_FR: Record<NotificationCategory, string
   payout: 'Reversements',
   offer: 'Offres',
 };
+
+// ─────────────────────────────────────────────────────────────────
+// Paiement · moyen choisi à la commande (Lot 8 — guest checkout)
+
+// `online` (défaut) = flux Bictorys existant (payment intent + webhook).
+// `cash_on_delivery` = paiement cash à la livraison : la commande invité est
+// confirmable sans payment intent (cf. order-service transition guard).
+export const PAYMENT_METHODS = ['online', 'cash_on_delivery'] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+export const PAYMENT_METHOD_LABEL_FR: Record<PaymentMethod, string> = {
+  online: 'Paiement en ligne',
+  cash_on_delivery: 'Paiement à la livraison',
+};

@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { DELIVERY_PERIODS, ORDER_STATUSES, PAYMENT_STATUSES } from '../constants/enums.js';
+import {
+  DELIVERY_PERIODS,
+  ORDER_STATUSES,
+  PAYMENT_METHODS,
+  PAYMENT_STATUSES,
+} from '../constants/enums.js';
 import { FcfaAmountSchema, IsoDateSchema, IsoDateTimeSchema, UuidSchema } from './common.js';
 import { PricingSnapshotOutputSchema } from './pricing.js';
 
@@ -21,6 +26,9 @@ import { PricingSnapshotOutputSchema } from './pricing.js';
 export const OrderStatusSchema = z.enum(ORDER_STATUSES);
 export const DeliveryPeriodSchema = z.enum(DELIVERY_PERIODS);
 export const OrderPaymentStatusSchema = z.enum(PAYMENT_STATUSES);
+// Moyen de paiement (Lot 8). Défini ici plutôt que dans guest.ts car
+// `OrderOutputSchema` l'expose et `guest.ts` importe déjà depuis `order.ts`.
+export const PaymentMethodSchema = z.enum(PAYMENT_METHODS);
 
 // ─────────────────────────────────────────────────────────────────
 // Helpers
@@ -125,6 +133,11 @@ export const OrderOutputSchema = z.object({
   orderNumber: z.string(), // ex: CMD-2026-0001
   clientUserId: UuidSchema.nullable(),
   clientDisplayName: z.string().nullable(), // joint depuis users.display_name (null si guest)
+  // Lot 8 — identité de contact invité (null pour un client authentifié).
+  guestFullName: z.string().nullable(),
+  guestPhoneNumber: z.string().nullable(),
+  // Moyen de paiement choisi à la création (online | cash_on_delivery).
+  paymentMethod: PaymentMethodSchema,
   status: OrderStatusSchema,
 
   // Livraison

@@ -1,4 +1,8 @@
-import { isValidOrderTransition, type OrderStatus } from '@mata/shared/constants';
+import {
+  isValidOrderTransition,
+  type OrderStatus,
+  type PaymentMethod,
+} from '@mata/shared/constants';
 import { DomainError } from '@mata/shared/errors';
 import type {
   OrderAdminListQuery,
@@ -8,6 +12,7 @@ import type {
 } from '@mata/shared/schemas';
 import type { Prisma } from '@prisma/client';
 import type { FastifyRequest } from 'fastify';
+import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { auditService } from '../audit/index.js';
 import { notificationService } from '../notifications/index.js';
@@ -38,13 +43,28 @@ import { generateOrderNumber } from './order-numbering.js';
 // Création
 
 export interface CreateOrderArgs {
-  clientUserId: string;
+  /**
+   * `null` = commande invité (Lot 8, guest checkout). Dans ce cas `guest` est
+   * obligatoire et l'audit `order.create` est skippé (pas de row `users` →
+   * FK actor impossible, même politique que le webhook payment).
+   */
+  clientUserId: string | null;
   input: OrderCreate;
+  /** Identité de contact invité — requise ssi `clientUserId` est null. */
+  guest?: { fullName: string; phoneNumber: string };
+  /** Moyen de paiement choisi. Défaut `online` (flux Bictorys du Lot 5). */
+  paymentMethod?: PaymentMethod;
   request?: FastifyRequest;
 }
 
 async function createOrderInternal(args: CreateOrderArgs): Promise<OrderOutput> {
-  const { clientUserId, input, request } = args;
+  const { clientUserId, input, guest, paymentMethod = 'online', request } = args;
+
+  // Invariant Lot 8 : une commande invité DOIT porter une identité de contact ;
+  // une commande authentifiée NE DOIT PAS en porter (l'identité vient du compte).
+  if (clientUserId === null && !guest) {
+    throw new DomainError('VALIDATION', 'Commande invité : identité de contact requise');
+  }
 
   // Vérifie en amont (hors transaction) que la zone existe — erreur 404
   // plus lisible qu'une violation FK SQL.
@@ -132,6 +152,10 @@ async function createOrderInternal(args: CreateOrderArgs): Promise<OrderOutput> 
       data: {
         orderNumber,
         clientUserId,
+        // Lot 8 : identité de contact invité (null pour un client authentifié).
+        guestFullName: guest?.fullName ?? null,
+        guestPhoneNumber: guest?.phoneNumber ?? null,
+        paymentMethod,
         status: 'created',
         deliveryZoneId: input.delivery.zoneId,
         deliveryAddressLine: input.delivery.addressLine,
@@ -167,18 +191,28 @@ async function createOrderInternal(args: CreateOrderArgs): Promise<OrderOutput> 
     return order as OrderLoaded;
   });
 
-  await auditService.log({
-    actorUserId: clientUserId,
-    action: 'order.create',
-    targetType: 'order',
-    targetId: created.id,
-    newValue: {
-      orderNumber: created.orderNumber,
-      totalFcfa: created.totalFcfa,
-      itemsCount: created.items.length,
-    },
-    request,
-  });
+  // Audit `order.create` : seulement pour un client authentifié. Un invité n'a
+  // pas de row `users` → FK actor impossible. On log un warn pour la traçabilité
+  // (même politique que le webhook payment, cf. payment-service `logWebhookAudit`).
+  if (clientUserId) {
+    await auditService.log({
+      actorUserId: clientUserId,
+      action: 'order.create',
+      targetType: 'order',
+      targetId: created.id,
+      newValue: {
+        orderNumber: created.orderNumber,
+        totalFcfa: created.totalFcfa,
+        itemsCount: created.items.length,
+      },
+      request,
+    });
+  } else {
+    logger.warn(
+      { event: 'order.create.guest_audit_skipped', orderId: created.id },
+      'order.create.guest_audit_skipped',
+    );
+  }
 
   return toOrderOutput(created);
 }

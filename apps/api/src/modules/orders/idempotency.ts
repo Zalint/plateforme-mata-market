@@ -28,7 +28,18 @@ import { auditService } from '../audit/index.js';
 
 interface WithIdempotencyArgs<T> {
   request: FastifyRequest;
-  userId: string;
+  /**
+   * Identifiant de scope d'idempotence, ex `user:<uuid>` (client authentifié)
+   * ou `guest:<+221...>` (mode invité Lot 8). Garantit qu'une même clé ne
+   * collisionne pas entre deux acteurs distincts.
+   */
+  scopeOwner: string;
+  /**
+   * Acteur pour l'audit `order.idempotent_replay`. `null` pour un invité (pas
+   * de row `users` → on skip l'audit pour ne pas violer la FK actor, même
+   * politique que le webhook côté payment-service).
+   */
+  actorUserId: string | null;
   handler: () => Promise<T>;
 }
 
@@ -42,20 +53,23 @@ export async function withIdempotency<T>(
   args: WithIdempotencyArgs<T>,
 ): Promise<IdempotencyOutcome<T>> {
   const key = readKeyHeader(args.request);
-  const scope = buildScope(args.request, args.userId);
+  const scope = buildScope(args.request, args.scopeOwner);
 
   // 1. Lookup cache
   const cached = await prisma.idempotencyRecord.findUnique({
     where: { key_scope: { key, scope } },
   });
   if (cached) {
-    await auditService.log({
-      actorUserId: args.userId,
-      action: 'order.idempotent_replay',
-      targetType: 'idempotency',
-      newValue: { key, scope, replayedStatus: cached.statusCode },
-      request: args.request,
-    });
+    // Audit du replay seulement si on a un acteur (skip pour invité, cf. FK).
+    if (args.actorUserId) {
+      await auditService.log({
+        actorUserId: args.actorUserId,
+        action: 'order.idempotent_replay',
+        targetType: 'idempotency',
+        newValue: { key, scope, replayedStatus: cached.statusCode },
+        request: args.request,
+      });
+    }
     return {
       body: cached.responseBody as T,
       statusCode: cached.statusCode,
@@ -99,10 +113,10 @@ function readKeyHeader(req: FastifyRequest): string {
   return parsed.data;
 }
 
-function buildScope(req: FastifyRequest, userId: string): string {
+function buildScope(req: FastifyRequest, scopeOwner: string): string {
   // Fastify 5 : route info exposée via req.routeOptions (method + url canonique
   // avec params templated). Fallback sur req.method/req.url si absent.
   const method = req.routeOptions?.method ?? req.method;
   const path = req.routeOptions?.url ?? req.url.split('?')[0];
-  return `${method} ${path}|user:${userId}`;
+  return `${method} ${path}|${scopeOwner}`;
 }

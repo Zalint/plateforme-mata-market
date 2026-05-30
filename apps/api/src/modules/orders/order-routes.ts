@@ -48,7 +48,8 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
 
       const outcome = await withIdempotency({
         request: req,
-        userId: user.id,
+        scopeOwner: `user:${user.id}`,
+        actorUserId: user.id,
         handler: () =>
           orderService.create({ clientUserId: user.id, input: req.body, request: req }),
       });
