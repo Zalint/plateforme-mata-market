@@ -150,7 +150,7 @@ export async function httpFetch(opts: HttpFetchOptions): Promise<HttpFetchResult
 
       // 5xx : retry. 4xx : abandon (erreur applicative).
       if (res.status >= 500 && attempt < maxRetries - 1) {
-        lastError = new Error(`Bictorys 5xx ${res.status}`);
+        lastError = new Error(`HTTP ${res.status}`);
         const wait = retryBaseMs * 2 ** attempt;
         logger.warn(
           { url: opts.url, status: res.status, attempt: attempt + 1, retryInMs: wait },
@@ -174,7 +174,10 @@ export async function httpFetch(opts: HttpFetchOptions): Promise<HttpFetchResult
       }
     }
   }
-  throw new DomainError('EXTERNAL_FAILURE', `Bictorys unreachable: ${errMessage(lastError)}`, {
+  // Message générique (sans nom de prestataire) : `httpFetch` est un helper
+  // partagé (Bictorys, n8n, hCaptcha...). Un échec n8n ne doit pas écrire
+  // « Bictorys ... » dans `outbox_events.last_error` (debug trompeur).
+  throw new DomainError('EXTERNAL_FAILURE', `Upstream request failed: ${errMessage(lastError)}`, {
     cause: lastError instanceof Error ? lastError : undefined,
   });
 }

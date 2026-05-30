@@ -289,6 +289,20 @@ export const offerService = {
     // à jour les photos d'une offre validée sans repasser par validation).
     // À durcir si on observe des abus.
 
+    // Validation publicId (CLAUDE.md §G5 « validation serveur du public_id ») :
+    // le folder Cloudinary est figé serveur à `mata/offers/<owner>/<offerId>`
+    // (cf. uploads-routes.buildFolder). Un public_id légitime commence donc par
+    // ce préfixe. On refuse tout id hors de ce folder — empêche un producteur
+    // d'attacher la photo d'une AUTRE offre / d'un autre producteur, ou un id
+    // forgé pointant ailleurs dans le compte Cloudinary.
+    const expectedPrefix = `mata/offers/${existing.producerUserId}/${offerId}/`;
+    const invalid = input.publicIds.find((id) => !id.startsWith(expectedPrefix));
+    if (invalid !== undefined) {
+      throw new DomainError('VALIDATION', 'public_id hors du folder de cette offre', {
+        details: { expectedPrefix },
+      });
+    }
+
     await prisma.$transaction(async (tx) => {
       await tx.offerPhoto.deleteMany({ where: { offerId } });
       await tx.offerPhoto.createMany({

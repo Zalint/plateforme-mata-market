@@ -1,6 +1,7 @@
 'use client';
 
 import { SITE_TYPE_LABEL_FR, SITE_TYPES, type SiteType } from '@mata/shared/constants';
+import type { SiteOutput } from '@mata/shared/schemas';
 import { Icon, SiteCard, useConfirm } from '@mata/ui';
 import Link from 'next/link';
 import { useId, useState } from 'react';
@@ -9,6 +10,7 @@ import {
   useCreateSite,
   useMyProducerProfile,
   useMySites,
+  useUpdateSite,
   useZones,
 } from '../../../../src/lib/api';
 
@@ -24,6 +26,7 @@ export default function ProducerSitesPage(): React.JSX.Element {
   const archive = useArchiveSite();
   const confirm = useConfirm();
   const [showForm, setShowForm] = useState(false);
+  const [editingSite, setEditingSite] = useState<SiteOutput | null>(null);
 
   if (profileLoading) return <p className="px-4 py-8 text-sm text-stone-500">Chargement…</p>;
   if (!profileData?.profile) return <NoProfileCta />;
@@ -53,7 +56,10 @@ export default function ProducerSitesPage(): React.JSX.Element {
         </div>
         <button
           type="button"
-          onClick={() => setShowForm((v) => !v)}
+          onClick={() => {
+            setEditingSite(null);
+            setShowForm((v) => !v);
+          }}
           className="inline-flex items-center gap-1.5 px-3 py-2 bg-mata-700 hover:bg-mata-800 text-white rounded-xl text-sm font-semibold shadow-soft transition"
         >
           <Icon name="plus" className="w-4 h-4" />
@@ -61,7 +67,15 @@ export default function ProducerSitesPage(): React.JSX.Element {
         </button>
       </div>
 
-      {showForm && <NewSiteForm zones={zones} onDone={() => setShowForm(false)} />}
+      {editingSite && (
+        <SiteForm
+          key={editingSite.id}
+          zones={zones}
+          site={editingSite}
+          onDone={() => setEditingSite(null)}
+        />
+      )}
+      {showForm && !editingSite && <SiteForm zones={zones} onDone={() => setShowForm(false)} />}
 
       {isLoading && <p className="text-sm text-stone-500">Chargement…</p>}
       {!isLoading && sites.length === 0 && !showForm && (
@@ -86,14 +100,26 @@ export default function ProducerSitesPage(): React.JSX.Element {
             contactPhone={s.contactPhone}
             pickupHours={s.pickupHours}
           >
-            <button
-              type="button"
-              onClick={() => handleArchive(s.id)}
-              disabled={archive.isPending}
-              className="w-full py-2 rounded-lg border border-stone-200 text-mata-700 text-xs font-semibold hover:bg-mata-50 flex items-center justify-center gap-1 disabled:opacity-50"
-            >
-              <Icon name="x" className="w-3.5 h-3.5" /> Archiver
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForm(false);
+                  setEditingSite(s);
+                }}
+                className="flex-1 py-2 rounded-lg border border-stone-200 text-mata-700 text-xs font-semibold hover:bg-mata-50 flex items-center justify-center gap-1"
+              >
+                <Icon name="pencil" className="w-3.5 h-3.5" /> Modifier
+              </button>
+              <button
+                type="button"
+                onClick={() => handleArchive(s.id)}
+                disabled={archive.isPending}
+                className="flex-1 py-2 rounded-lg border border-stone-200 text-mata-700 text-xs font-semibold hover:bg-mata-50 flex items-center justify-center gap-1 disabled:opacity-50"
+              >
+                <Icon name="x" className="w-3.5 h-3.5" /> Archiver
+              </button>
+            </div>
           </SiteCard>
         ))}
       </div>
@@ -125,30 +151,48 @@ function NoProfileCta(): React.JSX.Element {
 
 type Zone = { id: string; name: string; region: string };
 
-function NewSiteForm({ zones, onDone }: { zones: Zone[]; onDone: () => void }): React.JSX.Element {
+function SiteForm({
+  zones,
+  site,
+  onDone,
+}: {
+  zones: Zone[];
+  site?: SiteOutput;
+  onDone: () => void;
+}): React.JSX.Element {
   const createSite = useCreateSite();
+  const updateSite = useUpdateSite();
+  const isEdit = site !== undefined;
   const fid = useId();
-  const [name, setName] = useState('');
-  const [type, setType] = useState<SiteType>('poulailler');
-  const [zoneId, setZoneId] = useState(zones[0]?.id ?? '');
-  const [addressLine, setAddressLine] = useState('');
-  const [contactPhone, setContactPhone] = useState('');
+  const [name, setName] = useState(site?.name ?? '');
+  const [type, setType] = useState<SiteType>(site?.type ?? 'poulailler');
+  const [zoneId, setZoneId] = useState(site?.zoneId ?? zones[0]?.id ?? '');
+  const [addressLine, setAddressLine] = useState(site?.addressLine ?? '');
+  const [contactPhone, setContactPhone] = useState(site?.contactPhone ?? '');
+  const pending = createSite.isPending || updateSite.isPending;
 
   async function handleSubmit(): Promise<void> {
     if (!name || !zoneId) return;
-    await createSite.mutateAsync({
+    const data = {
       name,
       type,
       zoneId,
       addressLine: addressLine || undefined,
       contactPhone: contactPhone || undefined,
-    });
+    };
+    if (isEdit) {
+      await updateSite.mutateAsync({ id: site.id, data });
+    } else {
+      await createSite.mutateAsync(data);
+    }
     onDone();
   }
 
   return (
     <div className="bg-white rounded-2xl border border-stone-200 shadow-soft p-5 mb-5">
-      <h2 className="font-bold text-stone-900 mb-3">Nouveau site</h2>
+      <h2 className="font-bold text-stone-900 mb-3">
+        {isEdit ? 'Modifier le site' : 'Nouveau site'}
+      </h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label
@@ -249,10 +293,16 @@ function NewSiteForm({ zones, onDone }: { zones: Zone[]; onDone: () => void }): 
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={createSite.isPending || !name || !zoneId}
+          disabled={pending || !name || !zoneId}
           className="px-4 py-2 rounded-lg bg-mata-700 text-white text-sm font-bold disabled:opacity-50"
         >
-          {createSite.isPending ? 'Création…' : 'Créer le site'}
+          {pending
+            ? isEdit
+              ? 'Enregistrement…'
+              : 'Création…'
+            : isEdit
+              ? 'Enregistrer'
+              : 'Créer le site'}
         </button>
       </div>
     </div>

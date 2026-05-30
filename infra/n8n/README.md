@@ -27,19 +27,27 @@ N8N_WEBHOOK_SECRET=mata-dev-n8n-webhook-secret-32chars!!
 
 `mata-outbox-workflow.json` contient un nœud Webhook par eventType
 (`pickup.scheduled`, `pickup.confirmed`, `order.created`, `order.confirmed`,
-`order.delivered`, `payout.sent`, `teleconsult.action.performed`), chacun
-répondant 200, puis un nœud Code **« Vérifier signature HMAC (temps
-constant) »** partagé qui valide `X-Mata-Signature` avant le nœud de
-traitement. Le fichier est monté dans le conteneur sous `/import`.
+`order.delivered`, `payout.sent`, `teleconsult.action.performed`), tous en
+`responseMode: responseNode`, branchés sur un nœud Code **« Vérifier signature
+HMAC (temps constant) »** partagé. La réponse HTTP est rendue par un nœud
+*Respond to Webhook* dédié à chaque issue. Le fichier est monté dans le
+conteneur sous `/import`.
 
-### Vérification HMAC (§G5)
+### Vérification HMAC + rejet 401 (§G5)
 
 Le nœud Code recalcule `HMAC_SHA256(secret, JSON.stringify({eventType,
 payload}))` (hex) et le compare à l'en-tête `X-Mata-Signature` reçu via
 `crypto.timingSafeEqual` (temps constant). Symétrique de `signN8nPayload()`
-côté API. Si la signature est absente ou invalide, le nœud `throw` →
-l'exécution échoue (visible en rouge dans Executions) et le nœud de
-traitement n'est **jamais** atteint.
+côté API. Le nœud est en `onError: continueErrorOutput` (deux sorties) :
+
+- **signature valide** → sortie 0 → « Traitement (signature OK) » → nœud
+  *Respond to Webhook* **« Répondre 200 OK »** (`{ received: true }`).
+- **signature absente/invalide** (le `throw` est routé, pas une erreur 500) →
+  sortie 1 → nœud *Respond to Webhook* **« Répondre 401 »**
+  (`responseCode: 401`, `{ error: "UNAUTHORIZED" }`).
+
+Un appelant forgé reçoit donc un **vrai 401 HTTP** et le nœud de traitement
+n'est jamais atteint.
 
 Pré-requis docker-compose (déjà posés) :
 
@@ -48,11 +56,10 @@ Pré-requis docker-compose (déjà posés) :
 - `NODE_FUNCTION_ALLOW_BUILTIN=crypto` pour autoriser `require('crypto')`
   dans la sandbox du nœud Code.
 
-> Limite démo : `responseMode: onReceived` répond 200 **avant** d'exécuter le
-> workflow (ack rapide, n8n hors chemin critique §G3). La vérif gate donc le
-> *traitement*, pas le code HTTP. Pour rejeter en **401** au niveau HTTP (vrai
-> durcissement prod), passer le webhook en `responseMode: lastNode` + nœud
-> *Respond to Webhook* renvoyant 401 sur la branche d'erreur.
+> Note chemin critique (§G3) : `responseNode` répond après l'exécution du
+> workflow (le temps de vérif HMAC est négligeable). n8n reste hors chemin
+> critique côté MATA : le cron `retry-outbox` ne bloque pas sur la réponse et
+> retente en cas d'échec.
 
 ```bash
 # Import (le workflow arrive inactif dans la DB n8n)
@@ -93,13 +100,16 @@ curl -i -X POST http://localhost:5678/webhook/pickup.scheduled \
   -d '{"eventType":"pickup.scheduled","payload":{"pickupId":"demo"}}'
 ```
 
-Réponse `200` = webhook actif.
+Réponse `401` (`{ "error": "UNAUTHORIZED" }`) = webhook actif ET vérif HMAC
+en place (la signature `dev-test` est bien sûr invalide). Pour obtenir `200`,
+calcule la vraie signature : `signN8nPayload(JSON.stringify({eventType,
+payload}), N8N_WEBHOOK_SECRET)`.
 
 ## Notes
 
 - DB n8n : SQLite embarquée (volume `n8n-data`). `docker compose down -v`
   réinitialise tout (workflow à ré-importer).
 - Le nœud Code « Vérifier signature HMAC » valide `X-Mata-Signature` en temps
-  constant avant traitement (cf. §G5). Reste à durcir pour la prod : rejet HTTP
-  401 explicite (cf. encart « Vérification HMAC » plus haut) au lieu du seul
-  échec d'exécution.
+  constant avant traitement (cf. §G5) ET rejette en **401 HTTP** via le nœud
+  *Respond to Webhook* « Répondre 401 » (cf. encart « Vérification HMAC + rejet
+  401 » plus haut).

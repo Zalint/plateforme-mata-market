@@ -128,73 +128,6 @@ exacts où ces dettes sont marquées en commentaire inline.
 - **Risque si non traité** : une régression UI checkout n'est pas attrapée par
   la CI (seulement au run local manuel).
 
-## [lot-7→lot-9] Rejet HTTP 401 explicite côté récepteur n8n (durcissement HMAC)
-
-- **Découvert** : Lot 7 (vérif HMAC `X-Mata-Signature` ajoutée au workflow n8n,
-  commit `86cbc95`)
-- **Cible** : Lot 9 (durcissement intégrations)
-- **Pourquoi reporté** : le nœud Code « Vérifier signature HMAC (temps
-  constant) » valide bien la signature AVANT traitement (signature invalide →
-  `throw` → exécution en erreur, nœud de traitement jamais atteint). Mais comme
-  les webhooks sont en `responseMode: onReceived`, n8n répond `200` AVANT
-  d'exécuter le workflow (ack rapide, n8n hors chemin critique §G3) : le code
-  HTTP reste donc `200` même pour une signature forgée. Pour un vrai rejet
-  `401` au niveau HTTP, repasser les webhooks en `responseMode: lastNode` +
-  ajouter un nœud *Respond to Webhook* renvoyant 401 sur la branche d'erreur.
-- **Fichiers** : infra/n8n/mata-outbox-workflow.json, infra/n8n/README.md.
-- **Garde-fou actuel** : la signature EST vérifiée et gate le traitement ; un
-  event forgé n'est jamais traité (visible en `Error` dans Executions). Seul le
-  code HTTP retourné est non discriminant.
-- **Risque si non traité** : un appelant forgé reçoit `200` (faux positif de
-  succès) alors que l'event n'est pas traité. Faible : l'unique appelant
-  légitime est notre cron, qui signe correctement.
-
-## [lot-7→lot-9] Message d'erreur `httpFetch` codé « Bictorys » pour les échecs n8n
-
-- **Découvert** : Lot 7 (démo résilience : n8n arrêté → cron → `last_error`)
-- **Cible** : Lot 9 (nettoyage helper HTTP)
-- **Pourquoi reporté** : le dispatch n8n (`lib/n8n.ts`) réutilise le helper
-  partagé `httpFetch` (`lib/bictorys.ts`), dont le message d'erreur est codé en
-  dur « Bictorys unreachable: ... ». Résultat : un échec de dispatch n8n écrit
-  `last_error = "Bictorys unreachable: This operation was aborted"` dans
-  `outbox_events` — trompeur pour le debug. Rendre le message générique
-  (sans nom de prestataire) dans `httpFetch`.
-- **Fichiers** : apps/api/src/lib/bictorys.ts (helper `httpFetch`).
-- **Garde-fou actuel** : purement cosmétique (logs/`last_error`) ; le
-  comportement de retry/abandon est correct.
-- **Risque si non traité** : diagnostic ralenti (faux indice « Bictorys » sur
-  un incident n8n). Aucun impact fonctionnel.
-
-## [lot-2→lot-?] Édition d'un site existant (PATCH /v1/sites/:id)
-
-- **Découvert** : Lot 2 (étape 4, bouton "Modifier" sur SiteCard est `disabled`)
-- **Cible** : pas urgent, à activer dès qu'on touche la page sites
-- **Pourquoi reporté** : la route API existe et marche, juste l'UI form
-  edit pas faite (form create est inline, edit nécessiterait un mode
-  `editingId` dans la page).
-- **Fichiers** : apps/web/app/(chromed)/producer/sites/page.tsx:88
-  ("À venir" disabled button) + apps/web/src/lib/api/hooks/use-sites.ts
-  (`useUpdateSite` non câblé)
-- **Garde-fou actuel** : producteur peut archive + créer un nouveau site.
-- **Risque si non traité** : friction UX mineure.
-
-## [lot-2→lot-6] Validation Cloudinary publicId côté API (avant attach)
-
-- **Découvert** : Lot 2 (étape 6 Cloudinary)
-- **Cible** : Lot 6 (déjà fait pour le reste) ou Lot 9
-- **Pourquoi reporté** : on attache les `publicId[]` reçus du client sans
-  vérifier via `cloudinary.api.resource` qu'ils existent vraiment et
-  appartiennent au bon folder. Le folder est figé serveur (signature),
-  donc un client malicieux ne peut PAS uploader hors folder, mais
-  pourrait techniquement attacher un `publicId` inventé.
-- **Fichiers** : apps/api/src/modules/offers/offer-service.ts:227-239
-  (attachPhotos sans validation Cloudinary)
-- **Garde-fou actuel** : front upload via signature serveur (folder figé),
-  donc publicId valide en pratique.
-- **Risque si non traité** : possible attaque où un producer attache des
-  `publicId` qui n'existent pas → erreur lors de l'affichage côté front
-  (image cassée). Pas de risque sécurité grave car le folder est privé.
-
 ## [lot-8→lot-?] Mockup checkout : trois moyens de paiement → deux exposés
 
 - **Découvert** : Lot 8 (UI `/guest/checkout`, mockup §4712)
@@ -230,6 +163,50 @@ exacts où ces dettes sont marquées en commentaire inline.
 ---
 
 # Résolues
+
+## [lot-7→lot-9] Rejet HTTP 401 explicite côté récepteur n8n (HMAC) — résolue 2026-05-31 (Lot 9)
+
+Les 7 webhooks du workflow n8n (`infra/n8n/mata-outbox-workflow.json`) passent
+de `responseMode: onReceived` à `responseNode`. Le nœud Code « Vérifier
+signature HMAC » est en `onError: continueErrorOutput` (deux sorties) : signature
+valide → « Traitement » → nœud *Respond to Webhook* « Répondre 200 OK »
+(`{received:true}`) ; signature absente/invalide → nœud *Respond to Webhook*
+« Répondre 401 » (`responseCode: 401`, `{error:"UNAUTHORIZED"}`). Un appelant
+forgé reçoit donc un **vrai 401 HTTP** et le traitement n'est jamais atteint.
+README mis à jour. **Non testé au runtime** (pas de n8n en marche dans cette
+session) : JSON validé (`JSON.parse` OK), logique conforme au modèle n8n.
+
+## [lot-7→lot-9] Message `httpFetch` codé « Bictorys » pour les échecs n8n — résolue 2026-05-31 (Lot 9)
+
+`httpFetch` (`apps/api/src/lib/bictorys.ts`) est un helper partagé (Bictorys,
+n8n, hCaptcha). Ses messages d'erreur codés en dur « Bictorys 5xx » / « Bictorys
+unreachable » écrivaient `last_error = "Bictorys unreachable: ..."` dans
+`outbox_events` même pour un échec n8n (debug trompeur). Messages rendus
+génériques : `HTTP <status>` et `Upstream request failed: <cause>`. Aucun test
+n'asseyait l'ancien wording.
+
+## [lot-2→lot-9] Édition d'un site existant (PATCH /v1/sites/:id) — résolue 2026-05-31 (Lot 9)
+
+L'UI d'édition de site est câblée. La page `producer/sites` a un état
+`editingSite` ; chaque `SiteCard` porte un bouton « Modifier » qui ouvre le
+formulaire pré-rempli. L'ancien `NewSiteForm` est généralisé en `SiteForm`
+(prop optionnelle `site`) : create (`useCreateSite`) ou edit (`useUpdateSite` →
+PATCH `/v1/sites/:id`, déjà existant). PATCH partiel Prisma (les champs non
+fournis restent inchangés). Audit `site.update` déjà écrit côté service.
+
+## [lot-2→lot-6] Validation Cloudinary publicId côté API (avant attach) — résolue 2026-05-31 (Lot 9)
+
+`offerService.attachPhotos` valide désormais que chaque `publicId` reçu commence
+par le préfixe du folder figé serveur de l'offre — `mata/offers/<owner>/<offerId>/`
+(cf. `uploads-routes.buildFolder`). Tout id hors de ce folder → `DomainError`
+`VALIDATION`, aucune photo écrite. Empêche un producteur d'attacher la photo
+d'une autre offre / d'un autre compte, ou un id forgé pointant ailleurs.
+Couvert par `offer-attach-photos.integration.test.ts` (2 cas : id dans le
+folder accepté, id hors folder rejeté sans écriture). NB : la vérification
+d'**existence** réelle via `cloudinary.api.resource` (appel réseau) reste non
+faite — le préfixe ferme le risque cross-tenant ; un id inexistant mais bien
+préfixé donnerait au pire une image cassée (garde-fou : upload via signature
+serveur, donc préfixe valide en pratique).
 
 ## [lot-5→lot-9] KPIs admin/payments calculés côté front — résolue 2026-05-31 (Lot 9)
 
