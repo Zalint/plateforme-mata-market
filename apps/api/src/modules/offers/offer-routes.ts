@@ -15,7 +15,12 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { prisma } from '../../lib/prisma.js';
-import { assertOwnership, requireRole, requireUser } from '../auth/index.js';
+import {
+  assertOwnership,
+  requireProducerOrDelegate,
+  requireRole,
+  requireUser,
+} from '../auth/index.js';
 import { offerService } from './offer-service.js';
 
 const OfferIdParamSchema = z.object({ id: UuidSchema });
@@ -54,9 +59,11 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (req, reply) => {
-      requireRole(req, 'producer');
-      const user = requireUser(req);
-      const created = await offerService.create(user.id, req.body, req);
+      // Lot 6 — accepte producer direct OU téléconseiller/admin via délégation.
+      // mockup §2934 : "Créer/modifier/suspendre offre" est dans la whitelist
+      // des actions AUTORISÉES en session déléguée.
+      const { ownerUserId } = requireProducerOrDelegate(req);
+      const created = await offerService.create(ownerUserId, req.body, req);
       return reply.code(201).send(created);
     },
   );
