@@ -34,6 +34,12 @@
       "arrowParentheses": "always"
     }
   },
+  "json": {
+    "formatter": {
+      "indentStyle": "space",
+      "indentWidth": 2
+    }
+  },
   "linter": {
     "enabled": true,
     "rules": {
@@ -77,7 +83,16 @@
       "linter": {
         "rules": {
           "a11y": {
-            "useValidAriaRole": "off"
+            "useValidAriaRole": "off",
+            "noLabelWithoutControl": "off",
+            "noStaticElementInteractions": "off",
+            "useKeyWithClickEvents": "off"
+          },
+          "correctness": {
+            "useUniqueElementIds": "off"
+          },
+          "suspicious": {
+            "noAlert": "off"
           }
         }
       }

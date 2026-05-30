@@ -40,21 +40,39 @@ export function middleware(request: NextRequest): NextResponse {
 
   const response = NextResponse.next();
 
+  // En dev, autoriser localhost:4000 (API), localhost:8081 (Keycloak), upload
+  // Cloudinary (api.cloudinary.com déjà listé). En prod, seuls les hosts
+  // mata.sn + Cloudinary + Keycloak prod sont autorisés.
+  const isDev = process.env.NODE_ENV !== 'production';
+  const devConnect = isDev ? ' http://localhost:4000 http://localhost:8081' : '';
+  const devFrame = isDev ? ' http://localhost:8081' : '';
+
+  // En dev, Next 15 utilise des `<script>` inline (RSC streaming + bootstrap)
+  // et `eval()` (React Refresh / Fast Refresh) — donc on doit autoriser
+  // `'unsafe-inline'` et `'unsafe-eval'` pour que React hydrate. En prod
+  // ces deux directives DOIVENT être retirées : on bascule sur des nonces
+  // Next (à câbler au Lot 9 durcissement, cf. ARCHITECTURE.md §9 CSP).
+  const scriptSrc = isDev
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'"
+    : "script-src 'self' 'wasm-unsafe-eval'";
+
   const csp = [
     "default-src 'self'",
-    "script-src 'self' 'wasm-unsafe-eval'",
+    scriptSrc,
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https://res.cloudinary.com",
-    "connect-src 'self' https://api.mata.sn https://keycloak.mata.sn https://api.cloudinary.com",
+    `connect-src 'self' https://api.mata.sn https://keycloak.mata.sn https://api.cloudinary.com${devConnect}`,
     "worker-src 'self'",
     "manifest-src 'self'",
-    'frame-src https://keycloak.mata.sn',
+    `frame-src https://keycloak.mata.sn${devFrame}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
-    'upgrade-insecure-requests',
-  ].join('; ');
+    isDev ? '' : 'upgrade-insecure-requests',
+  ]
+    .filter(Boolean)
+    .join('; ');
 
   response.headers.set('Content-Security-Policy', csp);
   response.headers.set('X-Content-Type-Options', 'nosniff');

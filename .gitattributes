@@ -1,0 +1,29 @@
+# Force LF line endings on text files across all platforms.
+#
+# Sans ça, `git config core.autocrlf=true` (défaut Windows) convertit les
+# fichiers en CRLF au checkout, ce qui casse `pnpm biome check` (biome.json
+# impose `lineEnding: lf`). Cette règle override autocrlf pour ce repo.
+#
+# `text=auto` : git détecte les fichiers texte automatiquement.
+# `eol=lf`    : force LF au checkout ET au commit, peu importe l'OS.
+* text=auto eol=lf
+
+# Lock files : LF explicite (parfois mal détectés par auto).
+pnpm-lock.yaml text eol=lf
+package-lock.json text eol=lf
+
+# Binaires : préservation explicite, jamais convertis.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.svg   text eol=lf
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary
+*.zip   binary
+*.gz    binary

@@ -1,12 +1,22 @@
-// Schéma Prisma · Lot 1
+// Schéma Prisma · Lot 1 + Lot 2
 //
-// 3 tables : users (identité MATA + mapping Keycloak), audit_log (toutes
-// actions sensibles), notification_preferences (réservé Lot 7 push).
+// Lot 1 — identité & audit :
+//  - users                       identité MATA + mapping Keycloak
+//  - audit_log                   toutes actions sensibles
+//  - notification_preferences    réservé Lot 7 push
+//
+// Lot 2 — producteurs, sites, offres :
+//  - zones                       référentiel géographique (FK pour producer / site)
+//  - producer_profiles           profil producteur 1:1 avec users (role=producer)
+//  - production_sites            sites de production / retrait (ferme, poulailler, dépôt, mareyage)
+//  - offers                      offres produit + workflow validation
+//  - offer_photos                photos d'offre via Cloudinary public_id
 //
 // Conventions :
 //  - Tables Postgres en snake_case via @map, code TS en camelCase
 //  - Pas de soft-delete générique, statuts métier explicites
 //  - 6 rôles miroir du realm Keycloak (cf. infra/keycloak/realm-export.json)
+//  - bank_details (jsonb) chiffré applicatif AES-256-GCM côté service avant insertion
 //
 // Référence : ARCHITECTURE.md §6 « Modèle de données ».
 
@@ -23,7 +33,7 @@ datasource db {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Enums
+// Enums · Lot 1
 // ─────────────────────────────────────────────────────────────────
 
 enum UserRole {
@@ -54,7 +64,82 @@ enum PreferredLocale {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// users · identité MATA mappée vers Keycloak
+// Enums · Lot 2
+// ─────────────────────────────────────────────────────────────────
+
+enum ProducerType {
+  poultry // aviculteur (poulets et/ou œufs)
+  cattle // éleveur bovin
+  sheep // éleveur ovin (mouton)
+  vegetables // maraîcher
+  fish // mareyeur / pêche
+  mixed // multi-élevages / mixte
+
+  @@map("producer_type")
+}
+
+enum ProducerStatus {
+  pending // créé, en attente de validation MATA
+  validated // validé, peut publier des offres
+  suspended // suspendu temporairement par MATA
+  blacklisted // banni définitivement
+
+  @@map("producer_status")
+}
+
+enum SiteType {
+  poulailler // élevage volaille
+  ferme // ferme générique (bovin, ovin, mixte)
+  depot // dépôt / point de retrait sans production
+  mareyage // site mareyeur (port, débarcadère)
+
+  @@map("site_type")
+}
+
+enum SiteStatus {
+  active
+  archived // masqué sans destruction, préserve les FK offers existantes
+
+  @@map("site_status")
+}
+
+enum ProductCategory {
+  poultry
+  eggs
+  cattle
+  sheep
+  vegetables
+  fish
+
+  @@map("product_category")
+}
+
+enum OfferStatus {
+  draft // brouillon producteur, modifiable
+  pending // soumise à MATA pour validation
+  validated // visible au catalogue
+  rejected // refusée par MATA (rejection_reason rempli)
+  suspended // masquée par admin ou producteur après validation
+
+  // Lot 2 : `reserved` et `sold` volontairement omis.
+  // Ils seront ajoutés au Lot 4 (orders) via migration dédiée quand
+  // les transitions correspondantes existeront.
+
+  @@map("offer_status")
+}
+
+enum OfferUnit {
+  unit // unité (poulet entier, mouton sur pied)
+  kg // kilogramme (viande, poisson)
+  tray // plateau (œufs, généralement 30)
+  crate // caisse (poisson, légumes en gros)
+  head // tête (bovin/ovin sur pied)
+
+  @@map("offer_unit")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// users · identité MATA mappée vers Keycloak (Lot 1, relation ajoutée au Lot 2)
 // ─────────────────────────────────────────────────────────────────
 
 model User {
@@ -74,32 +159,33 @@ model User {
   notificationPreferences NotificationPreference?
   auditLogActor           AuditLog[]              @relation("audit_actor")
   auditLogOnBehalfOf      AuditLog[]              @relation("audit_on_behalf_of")
+  producerProfile         ProducerProfile?
 
   @@index([role, status])
   @@map("users")
 }
 
 // ─────────────────────────────────────────────────────────────────
-// audit_log · toutes les actions sensibles
+// audit_log · toutes les actions sensibles (Lot 1)
 // ─────────────────────────────────────────────────────────────────
 
 model AuditLog {
-  id                 String   @id @default(uuid()) @db.Uuid
-  actorUserId        String   @map("actor_user_id") @db.Uuid
-  onBehalfOfUserId   String?  @map("on_behalf_of_user_id") @db.Uuid
-  action             String // ex: "offer.validate", "payout.trigger", "teleconsult.session.start"
-  targetType         String   @map("target_type") // ex: "offer", "order", "user"
-  targetId           String?  @map("target_id") // peut être null pour actions globales
-  oldValue           Json?    @map("old_value")
-  newValue           Json?    @map("new_value")
-  ipAddress          String?  @map("ip_address")
-  userAgent          String?  @map("user_agent")
-  requestId          String?  @map("request_id")
-  createdAt          DateTime @default(now()) @map("created_at")
+  id               String   @id @default(uuid()) @db.Uuid
+  actorUserId      String   @map("actor_user_id") @db.Uuid
+  onBehalfOfUserId String?  @map("on_behalf_of_user_id") @db.Uuid
+  action           String // ex: "offer.validate", "payout.trigger", "teleconsult.session.start"
+  targetType       String   @map("target_type") // ex: "offer", "order", "user"
+  targetId         String?  @map("target_id") // peut être null pour actions globales
+  oldValue         Json?    @map("old_value")
+  newValue         Json?    @map("new_value")
+  ipAddress        String?  @map("ip_address")
+  userAgent        String?  @map("user_agent")
+  requestId        String?  @map("request_id")
+  createdAt        DateTime @default(now()) @map("created_at")
 
   // Relations
-  actor              User     @relation("audit_actor", fields: [actorUserId], references: [id])
-  onBehalfOf         User?    @relation("audit_on_behalf_of", fields: [onBehalfOfUserId], references: [id])
+  actor      User  @relation("audit_actor", fields: [actorUserId], references: [id])
+  onBehalfOf User? @relation("audit_on_behalf_of", fields: [onBehalfOfUserId], references: [id])
 
   @@index([actorUserId, createdAt])
   @@index([targetType, targetId])
@@ -108,20 +194,200 @@ model AuditLog {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// notification_preferences · réservé Lot 7
+// notification_preferences · réservé Lot 7 (Lot 1)
 // ─────────────────────────────────────────────────────────────────
 
 model NotificationPreference {
-  userId     String   @id @map("user_id") @db.Uuid
+  userId       String   @id @map("user_id") @db.Uuid
   // Préférences fines par catégorie d'événement, structure libre validée Zod
   // au niveau service. ex: { order: true, pickup: true, payout: true }
-  categories Json     @default("{}")
-  pushEnabled Boolean @default(true) @map("push_enabled")
-  emailEnabled Boolean @default(true) @map("email_enabled")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  categories   Json     @default("{}")
+  pushEnabled  Boolean  @default(true) @map("push_enabled")
+  emailEnabled Boolean  @default(true) @map("email_enabled")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notification_preferences")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// zones · référentiel géographique (Lot 2)
+//
+// Lecture publique authentifiée pour peupler les selects côté front
+// (producteur : choix zone profil / site, client : filtre catalogue).
+// CRUD admin UI non livré au Lot 2 (YAGNI). Ajout manuel via seed ou
+// SQL jusqu'à ce qu'un vrai workflow d'éditeur soit demandé.
+// ─────────────────────────────────────────────────────────────────
+
+model Zone {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique // "pout", "thies-ville", "dahra"
+  name        String // "Pout", "Thiès ville", "Dahra"
+  region      String // "Thiès", "Dakar", "Louga" — regroupement libre, pas FK
+  // Centroid optionnel : rempli au Lot 7 (tournées) si besoin calcul distance.
+  centroidLat Float?   @map("centroid_lat")
+  centroidLng Float?   @map("centroid_lng")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  producerProfiles ProducerProfile[]
+  productionSites  ProductionSite[]
+
+  @@index([active])
+  @@map("zones")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// producer_profiles · profil producteur (Lot 2)
+//
+// Relation 1:1 avec users (PK = userId). Un user de role=producer a
+// au plus un profil. Workflow status : pending → validated/suspended/blacklisted.
+// ─────────────────────────────────────────────────────────────────
+
+model ProducerProfile {
+  userId        String         @id @map("user_id") @db.Uuid
+  type          ProducerType
+  status        ProducerStatus @default(pending)
+  zoneId        String         @map("zone_id") @db.Uuid
+  whatsappPhone String?        @map("whatsapp_phone")
+  photoPublicId String?        @map("photo_public_id") // photo profil Cloudinary
+  bio           String?        @db.Text // courte description publique
+
+  // Pièces fournies (CNI, photo ferme, ...).
+  // Format : Array<{ type: 'cni' | 'farm_photo' | 'other'; publicId: string; uploadedAt: ISO }>
+  // Validé Zod côté service (cf. packages/shared/src/schemas/producer.ts au Lot 2 étape 2).
+  documents Json @default("[]")
+
+  // bank_details (jsonb) CHIFFRÉ AES-256-GCM applicatif AVANT insertion.
+  // Format en clair (avant chiffrement, jamais persisté tel quel) :
+  //   { holder: string, iban: string, bic?: string, bankName: string }
+  // En DB :
+  //   { ciphertext: base64, iv: base64, tag: base64, alg: 'aes-256-gcm', v: 1 }
+  // Jamais loggé (pino redact), jamais retourné en clair sans audit reveal
+  // (cf. CLAUDE.md §G4 « bank_details chiffré », §G8 « Chiffrement applicatif »).
+  bankDetails Json? @map("bank_details")
+
+  validatedAt DateTime? @map("validated_at")
+  validatedBy String?   @map("validated_by") @db.Uuid // user.id de l'admin qui a validé
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zone   Zone             @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  sites  ProductionSite[]
+  offers Offer[]
+
+  @@index([status])
+  @@index([zoneId, status])
+  @@index([type, status])
+  @@map("producer_profiles")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// production_sites · sites de production / retrait (Lot 2)
+//
+// Un producteur peut avoir N sites. Les offres sont rattachées à un
+// site précis (lieu de retrait pour la collecte MATA).
+// ─────────────────────────────────────────────────────────────────
+
+model ProductionSite {
+  id            String     @id @default(uuid()) @db.Uuid
+  producerUserId    String     @map("producer_user_id") @db.Uuid
+  name          String // "Poulailler Pout 1"
+  type          SiteType
+  status        SiteStatus @default(active)
+  zoneId        String     @map("zone_id") @db.Uuid
+  addressLine   String?    @map("address_line") // rue / lieu-dit (libre)
+  geoLat        Float?     @map("geo_lat")
+  geoLng        Float?     @map("geo_lng")
+  vehicleAccess String?    @map("vehicle_access") // "moto", "tricycle", "utilitaire", "camion"
+  contactName   String?    @map("contact_name")
+  contactPhone  String?    @map("contact_phone")
+  pickupHours   String?    @map("pickup_hours") // "Matin · 6h-10h" (texte libre MVP)
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  // Relations
+  producer ProducerProfile @relation(fields: [producerUserId], references: [userId], onDelete: Cascade)
+  zone     Zone            @relation(fields: [zoneId], references: [id], onDelete: Restrict)
+  offers   Offer[]
+
+  @@index([producerUserId, status])
+  @@index([zoneId])
+  @@map("production_sites")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// offers · offres produit + workflow validation (Lot 2)
+//
+// Workflow status :
+//   draft     → pending      (producteur soumet)
+//   pending   → validated    (admin valide)
+//   pending   → rejected     (admin refuse, rejection_reason obligatoire)
+//   validated → suspended    (admin OU producteur masque)
+//   suspended → validated    (admin OU producteur réactive)
+//
+// PATCH (édition champs) autorisé uniquement en `draft`. Pour modifier
+// une offre publiée le producteur doit créer une nouvelle offre.
+// ─────────────────────────────────────────────────────────────────
+
+model Offer {
+  id               String          @id @default(uuid()) @db.Uuid
+  producerUserId       String          @map("producer_user_id") @db.Uuid
+  siteId           String          @map("site_id") @db.Uuid
+  category         ProductCategory
+  status           OfferStatus     @default(draft)
+  title            String // "Poulet entier" — libre du producteur
+  unit             OfferUnit
+  quantity         Int // qty totale publiée
+  quantityReserved Int             @default(0) @map("quantity_reserved") // Lot 4 (orders)
+  priceFcfa        Int             @map("price_fcfa") // prix unitaire demandé par le producteur (FCFA, entier)
+  availableFrom    DateTime        @map("available_from") @db.Date
+  availableUntil   DateTime?       @map("available_until") @db.Date
+  qualityNote      String?         @map("quality_note") // "Poids moyen 1,5 kg"
+
+  // Workflow timestamps & acteurs
+  submittedAt     DateTime? @map("submitted_at")
+  validatedAt     DateTime? @map("validated_at")
+  validatedBy     String?   @map("validated_by") @db.Uuid
+  rejectionReason String?   @map("rejection_reason") @db.Text
+  suspendedAt     DateTime? @map("suspended_at")
+  suspendedBy     String?   @map("suspended_by") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  producer ProducerProfile @relation(fields: [producerUserId], references: [userId], onDelete: Cascade)
+  site     ProductionSite  @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  photos   OfferPhoto[]
+
+  @@index([producerUserId, status])
+  @@index([category, status, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([siteId])
+  @@map("offers")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// offer_photos · photos d'offre Cloudinary (Lot 2)
+//
+// On ne stocke QUE le public_id Cloudinary. URL reconstruite côté front
+// via SDK (cf. ARCHITECTURE.md §7 « Cloudinary »).
+// ─────────────────────────────────────────────────────────────────
+
+model OfferPhoto {
+  id                 String   @id @default(uuid()) @db.Uuid
+  offerId            String   @map("offer_id") @db.Uuid
+  cloudinaryPublicId String   @map("cloudinary_public_id")
+  position           Int      @default(0) // ordre d'affichage
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  offer Offer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@index([offerId, position])
+  @@map("offer_photos")
 }

@@ -13,6 +13,12 @@ import { env } from './env.js';
 import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
 import { authPlugin, createKeycloakVerifier } from './modules/auth/index.js';
+import { catalogRoutes } from './modules/catalog/index.js';
+import { offerRoutes } from './modules/offers/index.js';
+import { producerRoutes } from './modules/producers/index.js';
+import { siteRoutes } from './modules/sites/index.js';
+import { uploadsRoutes } from './modules/uploads/index.js';
+import { zoneRoutes } from './modules/zones/index.js';
 import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
 
@@ -64,6 +70,12 @@ async function buildServer(): Promise<void> {
 
   await app.register(healthRoutes);
   await app.register(authRoutes);
+  await app.register(zoneRoutes);
+  await app.register(producerRoutes);
+  await app.register(siteRoutes);
+  await app.register(offerRoutes);
+  await app.register(catalogRoutes);
+  await app.register(uploadsRoutes);
 
   app.setErrorHandler((err, req, reply) => {
     req.log.error({ err }, 'request.error');

@@ -11,3 +11,4 @@ export {
   type KeycloakVerifier,
   type KeycloakVerifierConfig,
 } from './keycloak-verifier.js';
+export { requireRole } from './require-role.js';
