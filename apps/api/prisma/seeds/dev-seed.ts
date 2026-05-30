@@ -1,16 +1,25 @@
 /**
- * Seed dev · 3 utilisateurs, 13 zones, 1 profil producteur complet
- * (Mor Diop) avec 2 sites et 3 offres couvrant les statuts UI.
+ * Seed dev · 3 utilisateurs alignés Keycloak (Mor Diop / Aïssatou Sow /
+ * Resto La Calebasse), 13 zones, profil producteur complet pour Mor avec
+ * 2 sites + 3 offres + 6 rules pricing par défaut (1 par catégorie).
  *
  * Usage : `pnpm --filter @mata/api db:seed`
  *
- * Les `keycloak_id` au format `dev:<role>:<slug>` sont des stubs : ils doivent
- * être remplacés par les vrais IDs Keycloak quand les comptes seront créés
- * dans le realm `mata` (cf. Lot 0 docs/DEPLOYMENT.md §4).
+ * Les `keycloakId` sont les UUIDs réels du realm-export (cf. `infra/keycloak/
+ * realm-export.json`). Un wipe complet (`docker compose down -v` + import
+ * realm + seed) restore un état fonctionnel sans manipulation SQL manuelle.
  *
- * Idempotent : utilise upsert sur clés naturelles (keycloakId, zone.slug,
- * producer.userId) et `deleteMany` + `createMany` pour les sites/offres de
- * Mor afin de pouvoir relancer sans accumuler de doublons.
+ * Idempotent (vérifié par re-run successifs) :
+ *  - users  : upsert par phone/email, ré-aligne keycloakId au passage
+ *  - zones  : upsert par slug
+ *  - profil : upsert par userId
+ *  - sites + offres : delete-create (Mor uniquement) en wipant aussi en
+ *    cascade les order_items + orders + pricing_snapshots qui les
+ *    référencent (FK onDelete=Restrict)
+ *  - rules pricing : delete + createMany sur les 6 catégories
+ *
+ * PROD : ce code n'est JAMAIS exécuté. Le seed prod est `prod-bootstrap.ts`,
+ * il refuse de tourner si la DB n'est pas vide.
  */
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -18,6 +27,9 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import {
   OfferStatus,
   OfferUnit,
+  PricingBase,
+  PricingModel,
+  PricingScope,
   PrismaClient,
   ProducerStatus,
   ProducerType,
@@ -48,12 +60,17 @@ const prisma = new PrismaClient({
 // `infra/keycloak/realm-export.json`. Tant qu'on importe le realm tel quel,
 // les UUIDs survivent aux wipes de la DB Keycloak (`docker compose down -v`).
 //
+// Le `slug` est un alias local STABLE indépendant du keycloakId, utilisé
+// pour les lookups internes du seed (cf. Map `userIdBySlug`). Changer le
+// keycloakId d'un user (ex: migration UUID) ne casse pas le seed.
+//
 // Identifiants de login (dev local, password commun `mata`) :
 //   mor.diop           / mata  → role producer
 //   aissatou.sow       / mata  → role admin
 //   lacalebasse.client / mata  → role client_pro
 const USERS = [
   {
+    slug: 'mor-diop',
     keycloakId: '6e426967-1bae-4280-8b7d-6597a020416c',
     email: null,
     phone: '+221771234567',
@@ -61,6 +78,7 @@ const USERS = [
     role: UserRole.producer,
   },
   {
+    slug: 'la-calebasse',
     keycloakId: '20a5b1c2-3d4e-4f56-8090-a1b2c3d4e5f6',
     email: 'contact@lacalebasse.sn',
     phone: '+221338691234',
@@ -68,6 +86,7 @@ const USERS = [
     role: UserRole.client_pro,
   },
   {
+    slug: 'aissatou-sow',
     keycloakId: '10a5b1c2-3d4e-4f56-8090-a1b2c3d4e5f6',
     email: 'aissatou.sow@mata.sn',
     phone: null,
@@ -98,14 +117,14 @@ async function main(): Promise<void> {
   // 1. Users
   //
   // Stratégie d'upsert : on cherche d'abord par clé naturelle (phone ou email).
-  // Si l'utilisateur existe déjà (cas d'un compte provisionné via login Keycloak
-  // réel qui a remplacé le `dev:*` stub par un vrai UUID), on PRÉSERVE son
-  // keycloak_id existant et on met juste à jour les champs métier. Sinon on
-  // crée avec le keycloak_id stub `dev:*` du seed.
+  // Si l'utilisateur existe déjà, on ré-aligne son `keycloakId` sur celui du
+  // seed (UUID Keycloak réel) et on met à jour displayName/role. Sinon on
+  // crée avec les valeurs du seed.
   //
-  // Cette logique évite de casser un login Keycloak établi tout en gardant
-  // le seed idempotent et utile pour les comptes qui n'ont pas encore loggué.
-  const userIdByKeycloakStub = new Map<string, string>();
+  // Le ré-alignement est nécessaire pour gérer le cas où un user a été créé
+  // avec un stub historique (`dev:*`) avant qu'on aligne sur les UUIDs réels
+  // du realm-export (cf. Lots 3-4). Au prochain run, il sera réconcilié.
+  const userIdBySlug = new Map<string, string>();
   for (const user of USERS) {
     const existing = await prisma.user.findFirst({
       where: {
@@ -116,14 +135,23 @@ async function main(): Promise<void> {
       },
     });
 
+    // À la première exécution, on crée avec le keycloakId du seed (UUID
+    // Keycloak réel). Lors des re-runs, on RÉ-ALIGNE le keycloakId du user
+    // existant sur celui du seed, pour gérer le cas où il avait été créé
+    // avec un stub (`dev:*`) historique avant qu'on aligne sur les UUIDs.
+    const { slug: _slug, ...userDataForCreate } = user;
     const saved = existing
       ? await prisma.user.update({
           where: { id: existing.id },
-          data: { displayName: user.displayName, role: user.role },
+          data: {
+            displayName: user.displayName,
+            role: user.role,
+            keycloakId: user.keycloakId,
+          },
         })
-      : await prisma.user.create({ data: user });
+      : await prisma.user.create({ data: userDataForCreate });
 
-    userIdByKeycloakStub.set(user.keycloakId, saved.id);
+    userIdBySlug.set(user.slug, saved.id);
     const kcShort =
       saved.keycloakId.length > 30 ? `${saved.keycloakId.slice(0, 27)}...` : saved.keycloakId;
     log(`user      ${saved.role.padEnd(15)} ${saved.displayName.padEnd(20)} kc=${kcShort}`);
@@ -142,8 +170,8 @@ async function main(): Promise<void> {
   log(`zones     ${ZONES.length} zones seedées (${ZONES.map((z) => z.slug).join(', ')})`);
 
   // 3. Profil producteur Mor Diop (idempotent)
-  const morUserId = userIdByKeycloakStub.get('dev:producer:mor-diop');
-  const adminUserId = userIdByKeycloakStub.get('dev:admin:aissatou-sow');
+  const morUserId = userIdBySlug.get('mor-diop');
+  const adminUserId = userIdBySlug.get('aissatou-sow');
   const poutZoneId = zoneIdBySlug.get('pout');
   const dahraZoneId = zoneIdBySlug.get('dahra');
   if (!morUserId || !adminUserId || !poutZoneId || !dahraZoneId) {
@@ -176,8 +204,31 @@ async function main(): Promise<void> {
 
   // 4. Sites de Mor (reset complet pour idempotence).
   //
-  // Ordre de suppression : d'abord les offers (FK `site_id` onDelete=Restrict),
-  // puis les sites. La création se fait inversée (sites d'abord).
+  // Ordre de suppression (FK onDelete=Restrict côté offers/order_items) :
+  //   order_items  → orders  → pricing_snapshots → offer_photos → offers → sites
+  // En dev, on accepte de wiper toutes les commandes touchant les offres de Mor
+  // pour que le seed reste idempotent. PROD : ce code n'est jamais exécuté
+  // (seed prod = prod-bootstrap.ts séparé, refuse de tourner si DB non vide).
+  const morOfferIds = (
+    await prisma.offer.findMany({
+      where: { producerUserId: morUserId },
+      select: { id: true },
+    })
+  ).map((o) => o.id);
+  if (morOfferIds.length > 0) {
+    const orderItemsToDelete = await prisma.orderItem.findMany({
+      where: { offerId: { in: morOfferIds } },
+      select: { orderId: true, pricingSnapshotId: true },
+    });
+    const orderIds = [...new Set(orderItemsToDelete.map((i) => i.orderId))];
+    const snapshotIds = orderItemsToDelete.map((i) => i.pricingSnapshotId);
+    await prisma.orderItem.deleteMany({ where: { offerId: { in: morOfferIds } } });
+    await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
+    await prisma.pricingSnapshot.deleteMany({ where: { id: { in: snapshotIds } } });
+    // audit_log : on garde les entrées historiques (pas de FK, pas de cascade
+    // requise). Si tu veux un wipe complet pour debug, ajoute :
+    //   await prisma.auditLog.deleteMany({ where: { targetId: { in: orderIds } } });
+  }
   await prisma.offer.deleteMany({ where: { producerUserId: morUserId } });
   await prisma.productionSite.deleteMany({ where: { producerUserId: morUserId } });
   await prisma.productionSite.createMany({
@@ -268,6 +319,58 @@ async function main(): Promise<void> {
     ],
   });
   log(`offers    3 offres créées (validated × 1, pending × 1, draft × 1)`);
+
+  // ─────────────────────────────────────────────────────────────────
+  // Pricing rules par défaut · une rule `category` active par catégorie
+  // produit, créée par Aïssatou (admin). Permet à `POST /v1/orders` de
+  // toujours trouver une rule active sans avoir à passer par /admin/pricing
+  // pour bootstrap.
+  //
+  // Valeurs alignées avec le mockup §2584-2771 (Commission 10% sur prix
+  // producteur, marge sécurité 3%, collecte 120 F, livraison 200 F, stockage
+  // 50 F, pas de remise). L'admin reste libre de surcharger via UI.
+  //
+  // Idempotent : delete + create par catégorie. Les rules existantes (créées
+  // via UI admin) seront écrasées si tu re-runs le seed — c'est voulu pour
+  // garantir un état dev cohérent.
+  // ─────────────────────────────────────────────────────────────────
+
+  const admin = await prisma.user.findFirstOrThrow({ where: { role: UserRole.admin } });
+  const allCategories: ProductCategory[] = [
+    ProductCategory.poultry,
+    ProductCategory.eggs,
+    ProductCategory.cattle,
+    ProductCategory.sheep,
+    ProductCategory.vegetables,
+    ProductCategory.fish,
+  ];
+
+  // Supprime les rules existantes ciblant ces catégories pour rester idempotent.
+  await prisma.pricingRule.deleteMany({
+    where: { scope: PricingScope.category, category: { in: allCategories } },
+  });
+
+  await prisma.pricingRule.createMany({
+    data: allCategories.map((category) => ({
+      scope: PricingScope.category,
+      category,
+      model: PricingModel.commission_pct,
+      commissionPct: 10,
+      commissionBase: PricingBase.producer_price,
+      commissionFlatFcfa: 0,
+      safetyMarginPct: 3,
+      safetyMarginBase: PricingBase.producer_price,
+      collectionFcfa: 120,
+      deliveryFcfa: 200,
+      storageFcfa: 50,
+      discountFcfa: 0,
+      createdBy: admin.id,
+    })),
+  });
+
+  log(
+    `pricing   ${allCategories.length} rules par défaut (1 par catégorie, model=commission_pct 10%)`,
+  );
 }
 
 function log(line: string): void {

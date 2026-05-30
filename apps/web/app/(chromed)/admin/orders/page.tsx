@@ -121,18 +121,23 @@ export default function AdminOrdersPage(): React.JSX.Element {
               {/* Actions */}
               {(nextStates.length > 0 || canCancel) && (
                 <div className="mt-3 flex items-center gap-2 flex-wrap">
-                  {nextStates.map((next) => (
-                    <button
-                      key={next}
-                      type="button"
-                      onClick={() => transition.mutate({ id: o.id, to: next })}
-                      disabled={transition.isPending}
-                      className="px-3 py-1.5 rounded-lg bg-mata-700 hover:bg-mata-800 disabled:bg-stone-300 text-white text-xs font-bold flex items-center gap-1"
-                    >
-                      <Icon name="arrow-right" className="w-3 h-3" /> Passer en{' '}
-                      {ORDER_STATUS_LABEL_FR[next].toLowerCase()}
-                    </button>
-                  ))}
+                  {nextStates.map((next) => {
+                    // Retire un préfixe "en " ou "En " du label pour éviter
+                    // "Passer en en collecte" / "Passer en en livraison".
+                    const rawLabel = ORDER_STATUS_LABEL_FR[next];
+                    const label = rawLabel.replace(/^en\s+/i, '').toLowerCase();
+                    return (
+                      <button
+                        key={next}
+                        type="button"
+                        onClick={() => transition.mutate({ id: o.id, to: next })}
+                        disabled={transition.isPending}
+                        className="px-3 py-1.5 rounded-lg bg-mata-700 hover:bg-mata-800 disabled:bg-stone-300 text-white text-xs font-bold flex items-center gap-1"
+                      >
+                        <Icon name="arrow-right" className="w-3 h-3" /> Passer en {label}
+                      </button>
+                    );
+                  })}
                   {canCancel && (
                     <button
                       type="button"

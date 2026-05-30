@@ -234,6 +234,26 @@ L'enum-coherence test couvre les 7 valeurs OfferStatus.
 Décision : pas de reviews au Lot 4, repoussée vers Lot 9 (cf. entrée active
 `[lot-2→lot-9]` Note moyenne producteur).
 
+## [lot-4 fix] Seed dev idempotent + rules pricing par défaut — 2026-05-30 (Lot 4)
+
+Deux bugs du `dev-seed.ts` fixés pendant le test E2E :
+
+1. **Lookups cassés après alignement UUIDs Keycloak** : la Map `userIdByKeycloakStub`
+   était indexée par les UUIDs (`6e426967-...`) depuis les Lots 3-4, mais les
+   lookups utilisaient encore les anciens stubs (`'dev:producer:mor-diop'`).
+   Fix : alias `slug` local stable indépendant du keycloakId
+   (`mor-diop`, `aissatou-sow`, `la-calebasse`) + Map renommée `userIdBySlug`.
+
+2. **FK RESTRICT bloquait le delete des offres** quand un order_item les
+   référençait. Fix : wipe en cascade `order_items → orders → pricing_snapshots`
+   avant de delete les offres de Mor. PROD reste safe (seed prod séparé).
+
+3. **6 rules pricing par défaut** (1 par catégorie, model commission_pct 10%
+   + safety 3% + collecte 120 + livraison 200 + stockage 50) ajoutées au seed.
+   POST /v1/orders trouve toujours une rule active sans bootstrap manuel via UI.
+
+Re-runs successifs vérifiés idempotents.
+
 ---
 
 # Notes opérationnelles
