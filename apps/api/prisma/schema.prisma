@@ -1,4 +1,4 @@
-// Schéma Prisma · Lot 1 + Lot 2 + Lot 3
+// Schéma Prisma · Lot 1 + Lot 2 + Lot 3 + Lot 4
 //
 // Lot 1 — identité & audit :
 //  - users                       identité MATA + mapping Keycloak
@@ -17,8 +17,16 @@
 //                                4 modèles économiques × 3 bases pct (producer / final / subtotal)
 //  - pricing_snapshots           fige les 7 composantes par order_item au moment de la commande
 //                                IMMUABLE après création (invariant comptable, cf. CLAUDE.md §G4)
-//                                Lot 3 : table créée SANS FK vers order_items (table absente).
-//                                Lot 4 : ajoutera order_items.pricing_snapshot_id (1:1 inverse).
+//                                Lot 4 : FK order_items.pricing_snapshot_id ajoutée (1:1 inverse).
+//
+// Lot 4 — commandes + cycle 8 étapes :
+//  - orders                      en-tête commande (CMD-2026-NNNN), 8 statuts cycle nominal +
+//                                cancelled, livraison zone+slot, total_fcfa figé à la création.
+//  - order_items                 lignes de commande, 1:1 vers pricing_snapshots, dénormalisation
+//                                producer_user_id pour requêtes producteur fréquentes (cf. §6).
+//  - idempotency_records         (key, scope) → response cache 24h pour POST /v1/orders.
+//  - OfferStatus.reserved/sold   ajout des valeurs prévues Lot 2 (résolution backlog L2→L4).
+//  - SEQUENCE order_number_seq   numéro CMD-{YYYY}-{NNNN} atomique sans collision.
 //
 // Conventions :
 //  - Tables Postgres en snake_case via @map, code TS en camelCase
@@ -126,13 +134,13 @@ enum ProductCategory {
 enum OfferStatus {
   draft // brouillon producteur, modifiable
   pending // soumise à MATA pour validation
-  validated // visible au catalogue
+  validated // visible au catalogue, stock dispo
   rejected // refusée par MATA (rejection_reason rempli)
   suspended // masquée par admin ou producteur après validation
 
-  // Lot 2 : `reserved` et `sold` volontairement omis.
-  // Ils seront ajoutés au Lot 4 (orders) via migration dédiée quand
-  // les transitions correspondantes existeront.
+  // Ajoutés Lot 4 (résolution backlog L2→L4).
+  reserved // stock épuisé temporairement (quantityReserved === quantity) — un cancel peut revenir validated
+  sold // épuisé définitivement (tout livré, retiré du catalogue) — pas de retour validated
 
   @@map("offer_status")
 }
@@ -178,6 +186,33 @@ enum PricingBase {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Enums · Lot 4 (orders)
+// ─────────────────────────────────────────────────────────────────
+
+// Cycle nominal 7 étapes + cancelled (cf. mockup §sec-status-orders + ARCHITECTURE.md §13).
+// Statuts "lateral" payment_pending et disputed réservés Lot 5 (paiements Bictorys).
+enum OrderStatus {
+  created // panier validé, en attente confirmation MATA
+  confirmed // MATA accepte, producteurs notifiés, stock réservé
+  collecting // MLC en tournée chez les producteurs
+  collected // tous les items récupérés, en route vers dépôt
+  stored // entrée chambre froide, en attente tournée livraison
+  delivering // livreur en route vers client
+  delivered // client a confirmé la réception, déclenche reversement
+  cancelled // annulée client (avant collecte) OU MATA (rupture, problème)
+
+  @@map("order_status")
+}
+
+// Créneau de livraison (date + période morning/afternoon — cf. §I glossaire).
+enum DeliveryPeriod {
+  morning // 6h–12h
+  afternoon // 14h–18h
+
+  @@map("delivery_period")
+}
+
+// ─────────────────────────────────────────────────────────────────
 // users · identité MATA mappée vers Keycloak (Lot 1, relation ajoutée au Lot 2)
 // ─────────────────────────────────────────────────────────────────
 
@@ -199,6 +234,8 @@ model User {
   auditLogActor           AuditLog[]              @relation("audit_actor")
   auditLogOnBehalfOf      AuditLog[]              @relation("audit_on_behalf_of")
   producerProfile         ProducerProfile?
+  ordersAsClient          Order[]                 @relation("client_orders") // Lot 4
+  orderItemsAsProducer    OrderItem[]             @relation("producer_items") // Lot 4 (dénormalisation)
 
   @@index([role, status])
   @@map("users")
@@ -273,6 +310,7 @@ model Zone {
 
   producerProfiles ProducerProfile[]
   productionSites  ProductionSite[]
+  orders           Order[]
 
   @@index([active])
   @@map("zones")
@@ -404,6 +442,7 @@ model Offer {
   site         ProductionSite  @relation(fields: [siteId], references: [id], onDelete: Restrict)
   photos       OfferPhoto[]
   pricingRules PricingRule[] // Lot 3 : overrides éventuels pour cette offre
+  orderItems   OrderItem[] // Lot 4 : items de commande référençant cette offre
 
   @@index([producerUserId, status])
   @@index([category, status, createdAt(sort: Desc)])
@@ -545,7 +584,131 @@ model PricingSnapshot {
   createdAt DateTime @default(now()) @map("created_at")
 
   pricingRule PricingRule? @relation(fields: [pricingRuleId], references: [id], onDelete: SetNull)
+  orderItem   OrderItem? // Lot 4 : 1:1 inverse (un snapshot peut exister sans order_item le temps Lot 3)
 
   @@index([pricingRuleId, createdAt(sort: Desc)])
   @@map("pricing_snapshots")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// orders · en-tête de commande (Lot 4)
+//
+// Numérotation `CMD-{YYYY}-{NNNN}` via SEQUENCE Postgres `order_number_seq`
+// (atomique, pas de collision concurrence). Le service formate année
+// courante + padding 4 zéros. La séquence continue sur 2027 sans reset
+// automatique — décision MVP, simple, le numéro reste unique globalement.
+//
+// `client_user_id` nullable : pour Lot 8 guest checkout (orders sans
+// compte authentifié, avec `guest_phone` à ajouter dans cette colonne).
+// Au Lot 4 il est toujours rempli (client_pro ou client_particulier).
+//
+// State machine `status` :
+//   created    → confirmed  (admin confirme)
+//   created    → cancelled  (client OU admin annule, libère stock)
+//   confirmed  → collecting (admin lance tournée collecte)
+//   confirmed  → cancelled  (admin annule, libère stock)
+//   collecting → collected  (tournée terminée chez producteurs)
+//   collected  → stored     (entrée dépôt MATA)
+//   stored     → delivering (admin lance tournée livraison)
+//   delivering → delivered  (client confirme réception)
+//
+// `payment_status` est un STUB Lot 4 — Lot 5 introduira l'enum dédié
+// (pending/paid/refunded/disputed) et la logique webhook Bictorys.
+// ─────────────────────────────────────────────────────────────────
+
+model Order {
+  id           String      @id @default(uuid()) @db.Uuid
+  orderNumber  String      @unique @map("order_number") // ex: CMD-2026-0001
+  clientUserId String?     @map("client_user_id") @db.Uuid // null = guest Lot 8
+  status       OrderStatus @default(created)
+
+  // Livraison
+  deliveryZoneId      String         @map("delivery_zone_id") @db.Uuid
+  deliveryAddressLine String         @map("delivery_address_line")
+  deliverySlotDate    DateTime       @map("delivery_slot_date") @db.Date
+  deliverySlotPeriod  DeliveryPeriod @map("delivery_slot_period")
+
+  // Total figé à la création (somme des order_items.final_price_fcfa × quantity).
+  // Permet l'affichage admin/client sans recalculer, et reste cohérent même si
+  // une rule pricing change après coup (les snapshots restent immuables).
+  totalFcfa Int @map("total_fcfa")
+
+  // Stub Lot 5 — sera typé enum dédié lors de l'intégration Bictorys.
+  // Valeurs autorisées Lot 4 : "pending" (default) seulement.
+  paymentStatus String @default("pending") @map("payment_status")
+
+  // Timestamps des transitions importantes.
+  confirmedAt  DateTime? @map("confirmed_at")
+  collectedAt  DateTime? @map("collected_at")
+  storedAt     DateTime? @map("stored_at")
+  deliveredAt  DateTime? @map("delivered_at")
+  cancelledAt  DateTime? @map("cancelled_at")
+  cancelReason String?   @map("cancel_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  client User?       @relation("client_orders", fields: [clientUserId], references: [id], onDelete: SetNull)
+  zone   Zone        @relation(fields: [deliveryZoneId], references: [id], onDelete: Restrict)
+  items  OrderItem[]
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([clientUserId, createdAt(sort: Desc)])
+  @@index([deliverySlotDate, status])
+  @@map("orders")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// order_items · lignes de commande (Lot 4)
+//
+// Une ligne = une offre × une quantité. 1:1 avec un pricing_snapshot
+// figé au moment de la création (cf. CLAUDE.md §G4). `producer_user_id`
+// dénormalisé depuis offer.producerUserId pour requêtes producteur
+// fréquentes sans join (cf. ARCHITECTURE.md §6).
+// ─────────────────────────────────────────────────────────────────
+
+model OrderItem {
+  id                String @id @default(uuid()) @db.Uuid
+  orderId           String @map("order_id") @db.Uuid
+  offerId           String @map("offer_id") @db.Uuid
+  producerUserId    String @map("producer_user_id") @db.Uuid // dénormalisé
+  quantity          Int
+  unitPriceAtOrder  Int    @map("unit_price_at_order") // prix producteur figé
+  pricingSnapshotId String @unique @map("pricing_snapshot_id") @db.Uuid // 1:1
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  order           Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  offer           Offer           @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  producer        User            @relation("producer_items", fields: [producerUserId], references: [id], onDelete: Restrict)
+  pricingSnapshot PricingSnapshot @relation(fields: [pricingSnapshotId], references: [id], onDelete: Restrict)
+
+  @@index([producerUserId, createdAt(sort: Desc)])
+  @@index([orderId])
+  @@index([offerId])
+  @@map("order_items")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// idempotency_records · cache de réponses pour POST /v1/orders (Lot 4)
+//
+// CLAUDE.md §G5 / ARCHITECTURE.md §7 : « Client → MATA : header
+// X-Idempotency-Key sur POST /v1/orders, table idempotency_records TTL 24h ».
+//
+// scope = `${method} ${path}|user:${userId}` pour éviter qu'un user A
+// réutilise la key d'un user B. Index `created_at` pour cron cleanup TTL 24h.
+// ─────────────────────────────────────────────────────────────────
+
+model IdempotencyRecord {
+  key          String // UUID v4 fourni par le client dans X-Idempotency-Key
+  scope        String // ex: "POST /v1/orders|user:abc-def"
+  statusCode   Int      @map("status_code")
+  responseBody Json     @map("response_body")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@id([key, scope])
+  @@index([createdAt])
+  @@map("idempotency_records")
 }

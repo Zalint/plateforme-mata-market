@@ -1,5 +1,6 @@
 export * from './hooks/use-catalog';
 export * from './hooks/use-offers';
+export * from './hooks/use-orders';
 export * from './hooks/use-pricing';
 export * from './hooks/use-producers';
 export * from './hooks/use-sites';

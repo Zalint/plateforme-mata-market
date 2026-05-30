@@ -33,6 +33,7 @@ export type AuditAction =
   | 'order.confirm'
   | 'order.cancel'
   | 'order.status_change'
+  | 'order.idempotent_replay'
   // Paiements
   | 'payment.received'
   | 'payment.disputed'

@@ -16,14 +16,20 @@ type NavItem = { href: string; label: string; icon: IconName };
 const PRODUCER_NAV: NavItem[] = [
   { href: '/producer/home', label: 'Accueil', icon: 'home' },
   { href: '/producer/offers', label: 'Mes offres', icon: 'package' },
+  { href: '/producer/received-orders', label: 'Commandes reçues', icon: 'inbox' },
   { href: '/producer/sites', label: 'Mes sites', icon: 'map-pin' },
   { href: '/producer/setup', label: 'Mon profil', icon: 'user' },
 ];
-const CLIENT_NAV: NavItem[] = [{ href: '/client/catalog', label: 'Catalogue', icon: 'grid-2x2' }];
+const CLIENT_NAV: NavItem[] = [
+  { href: '/client/catalog', label: 'Catalogue', icon: 'grid-2x2' },
+  { href: '/client/cart', label: 'Mon panier', icon: 'shopping-cart' },
+  { href: '/client/orders', label: 'Mes commandes', icon: 'package-check' },
+];
 const ADMIN_NAV: NavItem[] = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: 'layout-dashboard' },
   { href: '/admin/producers', label: 'Producteurs', icon: 'users' },
   { href: '/admin/offers', label: 'Validation offres', icon: 'badge-check' },
+  { href: '/admin/orders', label: 'Commandes', icon: 'shopping-bag' },
   { href: '/admin/pricing', label: 'Pricing', icon: 'calculator' },
 ];
 
