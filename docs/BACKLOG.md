@@ -193,6 +193,43 @@ exacts où ces dettes sont marquées en commentaire inline.
 - **Risque si non traité** : régression possible dans le flux navigateur
   (permission/SW/souscription) non détectée par les tests integration API.
 
+## [lot-7→lot-9] Rejet HTTP 401 explicite côté récepteur n8n (durcissement HMAC)
+
+- **Découvert** : Lot 7 (vérif HMAC `X-Mata-Signature` ajoutée au workflow n8n,
+  commit `86cbc95`)
+- **Cible** : Lot 9 (durcissement intégrations)
+- **Pourquoi reporté** : le nœud Code « Vérifier signature HMAC (temps
+  constant) » valide bien la signature AVANT traitement (signature invalide →
+  `throw` → exécution en erreur, nœud de traitement jamais atteint). Mais comme
+  les webhooks sont en `responseMode: onReceived`, n8n répond `200` AVANT
+  d'exécuter le workflow (ack rapide, n8n hors chemin critique §G3) : le code
+  HTTP reste donc `200` même pour une signature forgée. Pour un vrai rejet
+  `401` au niveau HTTP, repasser les webhooks en `responseMode: lastNode` +
+  ajouter un nœud *Respond to Webhook* renvoyant 401 sur la branche d'erreur.
+- **Fichiers** : infra/n8n/mata-outbox-workflow.json, infra/n8n/README.md.
+- **Garde-fou actuel** : la signature EST vérifiée et gate le traitement ; un
+  event forgé n'est jamais traité (visible en `Error` dans Executions). Seul le
+  code HTTP retourné est non discriminant.
+- **Risque si non traité** : un appelant forgé reçoit `200` (faux positif de
+  succès) alors que l'event n'est pas traité. Faible : l'unique appelant
+  légitime est notre cron, qui signe correctement.
+
+## [lot-7→lot-9] Message d'erreur `httpFetch` codé « Bictorys » pour les échecs n8n
+
+- **Découvert** : Lot 7 (démo résilience : n8n arrêté → cron → `last_error`)
+- **Cible** : Lot 9 (nettoyage helper HTTP)
+- **Pourquoi reporté** : le dispatch n8n (`lib/n8n.ts`) réutilise le helper
+  partagé `httpFetch` (`lib/bictorys.ts`), dont le message d'erreur est codé en
+  dur « Bictorys unreachable: ... ». Résultat : un échec de dispatch n8n écrit
+  `last_error = "Bictorys unreachable: This operation was aborted"` dans
+  `outbox_events` — trompeur pour le debug. Rendre le message générique
+  (sans nom de prestataire) dans `httpFetch`.
+- **Fichiers** : apps/api/src/lib/bictorys.ts (helper `httpFetch`).
+- **Garde-fou actuel** : purement cosmétique (logs/`last_error`) ; le
+  comportement de retry/abandon est correct.
+- **Risque si non traité** : diagnostic ralenti (faux indice « Bictorys » sur
+  un incident n8n). Aucun impact fonctionnel.
+
 ## [lot-5→lot-9] KPIs admin/payments calculés côté front
 
 - **Découvert** : Lot 5 (page admin/payments)
