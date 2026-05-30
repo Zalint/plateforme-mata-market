@@ -71,62 +71,6 @@ exacts où ces dettes sont marquées en commentaire inline.
 - **Garde-fou actuel** : aucun, juste placeholder.
 - **Risque si non traité** : différence visible avec mockup, à expliquer.
 
-## [lot-5→lot-9] Déployer migration `lot5_payments_part2` en release séparée prod
-
-- **Découvert** : Lot 5 (migration deux temps payment_status TEXT → enum)
-- **Cible** : Lot 9 (procédure prod)
-- **Pourquoi reporté** : Pour la mise en prod du Lot 5, la migration `part2`
-  (drop colonne TEXT + rename enum → `payment_status`) doit être déployée
-  DANS UNE RELEASE DISTINCTE de `part1` (CLAUDE.md §G4 « DEUX déploiements »).
-  En local dev/test elles s'enchaînent en séquence via `prisma migrate deploy`.
-  En prod : `part1` au déploiement N (compatible avec le code N qui lit déjà
-  la nouvelle colonne mais garde la TEXT comme fallback), puis `part2` au
-  déploiement N+1 (drop TEXT) une fois le déploiement N validé stable.
-- **Fichiers** : apps/api/prisma/migrations/20260530100000_lot5_payments_part1_add_enum/,
-  apps/api/prisma/migrations/20260530100100_lot5_payments_part2_drop_text/
-- **Garde-fou actuel** : pas encore en prod. Local : OK les deux migrations
-  passent en séquence.
-- **Risque si non traité** : déploiement prod direct des deux migrations
-  ensemble = rollback impossible si bug applicatif post-déploiement N
-  (la TEXT a déjà été droppée).
-
-## [lot-5→lot-9] Config Render cron pour `process-payouts`
-
-- **Découvert** : Lot 5 (job process-payouts livré sans config Render)
-- **Cible** : Lot 9 (config infra Render)
-- **Pourquoi reporté** : le job `apps/api/src/jobs/process-payouts.ts` est
-  livré et invocable via `pnpm payouts:cron` (testé OK). La config Render
-  Cron Job (schedule `0 6 * * *` UTC, même image Docker que l'API, command
-  override) sera ajoutée avec les deux autres crons du Lot 9 (retry-outbox
-  Lot 7, cleanup-expired-teleconsult Lot 6) dans un docs/DEPLOYMENT.md
-  ou render.yaml unifié.
-- **Fichiers** : apps/api/src/jobs/process-payouts.ts, apps/api/package.json
-  (`payouts:cron` script), CRON_ACTOR_USER_ID env var optionnelle.
-- **Garde-fou actuel** : MVP local, déclenchement manuel suffit. Idempotent
-  par construction (`payout_items.order_item_id` UNIQUE).
-- **Risque si non traité** : prod sans cron = reversements non déclenchés
-  automatiquement, admin doit cliquer "Reverser (N)" manuellement chaque jour.
-
-## [lot-6→lot-9] Config Render cron pour `cleanup-expired-teleconsult`
-
-- **Découvert** : Lot 6 (job cleanup livré sans config Render)
-- **Cible** : Lot 9 (config infra Render — même PR que process-payouts + retry-outbox)
-- **Pourquoi reporté** : le job `apps/api/src/jobs/cleanup-expired-teleconsult.ts`
-  est livré et invocable via `pnpm teleconsult:cleanup` (testé via les
-  tests integration `expireOverdue` + `cleanupExpired`). La config Render
-  Cron Job (schedule `*/5 * * * *` UTC, même image Docker, command override)
-  sera mutualisée avec les deux autres crons (process-payouts, retry-outbox).
-- **Fichiers** : apps/api/src/jobs/cleanup-expired-teleconsult.ts,
-  apps/api/package.json (`teleconsult:cleanup` script).
-- **Garde-fou actuel** : MVP local. Les sessions expirées sont quand même
-  refusées au plugin auth (resolveActiveForTeleconsultant verifie expires_at),
-  donc une session expirée ne peut pas continuer à agir même sans le cron.
-  Le cron ne sert qu'à libérer les rows et le UI badge "Session active".
-- **Risque si non traité** : prod sans cron = les sessions techniquement
-  expirées restent `closed_at NULL` dans `teleconsult_sessions`, polluant
-  les requêtes admin (filtre "active"). Pas de surface sécurité car le
-  plugin auth bloque l'usage.
-
 ## [lot-6→lot-9] Audit `offer.*` lors d'une délégation téléconseil — actor distinct
 
 - **Découvert** : Lot 6 E2E approfondi (POST /v1/offers via ibrahima en
@@ -154,27 +98,6 @@ exacts où ces dettes sont marquées en commentaire inline.
   l'info complète. audit_log seul est partiellement correct.
 - **Risque si non traité** : audit log incomplet pour reporting téléconseil.
   Acceptable au MVP car outbox event compense.
-
-## [lot-7→lot-9] Config Render cron pour `retry-outbox`
-
-- **Découvert** : Lot 7 (cron retry-outbox livré sans config Render)
-- **Cible** : Lot 9 (config infra Render — même PR que process-payouts +
-  cleanup-expired-teleconsult)
-- **Pourquoi reporté** : le job `apps/api/src/jobs/retry-outbox.ts` est livré
-  et invocable via `pnpm outbox:cron` (couvert par le test integration
-  `outbox-flow` : succès, idempotence, échec/retry, abandon). La config Render
-  Cron Job (schedule `*/1 * * * *` UTC, même image Docker que l'API, command
-  override) sera mutualisée avec les deux autres crons (process-payouts,
-  cleanup-expired-teleconsult) dans un render.yaml unifié.
-- **Fichiers** : apps/api/src/jobs/retry-outbox.ts, apps/api/package.json
-  (`outbox:cron` script).
-- **Garde-fou actuel** : MVP local, déclenchement manuel suffit. n8n hors
-  chemin critique : sans cron, les events s'accumulent dans `outbox_events`
-  sans bloquer aucune mutation métier. Le push web (déclenché DIRECTEMENT par
-  les services) fonctionne indépendamment du cron.
-- **Risque si non traité** : prod sans cron = emails/intégrations n8n
-  (order.created, payout.sent, etc.) jamais délivrés. Aucune perte de données
-  (events persistés), aucun impact sur le métier ni sur le push web.
 
 ## [lot-7→lot-9] E2E Puppeteer push web réel (souscription navigateur)
 
@@ -266,18 +189,6 @@ exacts où ces dettes sont marquées en commentaire inline.
   par les tests integration (ex: hook qui ne câble pas correctement
   paymentUrl).
 
-## [lot-4→lot-9] Cron cleanup `idempotency_records` TTL 24h
-
-- **Découvert** : Lot 4 (table idempotency_records)
-- **Cible** : Lot 9 (cron jobs Render)
-- **Pourquoi reporté** : la table grossit lentement (1 row par order créé).
-  Pas critique au MVP. Le cron sera ajouté avec les autres crons Render
-  (cleanup-expired-teleconsult, retry-outbox, process-payouts).
-- **Fichiers** : apps/api/src/modules/orders/idempotency.ts (commentaire),
-  apps/api/prisma/schema.prisma (model IdempotencyRecord, index createdAt)
-- **Garde-fou actuel** : index `created_at` posé pour permettre un cron rapide.
-- **Risque si non traité** : croissance lente (~30 rows/mois MVP), pas bloquant.
-
 ## [lot-2→lot-9] CSP `'unsafe-inline'` et `'unsafe-eval'` autorisés en dev
 
 - **Découvert** : Lot 2 (test E2E manuel — DevTools console "Refused to
@@ -325,16 +236,6 @@ exacts où ces dettes sont marquées en commentaire inline.
 - **Garde-fou actuel** : règle `suspicious/noAlert` désactivée dans biome.
 - **Risque si non traité** : UX inconsistante, mauvaise expérience mobile
   (les alerts natives mobile sont pénibles).
-
-## [lot-2→lot-9] Migrations destructives à valider en deux temps
-
-- **Découvert** : Lot 2 (rename `producer_id` → `producer_user_id`)
-- **Cible** : Lot 9 (procédure prod)
-- **Pourquoi reporté** : pas encore en prod, donc rename direct OK.
-  CLAUDE.md §G4 impose deux temps pour les migrations destructives en prod.
-- **Fichiers** : apps/api/prisma/migrations/20260529202110_lot2_rename_*/
-- **Garde-fou actuel** : pas encore déployé.
-- **Risque si non traité** : oubli au moment du Lot 9 → downtime au déploiement.
 
 ## [lot-2→lot-?] Édition d'un site existant (PATCH /v1/sites/:id)
 
@@ -423,6 +324,40 @@ exacts où ces dettes sont marquées en commentaire inline.
 ---
 
 # Résolues
+
+## [lot-4→lot-9] Cron cleanup `idempotency_records` TTL 24h — résolue 2026-05-30 (Lot 9)
+
+Job `apps/api/src/jobs/cleanup-idempotency.ts` (script `idempotency:cron`),
+logique `cleanupExpired()` dans `orders/idempotency.ts` (DELETE `created_at <
+now()-24h`, index `created_at` couvrant). Cron Render `mata-cron-cleanup-idempotency`
+`0 3 * * *`. Test integration `cleanup-idempotency.integration.test.ts` :
+ancien (25h) supprimé, récent (23h) gardé, re-run no-op.
+
+## [lot-5→lot-9] Config Render cron `process-payouts` — résolue 2026-05-30 (Lot 9)
+
+Cron Render `mata-cron-process-payouts` `0 6 * * *` (`render.yaml`), `dockerCommand:
+node dist/jobs/process-payouts.js`, env `BICTORYS_*` + `CRON_ACTOR_USER_ID` optionnel.
+
+## [lot-6→lot-9] Config Render cron `cleanup-expired-teleconsult` — résolue 2026-05-30 (Lot 9)
+
+Cron Render `mata-cron-cleanup-teleconsult` `*/5 * * * *` (`render.yaml`),
+`dockerCommand: node dist/jobs/cleanup-expired-teleconsult.js`.
+
+## [lot-7→lot-9] Config Render cron `retry-outbox` — résolue 2026-05-30 (Lot 9)
+
+Cron Render `mata-cron-retry-outbox` `*/1 * * * *` (`render.yaml`), `dockerCommand:
+node dist/jobs/retry-outbox.js`, env `N8N_BASE_URL`/`N8N_WEBHOOK_SECRET`.
+
+## [lot-5→lot-9] Migration `lot5_payments_part2` en release séparée — résolue 2026-05-30 (Lot 9)
+
+Procédure documentée dans `docs/DEPLOYMENT.md` § « Procédure migrations
+destructives en deux temps » (cas concret part1 au déploiement N, part2 au N+1).
+
+## [lot-2→lot-9] Migrations destructives en deux temps — résolue 2026-05-30 (Lot 9)
+
+Procédure générale + cas concret rename `lot2_rename_producer_id` documentés
+dans `docs/DEPLOYMENT.md`. Le rename direct était licite car schéma jamais
+déployé en prod ; tout rename futur d'une colonne en prod suit la procédure 2 temps.
 
 ## [lot-8] hCaptcha invité câblé bout-en-bout — résolue 2026-05-30 (Lot 8)
 

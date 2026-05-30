@@ -153,3 +153,116 @@ services:
         sync: false
       - key: KC_BOOTSTRAP_ADMIN_PASSWORD
         sync: false
+
+  # ────────────────────────────────────────────────────────────
+  # Cron Jobs · partagent l'image Docker de mata-api (api.Dockerfile).
+  #
+  # Override du CMD via `dockerCommand`. On invoque le JS COMPILÉ
+  # (`node dist/jobs/<job>.js`) et NON `pnpm <job>:cron` : l'image runtime
+  # est produite par `pnpm --prod deploy` (sans devDeps → pas de `tsx`) et
+  # ne copie que `dist/` + `prisma/` (pas les sources TS). Les scripts
+  # `*:cron` du package.json (`tsx src/jobs/...`) restent pour le dev local.
+  #
+  # CRON_DISABLED=true sur un job le met en pause sans le supprimer.
+  # ────────────────────────────────────────────────────────────
+
+  # retry-outbox · délivre les outbox_events vers n8n (toutes les minutes)
+  - type: cron
+    name: mata-cron-retry-outbox
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    branch: main
+    rootDir: .
+    dockerfilePath: ./infra/docker/api.Dockerfile
+    dockerContext: .
+    schedule: '*/1 * * * *'
+    dockerCommand: node dist/jobs/retry-outbox.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mata-db
+          property: connectionString
+      - key: N8N_BASE_URL
+        sync: false
+      - key: N8N_WEBHOOK_SECRET
+        sync: false
+
+  # process-payouts · agrège les items livrés, déclenche les reversements (6h UTC)
+  - type: cron
+    name: mata-cron-process-payouts
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    branch: main
+    rootDir: .
+    dockerfilePath: ./infra/docker/api.Dockerfile
+    dockerContext: .
+    schedule: '0 6 * * *'
+    dockerCommand: node dist/jobs/process-payouts.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mata-db
+          property: connectionString
+      - key: BICTORYS_API_KEY
+        sync: false
+      - key: BICTORYS_API_SECRET
+        sync: false
+      - key: BICTORYS_API_BASE_URL
+        sync: false
+      # Optionnel : force l'acteur audit du cron. Vide → premier admin actif.
+      - key: CRON_ACTOR_USER_ID
+        sync: false
+
+  # cleanup-teleconsult · ferme sessions expirées + purge codes (toutes les 5 min)
+  - type: cron
+    name: mata-cron-cleanup-teleconsult
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    branch: main
+    rootDir: .
+    dockerfilePath: ./infra/docker/api.Dockerfile
+    dockerContext: .
+    schedule: '*/5 * * * *'
+    dockerCommand: node dist/jobs/cleanup-expired-teleconsult.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mata-db
+          property: connectionString
+
+  # cleanup-idempotency · purge les idempotency_records > 24h (3h UTC)
+  - type: cron
+    name: mata-cron-cleanup-idempotency
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    branch: main
+    rootDir: .
+    dockerfilePath: ./infra/docker/api.Dockerfile
+    dockerContext: .
+    schedule: '0 3 * * *'
+    dockerCommand: node dist/jobs/cleanup-idempotency.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mata-db
+          property: connectionString

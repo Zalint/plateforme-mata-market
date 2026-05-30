@@ -22,9 +22,25 @@ import { auditService } from '../audit/index.js';
  *     (uniquement les codes 2xx — les erreurs ne sont PAS cachées, le client
  *     peut retry avec une intent différente).
  *
- * Nettoyage : un cron Lot 9 supprimera les records > 24h. En attendant la
- * table grossit lentement (1 row par order créé, négligeable au MVP).
+ * Nettoyage : le cron `cleanup-idempotency` (Lot 9) supprime les records > 24h
+ * via `cleanupExpired()`. Référence : ARCHITECTURE.md §7 (TTL 24h).
  */
+
+/** TTL d'un record d'idempotence avant purge par le cron (24h). */
+const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Supprime les records d'idempotence plus vieux que le TTL (24h). Appelé par
+ * le cron `cleanup-idempotency`. Idempotent : un re-run sans row expiré est un
+ * no-op. Retourne le nombre de rows supprimés.
+ */
+export async function cleanupExpired(now: Date = new Date()): Promise<{ purged: number }> {
+  const cutoff = new Date(now.getTime() - IDEMPOTENCY_TTL_MS);
+  const result = await prisma.idempotencyRecord.deleteMany({
+    where: { createdAt: { lt: cutoff } },
+  });
+  return { purged: result.count };
+}
 
 interface WithIdempotencyArgs<T> {
   request: FastifyRequest;

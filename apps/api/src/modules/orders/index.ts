@@ -5,7 +5,7 @@
  * via leur interface publique »).
  */
 
-export { withIdempotency } from './idempotency.js';
+export { cleanupExpired as cleanupExpiredIdempotency, withIdempotency } from './idempotency.js';
 export { generateOrderNumber } from './order-numbering.js';
 export { orderRoutes } from './order-routes.js';
 export { orderService } from './order-service.js';

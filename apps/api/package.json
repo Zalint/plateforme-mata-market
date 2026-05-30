@@ -21,6 +21,7 @@
     "payouts:cron": "tsx src/jobs/process-payouts.ts",
     "outbox:cron": "tsx src/jobs/retry-outbox.ts",
     "teleconsult:cleanup": "tsx src/jobs/cleanup-expired-teleconsult.ts",
+    "idempotency:cron": "tsx src/jobs/cleanup-idempotency.ts",
     "bictorys:mock": "tsx scripts/bictorys-mock-server.ts"
   },
   "dependencies": {

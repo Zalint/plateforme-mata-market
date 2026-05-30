@@ -15,7 +15,11 @@ Render. À lire avant la première mise en production.
 | mata-db           | Postgres  | Starter | DB applicative              |
 | mata-keycloak-db  | Postgres  | Starter | DB Keycloak (isolée)        |
 
-Coût estimé : ~42 $/mois. Un éventuel `mata-n8n` viendra plus tard (Lot 7).
+À quoi s'ajoutent **4 cron jobs** (`mata-cron-*`) qui réutilisent l'image Docker
+de `mata-api` — cf. § Cron jobs.
+
+Coût estimé : ~42 $/mois (crons facturés à l'usage). Un éventuel `mata-n8n`
+viendra plus tard (Lot 7).
 
 ## Première mise en place (Lot 0)
 
@@ -104,6 +108,54 @@ la Pre-Deploy Command de `mata-api`.
 (ajout d'abord, suppression dans une release suivante) pour permettre le
 rollback DB.
 
+#### Procédure migrations destructives en deux temps
+
+Une migration est *destructive* si elle supprime ou renomme une colonne, un
+type ou une table déjà déployés en prod. Un déploiement unique qui ajoute la
+nouvelle forme **et** supprime l'ancienne rend impossible le rollback du code :
+si le déploiement N introduit un bug applicatif, revenir au code N-1 ne suffit
+pas car la colonne qu'il lisait n'existe plus.
+
+La règle : **part1 (additif) au déploiement N, part2 (destructif) au
+déploiement N+1**, une fois N validé stable en prod.
+
+- **Déploiement N (part1, additif, réversible)** : crée la nouvelle colonne /
+  type / table, backfill les données, garde l'ancienne forme en place comme
+  fallback. Le code N sait lire la nouvelle forme tout en tolérant l'ancienne.
+  Si N régresse → rollback du code seul, la DB reste compatible.
+- **Validation** : laisser tourner N en prod le temps de confirmer (logs,
+  `/v1/health`, parcours critiques). Pas de part2 tant que N n'est pas jugé sain.
+- **Déploiement N+1 (part2, destructif)** : supprime l'ancienne colonne /
+  type, renomme la nouvelle vers son nom final. À partir d'ici, rollback du
+  code seul ne suffit plus — un rollback nécessiterait `prisma migrate resolve
+  --rolled-back` + une migration inverse (cf. § Rollback).
+
+##### Cas concret · `lot5_payments_part2` (release SÉPARÉE)
+
+Le passage de `orders.payment_status` TEXT → enum `PaymentStatus` est livré en
+deux migrations (cf. BACKLOG `[lot-5→lot-9]`, résolu) :
+
+| Migration | Effet | Déploiement |
+| --- | --- | --- |
+| `20260530100000_lot5_payments_part1_add_enum` | crée l'enum, ajoute `payment_status_v2`, backfill depuis TEXT, NOT NULL + DEFAULT, **garde la TEXT** | N |
+| `20260530100100_lot5_payments_part2_drop_text` | DROP la colonne TEXT + rename `_v2` → `payment_status` | **N+1, release distincte** |
+
+En local/dev/test les deux s'enchaînent via `prisma migrate deploy` (séquence
+OK). **En prod, ne pas déployer les deux ensemble** : pousser d'abord un commit
+contenant uniquement `part1`, valider, puis pousser `part2` dans un commit
+ultérieur. Le `schema.prisma` reflète déjà l'état final post-part2 ; la
+contrainte est sur l'ordre de déploiement des fichiers de migration, pas sur le
+schéma.
+
+##### Cas concret · rename `lot2_rename_producer_id`
+
+Le rename `producer_id` → `producer_user_id` (migration
+`20260529202110_lot2_rename_*`) est un rename direct **uniquement parce que ce
+schéma n'a jamais été déployé en prod** (cf. BACKLOG `[lot-2→lot-9]`, résolu).
+Pour tout rename futur d'une colonne **déjà en prod**, appliquer la procédure
+deux temps : part1 ajoute la nouvelle colonne + backfill + double-écriture côté
+code, part2 (release suivante) supprime l'ancienne.
+
 ### Rollback
 
 Render → Service → **Events** → bouton **Rollback** sur le commit cible.
@@ -121,15 +173,30 @@ Plan Starter : backups quotidiens automatiques, rétention 7 jours.
 Render → Service → **Logs** (rétention 7 jours sur Starter).
 Format pino JSON. Filtrer par `requestId` pour suivre une requête.
 
-### Cron jobs (Lot 5+)
+### Cron jobs
 
-Trois cron jobs partagent l'image Docker `mata-api` (CMD différent) :
+Quatre cron jobs partagent l'image Docker `mata-api` (`api.Dockerfile`), avec
+un `dockerCommand` override (cf. `render.yaml`) :
 
-- `cleanup-expired-teleconsult` · `*/5 * * * *`
-- `retry-outbox` · `* * * * *`
-- `process-payouts` · `0 6 * * *` (6h UTC)
+| Service Render | Commande | Schedule (UTC) | Rôle |
+| --- | --- | --- | --- |
+| `mata-cron-retry-outbox` | `node dist/jobs/retry-outbox.js` | `*/1 * * * *` | délivre `outbox_events` → n8n |
+| `mata-cron-process-payouts` | `node dist/jobs/process-payouts.js` | `0 6 * * *` | agrège items livrés, déclenche reversements |
+| `mata-cron-cleanup-teleconsult` | `node dist/jobs/cleanup-expired-teleconsult.js` | `*/5 * * * *` | ferme sessions expirées, purge codes |
+| `mata-cron-cleanup-idempotency` | `node dist/jobs/cleanup-idempotency.js` | `0 3 * * *` | purge `idempotency_records` > 24h |
 
-À ajouter dans `render.yaml` à leur Lot dédié.
+**Pourquoi `node dist/jobs/...` et pas `pnpm <job>:cron`** : l'image runtime est
+produite par `pnpm --prod deploy` (sans devDeps → pas de `tsx`) et ne copie que
+`dist/` + `prisma/`, sans les sources TS. Les scripts `*:cron` du `package.json`
+(`tsx src/jobs/...`) ne fonctionnent qu'en dev local où les sources sont présentes.
+
+**Pause manuelle** : poser `CRON_DISABLED=true` sur le service → le job log
+`cron.disabled_via_env` et sort en exit 0 sans rien traiter.
+
+**Env vars par cron** : tous reçoivent `DATABASE_URL`. `retry-outbox` a besoin
+de `N8N_BASE_URL`/`N8N_WEBHOOK_SECRET` (sinon il skip, n8n hors chemin critique).
+`process-payouts` a besoin des clés `BICTORYS_*` pour les disbursements et
+accepte `CRON_ACTOR_USER_ID` (optionnel ; à défaut, premier admin actif).
 
 ## Dev local
 
