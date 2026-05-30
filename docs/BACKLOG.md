@@ -128,41 +128,32 @@ exacts où ces dettes sont marquées en commentaire inline.
 - **Risque si non traité** : une régression UI checkout n'est pas attrapée par
   la CI (seulement au run local manuel).
 
-## [lot-8→lot-?] Mockup checkout : trois moyens de paiement → deux exposés
-
-- **Découvert** : Lot 8 (UI `/guest/checkout`, mockup §4712)
-- **Cible** : non urgent — à revoir si le backend expose un choix wallet explicite
-- **Pourquoi reporté** : le mockup présente trois options (Espèces / Wave /
-  Orange Money) mais l'enum backend `payment_method` n'expose que
-  `cash_on_delivery | online`. L'UI présente donc deux radios (Espèces +
-  Paiement en ligne) ; le choix Wave vs Orange Money se fait sur la page
-  hébergée Bictorys après redirection. Adaptation assumée du mockup contrainte
-  par l'enum.
-- **Fichiers** : apps/web/app/(chromeless)/guest/checkout/page.tsx
-  (`GUEST_PAYMENT_METHODS`).
-- **Garde-fou actuel** : le hint « Wave, Orange Money… via un lien sécurisé »
-  explicite la redirection au client.
-- **Risque si non traité** : léger écart visuel avec le mockup, sans impact
-  fonctionnel (Bictorys gère le sous-choix wallet).
-
-## [lot-2→lot-?] Schemas Output exposent `displayName` partout
-
-- **Découvert** : Lot 2 (Fix 1, enrichissement mappers)
-- **Cible** : à voir au Lot 4 quand on aura les orders catalogue public guest
-- **Pourquoi reporté** : `ProducerProfilePublic.displayName` est exposé
-  sur des routes lues par tout JWT valide (catalogue), donc visible à un
-  client_particulier. Pas un problème en soi mais à confirmer que c'est
-  le comportement souhaité.
-- **Fichiers** : packages/shared/src/schemas/producer.ts:120
-- **Garde-fou actuel** : seul `displayName` (déjà public sur Keycloak), pas
-  le `phone`/`email` réservés à `ProducerProfileAdmin`.
-- **Risque si non traité** : aucun majeur (le canal invité est tranché, cf.
-  `## Résolues` Lot 8 — masquage producteur). Reste à confirmer le comportement
-  voulu pour le catalogue authentifié `client_particulier`.
-
 ---
 
 # Résolues
+
+## [lot-8→lot-9] Mockup checkout : trois moyens de paiement → deux exposés — résolue 2026-05-31 (Lot 9)
+
+Confirmé comme **adaptation définitive et voulue** du mockup, pas une dette à
+combler. L'enum backend `payment_method` (`cash_on_delivery | online`) est la
+source de vérité (§G3) ; le mockup montrait trois tuiles (Espèces / Wave /
+Orange Money) mais Wave vs Orange Money est un sous-choix de la page hébergée
+Bictorys, hors périmètre MATA. L'UI `/guest/checkout` présente donc deux radios
+(Espèces + Paiement en ligne) avec le hint « Wave, Orange Money… via un lien de
+paiement sécurisé » qui explicite la redirection. Aucun changement de code :
+le comportement actuel (`GUEST_PAYMENT_METHODS`,
+apps/web/app/(chromeless)/guest/checkout/page.tsx) est l'état final souhaité.
+
+## [lot-2→lot-9] Schemas Output exposent `displayName` partout — résolue 2026-05-31 (Lot 9)
+
+Comportement **confirmé comme voulu**. Sur le catalogue authentifié, un
+`client_particulier` doit pouvoir voir le nom du producteur chez qui il achète :
+`ProducerProfilePublicSchema` (packages/shared/src/schemas/producer.ts) expose
+`displayName` (déjà public côté Keycloak) + `whatsappPhone`/`photoPublicId`/`bio`,
+tandis que la PII (`phone`, `email`, `documents`, `hasBankDetails`) reste réservée
+à `ProducerProfileAdminSchema`. Le canal invité est déjà tranché (cf. masquage
+producteur, Lot 8). Aucun changement de code : la séparation public/admin est
+correcte et intentionnelle.
 
 ## [lot-7→lot-9] Rejet HTTP 401 explicite côté récepteur n8n (HMAC) — résolue 2026-05-31 (Lot 9)
 
@@ -392,9 +383,9 @@ l'identité du producteur** (CLAUDE.md §G3). Les routes publiques
 `/v1/guest/catalog/offers` renvoient les offres SANS les champs `producer`/`site`
 (masquage côté serveur, vérifié par le test integration « offre a zoneId mais PAS
 de clé producer/site »). L'UI `/guest/checkout` affiche « Producteur MATA vérifié »
-au lieu du nom. L'entrée active `[lot-2→lot-?] displayName partout` reste ouverte
-uniquement pour le **catalogue authentifié** (`client_particulier`), distinct du
-canal invité désormais tranché.
+au lieu du nom. Le comportement du **catalogue authentifié** (`client_particulier`)
+— qui expose `displayName` — a été confirmé comme voulu au Lot 9 (cf. entrée
+`[lot-2→lot-9] displayName partout` ci-dessous), distinct du canal invité tranché ici.
 
 ## [lot-2→lot-3] Édition cosmétique offre validée — résolue 2026-05-29 (Lot 3)
 
