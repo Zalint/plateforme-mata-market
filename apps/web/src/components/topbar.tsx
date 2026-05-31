@@ -1,6 +1,8 @@
 'use client';
 
+import { USER_ROLE_LABEL_FR } from '@mata/shared/schemas';
 import { Icon } from '@mata/ui';
+import { useMe } from '../lib/api';
 
 type TopbarProps = {
   onMenuClick: () => void;
@@ -8,6 +10,11 @@ type TopbarProps = {
 };
 
 export function Topbar({ onMenuClick, menuIcon }: TopbarProps): React.JSX.Element {
+  const { data: me } = useMe();
+  const displayName = me?.displayName ?? '';
+  const roleLabel = me ? USER_ROLE_LABEL_FR[me.role] : '';
+  const initial = displayName.trim().charAt(0).toUpperCase() || '?';
+
   return (
     <header className="h-14 border-b border-stone-200 bg-white px-3 lg:px-6 flex items-center gap-3 sticky top-0 z-30">
       <button
@@ -38,8 +45,16 @@ export function Topbar({ onMenuClick, menuIcon }: TopbarProps): React.JSX.Elemen
         <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-mata-700" />
       </button>
 
-      <div className="w-9 h-9 rounded-full bg-mata-700 flex items-center justify-center text-white font-bold text-xs">
-        M
+      <div className="flex items-center gap-2.5">
+        <div className="hidden sm:block text-right leading-tight">
+          <p className="text-sm font-semibold text-stone-900 truncate max-w-[12rem]">
+            {displayName || '…'}
+          </p>
+          {roleLabel && <p className="text-xs text-stone-500">{roleLabel}</p>}
+        </div>
+        <div className="w-9 h-9 rounded-full bg-mata-700 flex items-center justify-center text-white font-bold text-xs">
+          {initial}
+        </div>
       </div>
     </header>
   );

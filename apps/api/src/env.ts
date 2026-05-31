@@ -36,8 +36,23 @@ const envSchema = z.object({
   KEYCLOAK_REALM: z.string().optional(),
   KEYCLOAK_CLIENT_API_AUDIENCE: z.string().optional(),
 
+  // Service account Keycloak (client confidentiel, scope `manage-users`) pour
+  // l'Admin REST API : provisioning des comptes producteurs onboardés par le
+  // téléconseiller (Lot 9). Optionnels ici ; `requireKeycloakAdminConfig()`
+  // (lib/keycloak-admin.ts) refuse l'onboarding si absents. Le secret ne
+  // transite jamais côté client et n'est jamais loggé (§G8).
+  KEYCLOAK_ADMIN_CLIENT_ID: z.string().optional(),
+  KEYCLOAK_ADMIN_CLIENT_SECRET: z.string().optional(),
+
+  // Bictorys (Lot 5) — paiement (checkout hosted) + disbursement (reversements).
+  // Les 4 vars sont optionnelles ici (NODE_ENV=test peut tourner sans),
+  // mais `requireBictorysConfig()` côté lib/bictorys.ts refuse de booter
+  // en NODE_ENV=production si l'une des trois critiques manque
+  // (API_KEY, API_SECRET, WEBHOOK_SECRET). Cf. CLAUDE.md §G5.
   BICTORYS_API_KEY: z.string().optional(),
+  BICTORYS_API_SECRET: z.string().optional(),
   BICTORYS_WEBHOOK_SECRET: z.string().optional(),
+  BICTORYS_API_BASE_URL: z.string().url().optional(),
 
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
@@ -50,7 +65,33 @@ const envSchema = z.object({
   VAPID_PRIVATE_KEY: z.string().optional(),
   VAPID_SUBJECT: z.string().optional(),
 
-  ENCRYPTION_KEY: z.string().optional(),
+  // n8n (Lot 7) — destination du dispatch outbox. Le cron retry-outbox POST
+  // chaque event vers `${N8N_BASE_URL}/<eventType>` avec une signature HMAC
+  // SHA-256 (clé N8N_WEBHOOK_SECRET) dans l'en-tête X-Mata-Signature.
+  // Optionnels : si absents, le cron log + skip (n8n jamais dans le chemin
+  // critique, CLAUDE.md §G3/§G5).
+  N8N_BASE_URL: z.string().url().optional(),
+  N8N_WEBHOOK_SECRET: z.string().optional(),
+
+  // Clé AES-256-GCM en base64 (32 bytes décodés). Requise pour chiffrer
+  // bank_details (Lot 2). Optionnelle en NODE_ENV=test pour permettre aux
+  // tests unitaires de tourner sans la setter ; les tests qui en ont besoin
+  // passent par `encryptWithKey`/`decryptWithKey` avec une clé jetable.
+  //
+  // Générer une clé : `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`
+  ENCRYPTION_KEY: z
+    .string()
+    .refine(
+      (val) => {
+        try {
+          return Buffer.from(val, 'base64').length === 32;
+        } catch {
+          return false;
+        }
+      },
+      { message: 'ENCRYPTION_KEY doit décoder en 32 bytes base64' },
+    )
+    .optional(),
 
   HCAPTCHA_SECRET: z.string().optional(),
 

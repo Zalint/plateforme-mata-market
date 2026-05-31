@@ -27,6 +27,15 @@ build/
 coverage/
 *.tsbuildinfo
 
+# Playwright (artefacts de run E2E, jamais commités)
+apps/web/test-results/
+apps/web/playwright-report/
+
+# Service worker généré par serwist (apps/web) — jamais commité, jamais linté
+apps/web/public/sw.js
+apps/web/public/sw.js.map
+apps/web/public/swe-worker-*.js
+
 # Prisma generated client
 **/prisma/generated/
 
@@ -41,4 +50,5 @@ coverage/
 
 # Scripts locaux (poste de Saliou, jamais commités)
 scripts/docker-reset.ps1
+scriptForMeToIgnore.txt
 

@@ -10,25 +10,38 @@ import { prisma } from '../../lib/prisma.js';
  */
 
 export type AuditAction =
+  // Utilisateurs (création par un admin, tous rôles)
+  | 'user.create'
   // Producteurs
   | 'producer.create'
+  | 'producer.onboard'
   | 'producer.update'
   | 'producer.suspend'
   | 'producer.blacklist'
   | 'producer.validate'
+  | 'producer.rating.create'
   // Offres
   | 'offer.create'
   | 'offer.update'
   | 'offer.validate'
   | 'offer.reject'
   | 'offer.suspend'
+  | 'offer.reactivate'
+  | 'offer.submit'
+  // Sites
+  | 'site.create'
+  | 'site.update'
+  | 'site.archive'
   // Commandes
   | 'order.create'
   | 'order.confirm'
   | 'order.cancel'
   | 'order.status_change'
+  | 'order.idempotent_replay'
   // Paiements
+  | 'payment.intent_created'
   | 'payment.received'
+  | 'payment.refunded'
   | 'payment.disputed'
   | 'payout.trigger'
   | 'payout.block'
@@ -38,14 +51,27 @@ export type AuditAction =
   | 'teleconsult.session.end'
   | 'teleconsult.session.action_forbidden'
   // Pricing
+  | 'pricing.rule.create'
   | 'pricing.rule.update'
   // Coordonnées bancaires
   | 'producer.bank_details.update'
-  | 'producer.bank_details.reveal';
+  | 'producer.bank_details.reveal'
+  // Tournées de collecte (Lot 7)
+  | 'pickup.create'
+  | 'pickup.status_change'
+  | 'pickup.cancel'
+  | 'pickup.item_check'
+  // Notifications push (Lot 7)
+  | 'notification.subscribe'
+  | 'notification.unsubscribe'
+  | 'notification.preferences_update';
 
 export type AuditLogInput = {
-  actorUserId: string;
+  /** `null` = acteur invité (sans row `users`). Renseigner alors `guestPhoneNumber`. */
+  actorUserId: string | null;
   onBehalfOfUserId?: string | null;
+  /** Téléphone de contact invité — à fournir quand `actorUserId` est null. */
+  guestPhoneNumber?: string | null;
   action: AuditAction;
   targetType: string;
   targetId?: string | null;
@@ -60,6 +86,7 @@ export const auditService = {
       data: {
         actorUserId: input.actorUserId,
         onBehalfOfUserId: input.onBehalfOfUserId ?? null,
+        guestPhoneNumber: input.guestPhoneNumber ?? null,
         action: input.action,
         targetType: input.targetType,
         targetId: input.targetId ?? null,

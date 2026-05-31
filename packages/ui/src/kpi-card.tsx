@@ -29,8 +29,8 @@ const VARIANT_CLASSES: Record<KpiCardVariant, { wrapper: string; label: string; 
 
 type KpiCardProps = {
   label: string;
-  value: string | number;
-  trend?: string;
+  value: React.ReactNode;
+  trend?: React.ReactNode;
   icon?: IconName;
   variant?: KpiCardVariant;
   className?: string;

@@ -1,9 +1,11 @@
 'use client';
 
+import type { UserRoleValue } from '@mata/shared/schemas';
 import { Icon, type IconName } from '@mata/ui';
 import clsx from 'clsx';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useMe } from '../lib/api';
 import { useAuth } from '../lib/auth/auth-provider';
 
 type SidebarProps = {
@@ -13,11 +15,68 @@ type SidebarProps = {
 
 type NavItem = { href: string; label: string; icon: IconName };
 
-const PRODUCER_NAV: NavItem[] = [{ href: '/producer/home', label: 'Accueil', icon: 'home' }];
-const CLIENT_NAV: NavItem[] = [{ href: '/client/catalog', label: 'Catalogue', icon: 'grid-2x2' }];
+const PRODUCER_NAV: NavItem[] = [
+  { href: '/producer/home', label: 'Accueil', icon: 'home' },
+  { href: '/producer/offers', label: 'Mes offres', icon: 'package' },
+  { href: '/producer/received-orders', label: 'Commandes reçues', icon: 'inbox' },
+  { href: '/producer/pickups', label: 'Mes collectes', icon: 'calendar' },
+  { href: '/producer/sites', label: 'Mes sites', icon: 'map-pin' },
+  { href: '/producer/setup', label: 'Mon profil', icon: 'user' },
+  { href: '/producer/help', label: 'Me faire aider', icon: 'phone-call' },
+];
+const CLIENT_NAV: NavItem[] = [
+  { href: '/client/home', label: 'Accueil', icon: 'home' },
+  { href: '/client/catalog', label: 'Catalogue', icon: 'grid-2x2' },
+  { href: '/client/cart', label: 'Mon panier', icon: 'shopping-cart' },
+  { href: '/client/orders', label: 'Mes commandes', icon: 'package-check' },
+];
 const ADMIN_NAV: NavItem[] = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: 'layout-dashboard' },
+  { href: '/admin/users/new', label: 'Créer un utilisateur', icon: 'user-plus' },
+  { href: '/admin/producers', label: 'Producteurs', icon: 'users' },
+  { href: '/admin/offers', label: 'Validation offres', icon: 'badge-check' },
+  { href: '/admin/orders', label: 'Commandes', icon: 'shopping-bag' },
+  { href: '/admin/pickups', label: 'Tournées', icon: 'truck' },
+  { href: '/admin/payments', label: 'Paiements', icon: 'wallet' },
+  { href: '/admin/teleconseil', label: 'Téléconseil', icon: 'headphones' },
+  { href: '/admin/pricing', label: 'Pricing', icon: 'calculator' },
+  { href: '/admin/guide', label: "Guide d'utilisation", icon: 'help-circle' },
 ];
+// Téléconseiller : périmètre volontairement restreint (cf. décision produit).
+// Il onboarde des producteurs (statut « à valider »), valide les offres et
+// gère les commandes — rien d'autre. La validation/suspension producteur, les
+// paiements, le pricing, etc. restent admin only (vérifié aussi côté API §G8).
+const TELECONSULTANT_NAV: NavItem[] = [
+  { href: '/admin/producers/new', label: 'Créer un producteur', icon: 'user-plus' },
+  { href: '/admin/offers', label: 'Validation offres', icon: 'badge-check' },
+  { href: '/admin/orders', label: 'Commandes', icon: 'shopping-bag' },
+];
+
+type NavSectionDef = { key: string; title: string; items: NavItem[] };
+
+const ALL_SECTIONS: NavSectionDef[] = [
+  { key: 'producer', title: 'Producteur', items: PRODUCER_NAV },
+  { key: 'client', title: 'Client', items: CLIENT_NAV },
+  { key: 'admin', title: 'Admin MATA', items: ADMIN_NAV },
+  { key: 'teleconsultant', title: 'Téléconseiller', items: TELECONSULTANT_NAV },
+];
+
+/**
+ * Sections de nav visibles par rôle. La sidebar reflète l'espace propre de
+ * l'utilisateur : les pages producteur/client sont liées à SON profil (un admin
+ * n'a pas de profil producteur). Ceci ne fait que l'AFFICHAGE — l'autorisation
+ * réelle reste vérifiée côté API à chaque endpoint (§G8). Le `teleconsultant`
+ * a un périmètre restreint (créer un producteur, valider les offres, gérer les
+ * commandes), distinct de l'espace Admin complet.
+ */
+const SECTIONS_BY_ROLE: Record<UserRoleValue, readonly string[]> = {
+  producer: ['producer'],
+  client_pro: ['client'],
+  client_particulier: ['client'],
+  admin: ['admin'],
+  super_admin: ['admin'],
+  teleconsultant: ['teleconsultant'],
+};
 
 /**
  * Sidebar dark (bg-stone-900) visible dès lg, drawer slide-in en dessous.
@@ -29,11 +88,13 @@ const ADMIN_NAV: NavItem[] = [
 export function Sidebar({ open, onClose }: SidebarProps): React.JSX.Element {
   const pathname = usePathname();
   const { logout } = useAuth();
+  const { data: me } = useMe();
 
-  // Lot 1 : on affiche toutes les nav puisqu'on n'a pas encore mappé le rôle
-  // depuis le JWT côté front (le Lot 1 met l'API ready, le rôle viendra du
-  // call /v1/auth/me au Lot 2 quand on aura les pages métier). En attendant,
-  // les 3 placeholders sont accessibles.
+  // Filtre les sections selon le rôle de l'utilisateur connecté (/v1/auth/me).
+  // Tant que le rôle n'est pas chargé, on n'affiche aucune section (évite de
+  // montrer brièvement des espaces interdits).
+  const visibleKeys = me ? SECTIONS_BY_ROLE[me.role] : [];
+  const sections = ALL_SECTIONS.filter((s) => visibleKeys.includes(s.key));
 
   return (
     <aside
@@ -45,7 +106,7 @@ export function Sidebar({ open, onClose }: SidebarProps): React.JSX.Element {
         open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
       )}
     >
-      <div className="px-5 py-5 border-b border-stone-800 flex items-center gap-2.5">
+      <div className="h-14 px-5 border-b border-stone-800 flex items-center gap-2.5 shrink-0">
         <div className="w-9 h-9 rounded-lg bg-mata-700 flex items-center justify-center">
           <span className="text-white font-extrabold text-sm">MA</span>
         </div>
@@ -66,19 +127,15 @@ export function Sidebar({ open, onClose }: SidebarProps): React.JSX.Element {
       </div>
 
       <nav className="flex-1 overflow-y-auto py-3 text-sm">
-        <NavSection
-          title="Producteur"
-          items={PRODUCER_NAV}
-          pathname={pathname}
-          onItemClick={onClose}
-        />
-        <NavSection title="Client" items={CLIENT_NAV} pathname={pathname} onItemClick={onClose} />
-        <NavSection
-          title="Admin MATA"
-          items={ADMIN_NAV}
-          pathname={pathname}
-          onItemClick={onClose}
-        />
+        {sections.map((s) => (
+          <NavSection
+            key={s.key}
+            title={s.title}
+            items={s.items}
+            pathname={pathname}
+            onItemClick={onClose}
+          />
+        ))}
       </nav>
 
       <div className="px-3 py-3 border-t border-stone-800">

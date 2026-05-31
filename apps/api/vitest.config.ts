@@ -4,6 +4,9 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
-    exclude: ['node_modules', 'dist'],
+    // Les tests d'intégration ont leur propre config + globalSetup
+    // (vitest.integration.config.ts). On les exclut ici pour que `pnpm test`
+    // reste rapide et n'exige pas Docker.
+    exclude: ['node_modules', 'dist', '**/*.integration.test.ts'],
   },
 });

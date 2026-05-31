@@ -24,7 +24,12 @@ export function refreshCookieOptions(maxAgeSeconds: number): CookieOptions {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
-    path: '/api/auth',
+    // path '/' (et non '/api/auth') pour que le middleware Next puisse
+    // détecter la présence du cookie sur les routes protégées /producer/*,
+    // /admin/*, /client/* et décider de rediriger ou non vers /auth/login.
+    // Le cookie reste HttpOnly + SameSite=Strict — JS ne peut pas le voir,
+    // et les CSRF cross-site sont impossibles.
+    path: '/',
     maxAge: maxAgeSeconds,
   };
 }

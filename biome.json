@@ -16,7 +16,8 @@
       "!**/coverage",
       "!**/.vercel",
       "!**/prisma/generated",
-      "!**/mockup"
+      "!**/mockup",
+      "!**/infra/keycloak/themes"
     ]
   },
   "formatter": {
@@ -32,6 +33,12 @@
       "trailingCommas": "all",
       "semicolons": "always",
       "arrowParentheses": "always"
+    }
+  },
+  "json": {
+    "formatter": {
+      "indentStyle": "space",
+      "indentWidth": 2
     }
   },
   "linter": {
