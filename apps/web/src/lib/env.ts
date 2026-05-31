@@ -35,6 +35,9 @@ const envSchema = z.object({
   // par captcha (dégradation OK, dev par défaut) ; présente = widget affiché et
   // token exigé. Les deux clés vont de pair (cf. dashboard hCaptcha).
   NEXT_PUBLIC_HCAPTCHA_SITEKEY: z.string().min(1).optional(),
+  // Affiche le lien « Voir la maquette de référence » sur /welcome. Masqué par
+  // défaut (artefact de dev) ; mettre 'true' pour le réafficher.
+  NEXT_PUBLIC_SHOW_MOCKUP: z.enum(['true', 'false']).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -54,6 +57,7 @@ function parseEnv(): Env {
     NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
     NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
     NEXT_PUBLIC_HCAPTCHA_SITEKEY: process.env.NEXT_PUBLIC_HCAPTCHA_SITEKEY,
+    NEXT_PUBLIC_SHOW_MOCKUP: process.env.NEXT_PUBLIC_SHOW_MOCKUP,
   });
   if (!parsed.success) {
     const issues = parsed.error.issues
