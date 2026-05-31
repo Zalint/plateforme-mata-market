@@ -40,6 +40,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: '/admin/payments', label: 'Paiements', icon: 'wallet' },
   { href: '/admin/teleconseil', label: 'Téléconseil', icon: 'headphones' },
   { href: '/admin/pricing', label: 'Pricing', icon: 'calculator' },
+  { href: '/admin/architecture', label: 'App archi', icon: 'scroll-text' },
   { href: '/admin/guide', label: "Guide d'utilisation", icon: 'help-circle' },
 ];
 // Téléconseiller : périmètre volontairement restreint (cf. décision produit).
