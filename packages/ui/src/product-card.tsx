@@ -50,19 +50,19 @@ export function ProductCard({
       type="button"
       onClick={onClick}
       className={clsx(
-        'bg-white rounded-2xl shadow-soft border border-stone-200 overflow-hidden text-left hover:shadow-card transition',
+        'flex flex-col bg-white rounded-2xl shadow-soft border border-stone-200 overflow-hidden text-left hover:shadow-card transition',
         className,
       )}
     >
       <div
         className={clsx(
-          'aspect-square flex items-center justify-center text-6xl lg:text-7xl',
+          'aspect-square shrink-0 flex items-center justify-center text-6xl lg:text-7xl',
           CATEGORY_BG[category],
         )}
       >
         {CATEGORY_EMOJI[category]}
       </div>
-      <div className="p-3">
+      <div className="p-3 flex-1 flex flex-col">
         <div className="flex items-center gap-1">
           <Icon name="badge-check" className="w-3.5 h-3.5 text-mata-700" />
           <span className="text-[10px] font-semibold text-mata-700 uppercase tracking-wider">
@@ -71,7 +71,7 @@ export function ProductCard({
         </div>
         <div className="font-bold text-stone-900 text-sm mt-1">{title}</div>
         {subtitle && <div className="text-[11px] text-stone-500">{subtitle}</div>}
-        <div className="mt-2 flex items-end gap-1">
+        <div className="mt-auto pt-2 flex items-end gap-1">
           <span className="text-[10px] text-stone-500">dès</span>
           <Money amount={priceFcfa} className="font-bold text-stone-900" />
           <span className="text-[10px] text-stone-500 mb-0.5">/{UNIT_SHORT[unit]}</span>

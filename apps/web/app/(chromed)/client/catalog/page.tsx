@@ -94,21 +94,22 @@ export default function ClientCatalogPage(): React.JSX.Element {
         {offers.map((o) => {
           const inCart = cart.items.find((i) => i.offerId === o.id);
           return (
-            <div key={o.id} className="relative">
+            <div key={o.id} className="flex flex-col h-full">
               <ProductCard
                 category={o.category}
                 title={o.title}
                 unit={o.unit}
                 priceFcfa={o.priceFcfa}
                 subtitle={`${o.producer.displayName} · ${o.site.name}`}
+                className="flex-1"
               />
               <button
                 type="button"
                 onClick={() => cart.add(o.id, 1)}
-                className="absolute bottom-2 right-2 px-2.5 py-1.5 bg-mata-700 hover:bg-mata-800 text-white rounded-lg text-xs font-bold shadow-soft flex items-center gap-1"
+                className="mt-2 w-full py-2 rounded-xl bg-mata-700 hover:bg-mata-800 text-white text-sm font-bold flex items-center justify-center gap-1.5"
               >
-                <Icon name="plus" className="w-3 h-3" />
-                {inCart ? ` ${inCart.quantity}` : ''}
+                <Icon name="plus" className="w-4 h-4" />
+                {inCart ? `Ajouter (${inCart.quantity})` : 'Ajouter'}
               </button>
             </div>
           );
