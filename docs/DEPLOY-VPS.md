@@ -24,6 +24,41 @@ Le navigateur appelle l'API **en direct** sur `api.<domaine>` (CORS autorisé vi
 `PUBLIC_WEB_URL`). L'app tourne en **mode dev** (les `NEXT_PUBLIC_*` sont lues au
 runtime → reconfigurables sans rebuild).
 
+## VPS recommandé — Hetzner CX32 (8 Go), pas-à-pas
+
+Première fois sur Hetzner ? Suivre dans l'ordre.
+
+### a. Créer le serveur (console.hetzner.cloud)
+
+1. **New Project** → **Add Server**.
+2. **Location** : Nuremberg ou Falkenstein (UE).
+3. **Image** : Ubuntu 24.04.
+4. **Type** : Shared vCPU → **CX32** (4 vCPU / 8 Go / 80 Go) — confortable pour la stack.
+5. **SSH Key** : ajouter ta clé publique. Si tu n'en as pas :
+   `ssh-keygen -t ed25519` puis colle le contenu de `~/.ssh/id_ed25519.pub`.
+6. **Firewalls** : créer/attacher un firewall autorisant **22, 80, 443** (TCP entrant).
+7. **Create & Buy** → noter l'**IPv4**.
+
+### b. DNS
+
+A records `app.` `api.` `auth.` (+ `n8n.` `mail.`) → IPv4 du serveur. Attendre la propagation.
+
+### c. Préparer le serveur (1 commande)
+
+```bash
+ssh root@<IP>
+curl -fsSL https://raw.githubusercontent.com/Zalint/plateforme-mata-market/development/infra/deploy/bootstrap-vps.sh | bash
+```
+
+Le script `infra/deploy/bootstrap-vps.sh` fait : MAJ système + swap 4 Go + pare-feu
+(ufw 22/80/443) + Docker Engine & compose. Idempotent.
+
+### d. Déployer
+
+Enchaîner avec les sections « Récupérer le code », « Démarrer » et l'étape Keycloak ci-dessous.
+
+---
+
 ## 1. Pré-requis
 
 - Un VPS (ex. Hetzner CX22, DigitalOcean) avec **Docker + Docker Compose**.
