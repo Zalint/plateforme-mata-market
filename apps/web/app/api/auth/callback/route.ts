@@ -56,23 +56,30 @@ async function resolveLanding(apiBaseUrl: string, accessToken: string): Promise<
  */
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const env = getEnv();
+  // Origine PUBLIQUE de l'app. On NE PEUT PAS se fier à `req.url` : derrière le
+  // reverse-proxy (Caddy), Next dev voit l'hôte interne du conteneur
+  // (localhost:3000) → la redirection post-login partirait vers localhost.
+  // L'URL de callback Keycloak est configurée avec le domaine public, donc son
+  // origine = l'origine publique de l'app (https://app.<domaine>, ou
+  // http://localhost:3000 en dev local — comportement inchangé).
+  const appOrigin = new URL(env.KEYCLOAK_REDIRECT_URI).origin;
   const code = req.nextUrl.searchParams.get('code');
   const state = req.nextUrl.searchParams.get('state');
   const pkceCookie = req.cookies.get(COOKIE_PKCE)?.value;
 
   if (!code || !state || !pkceCookie) {
-    return NextResponse.redirect(new URL('/auth/login?error=missing_code', req.url));
+    return NextResponse.redirect(new URL('/auth/login?error=missing_code', appOrigin));
   }
 
   let parsed: { verifier: string; state: string };
   try {
     parsed = JSON.parse(pkceCookie) as { verifier: string; state: string };
   } catch {
-    return NextResponse.redirect(new URL('/auth/login?error=invalid_pkce', req.url));
+    return NextResponse.redirect(new URL('/auth/login?error=invalid_pkce', appOrigin));
   }
 
   if (parsed.state !== state) {
-    return NextResponse.redirect(new URL('/auth/login?error=state_mismatch', req.url));
+    return NextResponse.redirect(new URL('/auth/login?error=state_mismatch', appOrigin));
   }
 
   let tokens: Awaited<ReturnType<typeof exchangeCode>>;
@@ -86,11 +93,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       { code, codeVerifier: parsed.verifier, redirectUri: env.KEYCLOAK_REDIRECT_URI },
     );
   } catch {
-    return NextResponse.redirect(new URL('/auth/login?error=exchange_failed', req.url));
+    return NextResponse.redirect(new URL('/auth/login?error=exchange_failed', appOrigin));
   }
 
   const landing = await resolveLanding(env.API_BASE_URL, tokens.access_token);
-  const response = NextResponse.redirect(new URL(landing, req.url));
+  const response = NextResponse.redirect(new URL(landing, appOrigin));
   response.cookies.set(
     COOKIE_REFRESH,
     tokens.refresh_token,
