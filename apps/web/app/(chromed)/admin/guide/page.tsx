@@ -155,6 +155,47 @@ const MENUS: MenuDef[] = [
   },
 ];
 
+// Pricing à 7 composantes (cf. écran Admin / Pricing). Le prix producteur est
+// un INTRANT (fixé par le producteur, pas par la règle) ; les 6 autres sont la
+// marge + les coûts MATA, configurés par l'admin.
+type PriceComponent = { label: string; desc: string; sign: '=' | '+' | '−' };
+const PRICE_COMPONENTS: PriceComponent[] = [
+  {
+    label: 'Prix producteur',
+    sign: '=',
+    desc: 'Prix demandé par le producteur sur son offre (champ « Prix demandé » de Nouvelle offre). Verrouillé côté admin : c’est un intrant, pas un paramètre de règle. C’est EXACTEMENT ce que le producteur reçoit.',
+  },
+  {
+    label: 'Commission plateforme',
+    sign: '+',
+    desc: 'Marge MATA : un pourcentage d’une base (ex. prix producteur) ou un montant fixe.',
+  },
+  {
+    label: 'Coût collecte',
+    sign: '+',
+    desc: 'Forfait par unité pour ramasser la marchandise chez le producteur.',
+  },
+  { label: 'Coût livraison', sign: '+', desc: 'Selon la grille de la zone du client.' },
+  { label: 'Coût stockage', sign: '+', desc: 'Forfait court séjour en chambre froide.' },
+  {
+    label: 'Marge sécurité',
+    sign: '+',
+    desc: 'Pourcentage couvrant pertes, variations de poids et incidents.',
+  },
+  {
+    label: 'Remise',
+    sign: '−',
+    desc: 'Réduction manuelle décidée par l’admin (soustraite du total).',
+  },
+];
+
+const PRICE_NOTES: string[] = [
+  'Qui fixe le prix producteur ? Le producteur lui-même, par offre. Un téléconseiller peut le faire en son nom via une session déléguée. L’admin ne le fixe pas — il calibre seulement la marge et les coûts MATA par-dessus.',
+  'Répartition : le producteur reçoit son prix producteur ; MATA encaisse tout le reste (commission + coûts + marge − remise).',
+  'Figé à la commande : un instantané (snapshot) du prix est enregistré à la création de chaque commande. Modifier une règle plus tard n’affecte QUE les nouvelles commandes — jamais les commandes passées.',
+  'Cible de la règle : « Catégorie » (s’applique à toutes les offres de la catégorie) ou « Offre (override) », prioritaire sur la catégorie.',
+];
+
 // Flux nominal (sans `cancelled`, qui est une branche terminale) et extras
 // (états atteints uniquement par branche) — alimentent le stepper.
 const ORDER_FLOW = ORDER_ROWS.filter((r) => r.status !== 'cancelled');
@@ -287,8 +328,8 @@ export default function AdminGuidePage(): React.JSX.Element {
         </div>
         <h1 className="text-2xl lg:text-3xl font-bold text-stone-900 mt-1">Guide d'utilisation</h1>
         <p className="text-sm text-stone-500 mt-1">
-          Comment marchent les statuts des commandes, des tournées, leur lien, et les menus de
-          chaque profil.
+          Comment marchent les statuts des commandes, des tournées, leur lien, le calcul du prix, et
+          les menus de chaque profil.
         </p>
       </div>
 
@@ -341,6 +382,51 @@ export default function AdminGuidePage(): React.JSX.Element {
                 </div>
                 <div className="text-sm text-stone-600 mt-1">{s.desc}</div>
               </div>
+            </li>
+          ))}
+        </ul>
+      </Card>
+
+      <Card title="Comment se calcule le prix (pricing à 7 composantes)">
+        <p className="text-sm text-stone-500 mb-4">
+          MATA ne fixe pas ce que gagne le producteur : elle ajoute sa marge et ses coûts par-dessus
+          le prix demandé par le producteur. Le prix final client est la somme de ces composantes.
+        </p>
+        <ul className="space-y-3">
+          {PRICE_COMPONENTS.map((c) => (
+            <li key={c.label} className="flex items-start gap-3">
+              <span
+                className={`shrink-0 mt-0.5 w-6 h-6 rounded-md flex items-center justify-center text-sm font-bold tabular ${
+                  c.sign === '−'
+                    ? 'bg-stone-100 text-stone-500'
+                    : c.sign === '='
+                      ? 'bg-mata-50 text-mata-700'
+                      : 'bg-amber-50 text-amber-700'
+                }`}
+              >
+                {c.sign}
+              </span>
+              <span className="text-sm text-stone-600">
+                <span className="font-semibold text-stone-900">{c.label}</span> — {c.desc}
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-4 rounded-xl bg-stone-900 text-white p-4">
+          <div className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold mb-1">
+            Prix final client
+          </div>
+          <code className="text-sm text-stone-100">
+            Prix producteur + Commission + Collecte + Livraison + Stockage + Marge sécurité − Remise
+          </code>
+        </div>
+
+        <ul className="mt-4 space-y-2">
+          {PRICE_NOTES.map((n) => (
+            <li key={n} className="flex items-start gap-2 text-sm text-stone-600">
+              <Icon name="check" className="w-4 h-4 text-mata-700 mt-0.5 shrink-0" />
+              <span>{n}</span>
             </li>
           ))}
         </ul>
