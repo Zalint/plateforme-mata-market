@@ -58,10 +58,14 @@ async function startSessionInternal(args: StartSessionArgs): Promise<Teleconsult
     throw new DomainError('UNAUTHORIZED', UNIFORM_ERROR);
   }
 
-  // 2. Refuser si une session active existe déjà pour le téléconseiller OU le producteur.
+  // 2. Refuser si une session VRAIMENT active existe déjà pour le téléconseiller
+  //    OU le producteur. On exige `expiresAt > now` (comme getActive) : une session
+  //    expirée mais pas encore fermée par le cron ne doit PAS bloquer un nouveau
+  //    démarrage (sinon elle « pollue » jusqu'à la purge).
   const conflicting = await prisma.teleconsultSession.findFirst({
     where: {
       closedAt: null,
+      expiresAt: { gt: new Date() },
       OR: [{ teleconsultantUserId: args.teleconsultantUserId }, { producerUserId: producer.id }],
     },
     select: { id: true, sessionNumber: true },
@@ -155,7 +159,15 @@ async function closeSessionInternal(args: CloseSessionArgs): Promise<Teleconsult
   });
   if (!session) throw new DomainError('NOT_FOUND', 'Session introuvable');
   if (session.closedAt) {
-    throw new DomainError('CONFLICT', `Session déjà fermée (${session.closeReason ?? 'unknown'})`);
+    // Idempotent : fermer une session déjà fermée (expirée, ou fermée dans un
+    // autre onglet) est un no-op réussi. Évite un 409 qui empêcherait le client
+    // de nettoyer son état local (singleton X-Teleconsult-Session-Id) et bloquerait
+    // le démarrage d'une nouvelle session.
+    return toSessionOutput({
+      session,
+      teleconsultantDisplayName: session.teleconsultant.displayName,
+      producer: session.producer,
+    });
   }
 
   // Infère la raison selon le rôle si non fournie.

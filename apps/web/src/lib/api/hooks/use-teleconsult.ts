@@ -56,7 +56,10 @@ export function useCloseTeleconsultSession() {
         input.reason ? { reason: input.reason } : {},
         token,
       ),
-    onSuccess: () => {
+    // onSettled (succès OU erreur) : on nettoie TOUJOURS l'état local. Sinon une
+    // session déjà fermée/expirée côté serveur resterait dans le singleton mémoire
+    // et continuerait d'injecter X-Teleconsult-Session-Id sur tous les appels.
+    onSettled: () => {
       setActiveTeleconsultSessionId(null);
       void qc.invalidateQueries({ queryKey: ['teleconsult'] });
     },
