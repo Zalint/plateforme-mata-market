@@ -1,5 +1,6 @@
 export * from './hooks/use-auth-me';
 export * from './hooks/use-catalog';
+export * from './hooks/use-dashboard';
 export * from './hooks/use-guest';
 export * from './hooks/use-notifications';
 export * from './hooks/use-offers';

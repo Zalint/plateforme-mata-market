@@ -15,6 +15,7 @@ import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
 import { authPlugin, createKeycloakVerifier } from './modules/auth/index.js';
 import { catalogRoutes } from './modules/catalog/index.js';
+import { dashboardRoutes } from './modules/dashboard/index.js';
 import { guestPlugin } from './modules/guest/index.js';
 import { notificationRoutes } from './modules/notifications/index.js';
 import { offerRoutes } from './modules/offers/index.js';
@@ -112,6 +113,7 @@ async function buildServer(): Promise<void> {
   await app.register(teleconsultRoutes); // Lot 6
   await app.register(pickupRoutes); // Lot 7
   await app.register(notificationRoutes); // Lot 7
+  await app.register(dashboardRoutes); // Lot 9 — KPIs accueil admin
   await app.register(guestPlugin); // Lot 8 — mode invité (/v1/guest/*)
   await app.register(uploadsRoutes);
 
