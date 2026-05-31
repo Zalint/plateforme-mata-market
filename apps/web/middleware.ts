@@ -46,9 +46,31 @@ const HCAPTCHA = 'https://hcaptcha.com https://*.hcaptcha.com';
  * par React Refresh en dev) et on ajoute `upgrade-insecure-requests`.
  * `'wasm-unsafe-eval'` conservé pour le WebAssembly éventuel sans rouvrir `eval()`.
  */
+/** Extrait l'origine (scheme://host[:port]) d'une URL, ou null si invalide/absente. */
+function originOf(url: string | undefined): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
 function buildCsp(isDev: boolean): string {
   const devConnect = isDev ? ' http://localhost:4000 http://localhost:8081' : '';
   const devFrame = isDev ? ' http://localhost:8081' : '';
+
+  // Origines API + Keycloak dérivées des variables d'env du déploiement (et non
+  // codées en dur) : le navigateur appelle l'API en direct (connect-src) et est
+  // redirigé/iframé vers Keycloak (connect-src + frame-src). Sans ça, un domaine
+  // autre que celui de prod (ex. déploiement de test sur un sous-domaine) verrait
+  // tous ses fetch bloqués par la CSP (« Failed to fetch »).
+  const apiOrigin = originOf(process.env.NEXT_PUBLIC_API_BASE_URL);
+  const kcOrigin = originOf(process.env.NEXT_PUBLIC_KEYCLOAK_URL);
+  const connectExtra = [apiOrigin, kcOrigin, 'https://api.cloudinary.com']
+    .filter(Boolean)
+    .join(' ');
+  const frameExtra = [kcOrigin].filter(Boolean).join(' ');
 
   const scriptSrc = isDev
     ? `script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' ${HCAPTCHA}`
@@ -60,10 +82,10 @@ function buildCsp(isDev: boolean): string {
     `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com ${HCAPTCHA}`,
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https://res.cloudinary.com",
-    `connect-src 'self' https://api.mata.sn https://keycloak.mata.sn https://api.cloudinary.com ${HCAPTCHA}${devConnect}`,
+    `connect-src 'self' ${connectExtra} ${HCAPTCHA}${devConnect}`,
     "worker-src 'self'",
     "manifest-src 'self'",
-    `frame-src https://keycloak.mata.sn ${HCAPTCHA}${devFrame}`,
+    `frame-src ${frameExtra} ${HCAPTCHA}${devFrame}`,
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

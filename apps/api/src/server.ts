@@ -64,7 +64,16 @@ async function buildServer(): Promise<void> {
   app.setSerializerCompiler(serializerCompiler);
 
   await app.register(sensible);
-  await app.register(helmet, { contentSecurityPolicy: false });
+  await app.register(helmet, {
+    contentSecurityPolicy: false,
+    // L'API est servie sur un sous-domaine distinct du web (api.<domaine> vs
+    // app.<domaine>, et localhost:4000 vs :3000 en dev). Le défaut Helmet
+    // `crossOriginResourcePolicy: same-origin` ferait BLOQUER la réponse par le
+    // navigateur (« Failed to fetch ») même quand CORS l'autorise. On passe en
+    // `cross-origin` : la lecture des données reste gardée par CORS ci-dessous
+    // (origin restreint à PUBLIC_WEB_URL).
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  });
   await app.register(cors, {
     origin: [env.PUBLIC_WEB_URL],
     credentials: true,
