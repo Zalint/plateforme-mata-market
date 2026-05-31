@@ -24,9 +24,15 @@ const TONE: Record<ProducerStatus, 'success' | 'warning' | 'neutral' | 'danger'>
   blacklisted: 'danger',
 };
 
+const FILTERS: (ProducerStatus | 'all')[] = ['all', ...PRODUCER_STATUSES];
+
 export default function AdminProducersPage(): React.JSX.Element {
-  const [status, setStatus] = useState<ProducerStatus>('pending');
-  const { data, isLoading } = useAdminProducers({ page: 1, limit: 50, status });
+  const [status, setStatus] = useState<ProducerStatus | 'all'>('all');
+  const { data, isLoading } = useAdminProducers({
+    page: 1,
+    limit: 50,
+    status: status === 'all' ? undefined : status,
+  });
   const validate = useValidateProducer();
 
   const producers = data?.producers ?? [];
@@ -43,9 +49,9 @@ export default function AdminProducersPage(): React.JSX.Element {
       </div>
 
       <div className="flex items-center gap-2 mb-4 overflow-x-auto hide-scrollbar">
-        {PRODUCER_STATUSES.map((s) => (
+        {FILTERS.map((s) => (
           <FilterChip key={s} selected={status === s} onClick={() => setStatus(s)}>
-            {PRODUCER_STATUS_LABEL_FR[s]}
+            {s === 'all' ? 'Tous' : PRODUCER_STATUS_LABEL_FR[s]}
           </FilterChip>
         ))}
       </div>
@@ -81,6 +87,12 @@ export default function AdminProducersPage(): React.JSX.Element {
                   {PRODUCER_TYPE_LABEL_FR[p.type]} · Inscrit le{' '}
                   {new Date(p.createdAt).toLocaleDateString('fr-FR')}
                   {p.phone && ` · ${p.phone}`}
+                  {' · '}
+                  <span className="font-semibold text-stone-700">
+                    {p.ratingCount > 0
+                      ? `★ ${(p.ratingAvg ?? 0).toFixed(1)} (${p.ratingCount} avis)`
+                      : '★ — (aucun avis)'}
+                  </span>
                 </div>
               </div>
               {p.status === 'pending' && (

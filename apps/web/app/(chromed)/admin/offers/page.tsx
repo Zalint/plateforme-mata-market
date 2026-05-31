@@ -10,9 +10,15 @@ import { useAdminOffers, useRejectOffer, useValidateOffer } from '../../../../sr
  *
  * Reproduit la maquette `mockup/index.html` section ADMIN/OFFERS.
  */
+const FILTERS: (OfferStatus | 'all')[] = ['all', ...OFFER_STATUSES];
+
 export default function AdminOffersPage(): React.JSX.Element {
-  const [status, setStatus] = useState<OfferStatus>('pending');
-  const { data, isLoading } = useAdminOffers({ page: 1, limit: 50, status });
+  const [status, setStatus] = useState<OfferStatus | 'all'>('all');
+  const { data, isLoading } = useAdminOffers({
+    page: 1,
+    limit: 50,
+    status: status === 'all' ? undefined : status,
+  });
   const validate = useValidateOffer();
   const reject = useRejectOffer();
   const prompt = usePrompt();
@@ -44,9 +50,9 @@ export default function AdminOffersPage(): React.JSX.Element {
       </div>
 
       <div className="flex items-center gap-2 mb-4 overflow-x-auto hide-scrollbar">
-        {OFFER_STATUSES.map((s) => (
+        {FILTERS.map((s) => (
           <FilterChip key={s} selected={status === s} onClick={() => setStatus(s)}>
-            {OFFER_STATUS_LABEL_FR[s]}
+            {s === 'all' ? 'Toutes' : OFFER_STATUS_LABEL_FR[s]}
           </FilterChip>
         ))}
       </div>

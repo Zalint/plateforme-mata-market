@@ -38,7 +38,13 @@ export function toProducerPublic(p: ProfileWithUser): ProducerProfilePublic {
   };
 }
 
-export function toProducerAdmin(p: ProfileWithUser): ProducerProfileAdmin {
+/** Agrégat de notation d'un producteur (moyenne + nombre d'avis). */
+export type RatingAggregate = { avg: number | null; count: number };
+
+export function toProducerAdmin(
+  p: ProfileWithUser,
+  rating: RatingAggregate = { avg: null, count: 0 },
+): ProducerProfileAdmin {
   // documents est un jsonb. On valide strictement via Zod : si la DB contient
   // une forme inattendue, le caller verra l'erreur — c'est volontaire pour
   // détecter une dérive de format au plus tôt.
@@ -50,5 +56,7 @@ export function toProducerAdmin(p: ProfileWithUser): ProducerProfileAdmin {
     validatedBy: p.validatedBy,
     documents,
     hasBankDetails: p.bankDetails !== null,
+    ratingAvg: rating.avg,
+    ratingCount: rating.count,
   };
 }

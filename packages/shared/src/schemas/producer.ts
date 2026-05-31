@@ -161,9 +161,27 @@ export const ProducerProfileAdminSchema = ProducerProfilePublicSchema.extend({
   validatedBy: UuidSchema.nullable(),
   documents: ProducerDocumentsSchema,
   hasBankDetails: z.boolean(), // pas la valeur, juste si défini
+  // Lot 9 — notation : moyenne (null si aucun avis) + nombre d'avis post-livraison.
+  ratingAvg: z.number().nullable(),
+  ratingCount: z.number().int().nonnegative(),
 });
 
 export type ProducerProfileAdmin = z.infer<typeof ProducerProfileAdminSchema>;
+
+// ─────────────────────────────────────────────────────────────────
+// Notation producteur (Lot 9) · avis client post-livraison
+
+/**
+ * Body POST /v1/producers/:producerId/ratings. Le client note un producteur
+ * pour une commande LIVRÉE dont il est le propriétaire. 1 note par (commande,
+ * producteur) — l'unicité est garantie en base (`@@unique`).
+ */
+export const ProducerRatingCreateSchema = z.object({
+  orderId: UuidSchema,
+  stars: z.number().int().min(1).max(5),
+  comment: z.string().trim().max(500).optional(),
+});
+export type ProducerRatingCreate = z.infer<typeof ProducerRatingCreateSchema>;
 
 // ─────────────────────────────────────────────────────────────────
 // Liste admin (paginée + filtres)

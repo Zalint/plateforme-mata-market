@@ -338,6 +338,9 @@ model User {
   teleconsultSessionsAsPro TeleconsultSession[] @relation("producer_sessions")
   // Lot 7 — push web
   pushSubscriptions PushSubscription[]
+  // Lot 9 — notation producteur (avis post-livraison)
+  ratingsReceived ProducerRating[] @relation("producer_ratings")
+  ratingsGiven    ProducerRating[] @relation("client_ratings")
 
   @@index([role, status])
   @@map("users")
@@ -771,6 +774,7 @@ model Order {
   zone    Zone        @relation(fields: [deliveryZoneId], references: [id], onDelete: Restrict)
   items   OrderItem[]
   payment Payment? // Lot 5 : 1:1 inverse (un order a au plus un payment)
+  ratings ProducerRating[] // Lot 9 : notes producteurs liées à cette commande
 
   @@index([status, createdAt(sort: Desc)])
   @@index([clientUserId, createdAt(sort: Desc)])
@@ -810,6 +814,32 @@ model OrderItem {
   @@index([orderId])
   @@index([offerId])
   @@map("order_items")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// producer_ratings · note client d'un producteur après livraison (Lot 9)
+//
+// 1 note par (commande, producteur) — UNIQUE → idempotent + ancré sur une vraie
+// transaction livrée (anti-faux-avis). La moyenne producteur est calculée à la
+// lecture (agrégat). Clients authentifiés uniquement (clientUserId non null).
+// ─────────────────────────────────────────────────────────────────
+
+model ProducerRating {
+  id             String   @id @default(uuid()) @db.Uuid
+  producerUserId String   @map("producer_user_id") @db.Uuid
+  orderId        String   @map("order_id") @db.Uuid
+  clientUserId   String   @map("client_user_id") @db.Uuid
+  stars          Int // 1..5, validé Zod à la frontière
+  comment        String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  producer User  @relation("producer_ratings", fields: [producerUserId], references: [id], onDelete: Cascade)
+  client   User  @relation("client_ratings", fields: [clientUserId], references: [id], onDelete: Cascade)
+  order    Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([orderId, producerUserId])
+  @@index([producerUserId])
+  @@map("producer_ratings")
 }
 
 // ─────────────────────────────────────────────────────────────────

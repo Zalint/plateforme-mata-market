@@ -9,6 +9,7 @@ import {
   ProducerProfileCreateSchema,
   ProducerProfilePublicSchema,
   ProducerProfileUpdateSchema,
+  ProducerRatingCreateSchema,
   ProducerSuspendInputSchema,
   UuidSchema,
 } from '@mata/shared/schemas';
@@ -21,6 +22,7 @@ import { bankDetailsService } from './bank-details-service.js';
 import { producerService } from './producer-service.js';
 
 const UserIdParamSchema = z.object({ userId: UuidSchema });
+const ProducerIdParamSchema = z.object({ producerId: UuidSchema });
 
 const MyProfileResponseSchema = z.object({
   profile: ProducerProfilePublicSchema.nullable(),
@@ -133,6 +135,32 @@ export async function producerRoutes(app: FastifyInstance): Promise<void> {
       });
       // Re-validation défensive avant sortie réseau.
       return BankDetailsClearSchema.parse(clear);
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────
+  // Notation producteur (Lot 9) · client authentifié, commande livrée dont il
+  // est propriétaire. 1 note par (commande, producteur).
+
+  typed.post(
+    '/v1/producers/:producerId/ratings',
+    {
+      schema: {
+        params: ProducerIdParamSchema,
+        body: ProducerRatingCreateSchema,
+        response: { 204: z.null() },
+      },
+    },
+    async (req, reply) => {
+      requireRole(req, 'client_pro', 'client_particulier');
+      const user = requireUser(req);
+      await producerService.createRating({
+        actorUserId: user.id,
+        producerUserId: req.params.producerId,
+        input: req.body,
+        request: req,
+      });
+      return reply.code(204).send();
     },
   );
 

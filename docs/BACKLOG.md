@@ -80,19 +80,21 @@ exacts où ces dettes sont marquées en commentaire inline.
   consultable hors UI.
 - **Risque si non traité** : friction admin pour traçabilité. Pas bloquant.
 
-## [lot-2→lot-?] Note moyenne producteur (★ 4.8 dans mockup) absente
+## [lot-9→lot-?] Note producteur : affichage catalogue + notation invité
 
-- **Découvert** : Lot 2 (le mockup affiche `★ 4.8`)
-- **Cible** : repoussée Lot 9 → post-reviews le 2026-05-31 (aucune feature
-  reviews encore spécifiée — rien à agréger)
-- **Pourquoi reporté** : décision en début Lot 4 — il n'y a pas de reviews
-  post-livraison au Lot 4 (les orders se terminent à `delivered`, pas de
-  table reviews). Mettre un proxy basé sur le ratio livré/total tromperait
-  les clients. Le placeholder UI reste, l'entrée se traite Lot 9 quand la
-  feature reviews (post-livraison) sera spécifiée.
-- **Fichiers** : packages/ui/src/offer-card.tsx (UI placeholder "—")
-- **Garde-fou actuel** : aucun, juste placeholder.
-- **Risque si non traité** : différence visible avec mockup, à expliquer.
+- **Découvert** : Lot 9 (système de notation livré — voir Résolues)
+- **Cible** : ultérieur (UX catalogue + parcours invité)
+- **Pourquoi reporté** : le système de notation existe (table `producer_ratings`,
+  endpoint, notation client post-livraison, moyenne exposée + colonne admin).
+  Restent deux compléments non bloquants :
+  1. afficher la moyenne (★) sur la carte catalogue (`ProductCard`/`OfferCard`)
+     — aujourd'hui pas de note affichée côté client/guest ;
+  2. permettre la notation par un **invité** (pas de session → ownership par
+     orderId + téléphone à concevoir).
+- **Fichiers** : packages/ui/src/product-card.tsx (pas de ★), apps/api guest.
+- **Garde-fou actuel** : la note moyenne est déjà visible côté **admin**
+  (liste + détail Producteurs) ; le besoin métier principal est couvert.
+- **Risque si non traité** : léger écart mockup (★ catalogue), invités non notés.
 
 ## [lot-7→lot-?] E2E browser push web réel (souscription navigateur)
 
@@ -150,6 +152,32 @@ exacts où ces dettes sont marquées en commentaire inline.
 ---
 
 # Résolues
+
+## [seed fix] Wipe seed : `pickup_items` bloquaient le DELETE `order_items` — résolue 2026-05-31
+
+Découvert en enrichissant `dev-seed.ts` (ajout de 5 producteurs + commandes
+livrées/avis pour la vue admin). Le couplage commande↔tournée (commit 346a288)
+a ajouté une FK `pickup_items.order_item_id` en `onDelete: Restrict` ; or le
+wipe idempotent du seed ne supprimait pas les `pickup_items` avant les
+`order_items` → `23001` dès qu'une tournée existait en base. Fix : le wipe
+supprime désormais les `pickup_items` référençant les order_items wipés, puis
+les tournées devenues vides (`items: { none: {} }`), avant le DELETE
+`order_items`. Vérifié idempotent (2 runs consécutifs verts).
+Fichier : `apps/api/prisma/seeds/dev-seed.ts`.
+
+## [lot-2→lot-9] Système de notation producteur — résolue 2026-05-31 (Lot 9)
+
+Le cœur du besoin (note moyenne producteur, ★ du mockup) est livré : table
+`producer_ratings` (migration `lot9_producer_ratings`, unique (orderId,
+producerUserId)), endpoint `POST /v1/producers/:producerId/ratings` (client
+authentifié, commande **livrée** dont il est propriétaire, audit
+`producer.rating.create`), agrégation moyenne+count exposée dans
+`ProducerProfileAdmin`, colonne « ★ moyenne (n avis) » dans la liste/détail
+admin, et UI client de notation (★ + commentaire) sur les commandes livrées.
+5 tests d'intégration (note OK + moyenne, non livrée→CONFLICT, non-owner→
+FORBIDDEN, producteur absent→VALIDATION, doublon→CONFLICT). Compléments non
+bloquants (affichage ★ catalogue + notation invité) suivis dans l'entrée active
+`[lot-9→lot-?] Note producteur : affichage catalogue + notation invité`.
 
 ## [lot-8→lot-9] Mockup checkout : trois moyens de paiement → deux exposés — résolue 2026-05-31 (Lot 9)
 
@@ -499,13 +527,24 @@ Si la DB Keycloak est wipée (`docker compose down -v`), le realm `mata` doit
 1. http://localhost:8081/admin/master/console/ (login `admin`/`admin`)
 2. Create Realm → Browse → `infra/keycloak/realm-export.json`
 
-Depuis le Lot 3, le realm-export embarque deux users avec UUID stables
-et password `mata` (cf. `infra/keycloak/realm-export.json` § `users`) :
+Le realm-export embarque des users avec UUID stables et password `mata`
+(cf. `infra/keycloak/realm-export.json` § `users`) :
 
-| Username       | Role     | UUID Keycloak                          |
-|----------------|----------|----------------------------------------|
-| `mor.diop`     | producer | `6e426967-1bae-4280-8b7d-6597a020416c` |
-| `aissatou.sow` | admin    | `10a5b1c2-3d4e-4f56-8090-a1b2c3d4e5f6` |
+| Username         | Role           | UUID Keycloak                          |
+|------------------|----------------|----------------------------------------|
+| `mor.diop`       | producer       | `6e426967-1bae-4280-8b7d-6597a020416c` |
+| `aissatou.sow`   | admin          | `10a5b1c2-3d4e-4f56-8090-a1b2c3d4e5f6` |
+| `lacalebasse.client` | client_pro | `20a5b1c2-3d4e-4f56-8090-a1b2c3d4e5f6` |
+| `ibrahima.ndiaye`| teleconsultant | `30b6c2d3-4e5f-4067-9101-b2c3d4e5f607` |
+| `fatou.ndiaye`   | producer       | `a1000001-0000-4000-8000-000000000001` |
+| `ousmane.ba`     | producer       | `a1000002-0000-4000-8000-000000000002` |
+| `awa.sarr`       | producer       | `a1000003-0000-4000-8000-000000000003` |
+| `cheikh.fall`    | producer       | `a1000004-0000-4000-8000-000000000004` |
+| `khady.diallo`   | producer       | `a1000005-0000-4000-8000-000000000005` |
+
+Les 5 producteurs Lot 9 (`fatou`/`ousmane` pending, `awa` validée, `cheikh`
+suspendu, `khady` blacklisté) alimentent la file de validation de la vue admin
+Producteurs (un producteur par statut).
 
 Les mêmes UUIDs sont câblés en dur dans `apps/api/prisma/seeds/dev-seed.ts`,
 donc un wipe complet (`docker compose down -v` + `pnpm db:seed` + re-import

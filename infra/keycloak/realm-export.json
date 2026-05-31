@@ -157,6 +157,86 @@
         }
       ],
       "realmRoles": ["teleconsultant"]
+    },
+    {
+      "id": "a1000001-0000-4000-8000-000000000001",
+      "username": "fatou.ndiaye",
+      "enabled": true,
+      "emailVerified": false,
+      "firstName": "Fatou",
+      "lastName": "Ndiaye",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "mata",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["producer"]
+    },
+    {
+      "id": "a1000002-0000-4000-8000-000000000002",
+      "username": "ousmane.ba",
+      "enabled": true,
+      "emailVerified": false,
+      "firstName": "Ousmane",
+      "lastName": "Ba",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "mata",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["producer"]
+    },
+    {
+      "id": "a1000003-0000-4000-8000-000000000003",
+      "username": "awa.sarr",
+      "enabled": true,
+      "emailVerified": false,
+      "firstName": "Awa",
+      "lastName": "Sarr",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "mata",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["producer"]
+    },
+    {
+      "id": "a1000004-0000-4000-8000-000000000004",
+      "username": "cheikh.fall",
+      "enabled": true,
+      "emailVerified": false,
+      "firstName": "Cheikh",
+      "lastName": "Fall",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "mata",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["producer"]
+    },
+    {
+      "id": "a1000005-0000-4000-8000-000000000005",
+      "username": "khady.diallo",
+      "enabled": true,
+      "emailVerified": false,
+      "firstName": "Khady",
+      "lastName": "Diallo",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "mata",
+          "temporary": false
+        }
+      ],
+      "realmRoles": ["producer"]
     }
   ]
 }

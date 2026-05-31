@@ -9,6 +9,7 @@ import type {
   ProducerProfileCreate,
   ProducerProfilePublic,
   ProducerProfileUpdate,
+  ProducerRatingCreate,
 } from '@mata/shared/schemas';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../http-client';
@@ -134,6 +135,15 @@ export function useBlacklistProducer() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['producers', 'admin'] });
     },
+  });
+}
+
+/** Notation d'un producteur (client authentifié, commande livrée). */
+export function useRateProducer() {
+  const token = useAuthToken();
+  return useMutation({
+    mutationFn: (input: { producerUserId: string; data: ProducerRatingCreate }) =>
+      apiClient.post<void>(`/v1/producers/${input.producerUserId}/ratings`, input.data, token),
   });
 }
 

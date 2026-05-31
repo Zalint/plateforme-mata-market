@@ -16,6 +16,7 @@ export type AuditAction =
   | 'producer.suspend'
   | 'producer.blacklist'
   | 'producer.validate'
+  | 'producer.rating.create'
   // Offres
   | 'offer.create'
   | 'offer.update'

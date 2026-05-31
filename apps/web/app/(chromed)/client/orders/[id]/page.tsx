@@ -5,7 +5,12 @@ import { Icon, Money, StatusBadge, type StatusTone, useToast } from '@mata/ui';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
-import { useCancelOrder, useCreatePaymentIntent, useOrder } from '../../../../../src/lib/api';
+import {
+  useCancelOrder,
+  useCreatePaymentIntent,
+  useOrder,
+  useRateProducer,
+} from '../../../../../src/lib/api';
 
 /**
  * Client / Détail commande · timeline + items + actions.
@@ -160,6 +165,30 @@ export default function ClientOrderDetailPage(): React.JSX.Element {
             </div>
           </div>
 
+          {/* Notation des producteurs (commande livrée) */}
+          {order.status === 'delivered' && (
+            <div className="bg-white rounded-2xl border border-stone-200 shadow-soft p-5">
+              <h3 className="font-bold text-stone-900 mb-1">Noter les producteurs</h3>
+              <p className="text-sm text-stone-500 mb-3">
+                Votre commande est livrée — partagez votre avis.
+              </p>
+              <div className="space-y-3">
+                {Array.from(
+                  new Map(
+                    order.items.map((i) => [i.producerUserId, i.producerDisplayName]),
+                  ).entries(),
+                ).map(([pid, pname]) => (
+                  <RatingBlock
+                    key={pid}
+                    orderId={order.id}
+                    producerUserId={pid}
+                    producerName={pname}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Items */}
           <div className="bg-white rounded-2xl border border-stone-200 shadow-soft p-5">
             <h3 className="font-bold text-stone-900 mb-3">Articles</h3>
@@ -276,6 +305,86 @@ export default function ClientOrderDetailPage(): React.JSX.Element {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Bloc de notation d'un producteur pour la commande livrée courante.
+ * Sélecteur 1–5 ★ + commentaire optionnel. 1 envoi (idempotent côté serveur :
+ * un 2e essai renvoie 409 « déjà noté », affiché en toast).
+ */
+function RatingBlock({
+  orderId,
+  producerUserId,
+  producerName,
+}: {
+  orderId: string;
+  producerUserId: string;
+  producerName: string;
+}): React.JSX.Element {
+  const rate = useRateProducer();
+  const toast = useToast();
+  const [stars, setStars] = useState(0);
+  const [comment, setComment] = useState('');
+  const [done, setDone] = useState(false);
+
+  async function submit(): Promise<void> {
+    if (stars < 1) {
+      toast.info('Choisissez une note (1 à 5 étoiles).');
+      return;
+    }
+    try {
+      await rate.mutateAsync({
+        producerUserId,
+        data: { orderId, stars, comment: comment.trim() || undefined },
+      });
+      setDone(true);
+      toast.success('Merci pour votre note !');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de la notation.');
+    }
+  }
+
+  if (done) {
+    return (
+      <div className="p-3 rounded-xl bg-green-50 border border-green-200 text-sm text-green-800 flex items-center gap-2">
+        <Icon name="check-circle" className="w-4 h-4" /> {producerName} — noté {stars}/5. Merci !
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-3 rounded-xl bg-stone-50 border border-stone-100">
+      <div className="font-semibold text-stone-900 text-sm">{producerName}</div>
+      <div className="flex items-center gap-1 mt-1.5">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => setStars(n)}
+            aria-label={`${n} étoile${n > 1 ? 's' : ''}`}
+            className={`text-2xl leading-none ${n <= stars ? 'text-mata-700' : 'text-stone-300'} hover:text-mata-700`}
+          >
+            ★
+          </button>
+        ))}
+      </div>
+      <textarea
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        placeholder="Commentaire (optionnel)…"
+        rows={2}
+        className="mt-2 w-full p-2 text-sm rounded-lg border border-stone-200 outline-none focus:border-mata-700"
+      />
+      <button
+        type="button"
+        onClick={submit}
+        disabled={rate.isPending}
+        className="mt-2 px-4 py-2 rounded-lg bg-mata-700 hover:bg-mata-800 disabled:bg-stone-300 text-white text-sm font-bold"
+      >
+        {rate.isPending ? 'Envoi…' : 'Envoyer ma note'}
+      </button>
     </div>
   );
 }

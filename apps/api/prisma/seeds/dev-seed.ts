@@ -1,7 +1,11 @@
 /**
- * Seed dev · 3 utilisateurs alignés Keycloak (Mor Diop / Aïssatou Sow /
- * Resto La Calebasse), 13 zones, profil producteur complet pour Mor avec
- * 2 sites + 3 offres + 6 rules pricing par défaut (1 par catégorie).
+ * Seed dev · 9 utilisateurs alignés Keycloak (Mor Diop, Aïssatou Sow admin,
+ * Resto La Calebasse client, Ibrahima Ndiaye téléconseiller + 5 producteurs
+ * Lot 9 : Fatou/Ousmane pending, Awa validée, Cheikh suspendu, Khady
+ * blacklisté). 13 zones. Profils producteurs (1 par statut → file de
+ * validation admin non vide). Mor : 2 sites + 3 offres ; Awa : 1 site + 1
+ * offre validée. 6 rules pricing par défaut. 3 commandes livrées + 3 avis
+ * (La Calebasse note Mor 5★+4★ → 4.5 et Awa 5★) pour démontrer la note moyenne.
  *
  * Usage : `pnpm --filter @mata/api db:seed`
  *
@@ -12,11 +16,12 @@
  * Idempotent (vérifié par re-run successifs) :
  *  - users  : upsert par phone/email, ré-aligne keycloakId au passage
  *  - zones  : upsert par slug
- *  - profil : upsert par userId
- *  - sites + offres : delete-create (Mor uniquement) en wipant aussi en
- *    cascade les order_items + orders + pricing_snapshots qui les
- *    référencent (FK onDelete=Restrict)
+ *  - profils : upsert par userId (Mor + 5 producteurs Lot 9)
+ *  - sites + offres : delete-create (Mor + Awa) en wipant aussi en cascade les
+ *    order_items + orders + pricing_snapshots + producer_ratings qui les
+ *    référencent (FK onDelete=Restrict/Cascade)
  *  - rules pricing : delete + createMany sur les 6 catégories
+ *  - commandes + avis : recréés à chaque run (supprimés par le wipe ci-dessus)
  *
  * PROD : ce code n'est JAMAIS exécuté. Le seed prod est `prod-bootstrap.ts`,
  * il refuse de tourner si la DB n'est pas vide.
@@ -25,8 +30,11 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PrismaPg } from '@prisma/adapter-pg';
 import {
+  DeliveryPeriod,
   OfferStatus,
   OfferUnit,
+  OrderStatus,
+  PaymentStatus,
   PricingBase,
   PricingModel,
   PricingScope,
@@ -65,10 +73,15 @@ const prisma = new PrismaClient({
 // keycloakId d'un user (ex: migration UUID) ne casse pas le seed.
 //
 // Identifiants de login (dev local, password commun `mata`) :
-//   mor.diop           / mata  → role producer
+//   mor.diop           / mata  → role producer (validé)
 //   aissatou.sow       / mata  → role admin
 //   lacalebasse.client / mata  → role client_pro
 //   ibrahima.ndiaye    / mata  → role teleconsultant (Lot 6)
+//   fatou.ndiaye       / mata  → role producer (pending — Lot 9)
+//   ousmane.ba         / mata  → role producer (pending — Lot 9)
+//   awa.sarr           / mata  → role producer (validé — Lot 9)
+//   cheikh.fall        / mata  → role producer (suspendu — Lot 9)
+//   khady.diallo       / mata  → role producer (blacklisté — Lot 9)
 //
 // Le champ `username` (Lot 6) est utilisé par le lookup producteur lors du
 // démarrage d'une session téléconseil (cf. mockup §2888 — l'admin saisit
@@ -109,6 +122,103 @@ const USERS = [
     phone: null,
     displayName: 'Ibrahima Ndiaye',
     role: UserRole.teleconsultant,
+  },
+  // Lot 9 — producteurs supplémentaires pour alimenter la file de validation
+  // admin (un producteur par statut) + démontrer la note moyenne. UUIDs alignés
+  // sur le realm-export (cf. infra/keycloak/realm-export.json § users), password
+  // commun `mata`. Leurs profils (statut/type/zone) sont définis dans PRODUCERS.
+  {
+    slug: 'fatou-ndiaye',
+    keycloakId: 'a1000001-0000-4000-8000-000000000001',
+    username: 'fatou.ndiaye',
+    email: null,
+    phone: '+221770000001',
+    displayName: 'Fatou Ndiaye',
+    role: UserRole.producer,
+  },
+  {
+    slug: 'ousmane-ba',
+    keycloakId: 'a1000002-0000-4000-8000-000000000002',
+    username: 'ousmane.ba',
+    email: null,
+    phone: '+221770000002',
+    displayName: 'Ousmane Ba',
+    role: UserRole.producer,
+  },
+  {
+    slug: 'awa-sarr',
+    keycloakId: 'a1000003-0000-4000-8000-000000000003',
+    username: 'awa.sarr',
+    email: null,
+    phone: '+221770000003',
+    displayName: 'Awa Sarr',
+    role: UserRole.producer,
+  },
+  {
+    slug: 'cheikh-fall',
+    keycloakId: 'a1000004-0000-4000-8000-000000000004',
+    username: 'cheikh.fall',
+    email: null,
+    phone: '+221770000004',
+    displayName: 'Cheikh Fall',
+    role: UserRole.producer,
+  },
+  {
+    slug: 'khady-diallo',
+    keycloakId: 'a1000005-0000-4000-8000-000000000005',
+    username: 'khady.diallo',
+    email: null,
+    phone: '+221770000005',
+    displayName: 'Khady Diallo',
+    role: UserRole.producer,
+  },
+] as const;
+
+// ─────────────────────────────────────────────────────────────────
+// Profils des producteurs additionnels (Lot 9). Un par statut pour que chaque
+// onglet de la vue admin Producteurs soit non vide (À valider ×2, Validé,
+// Suspendu, Blacklisté ; Mor Diop fournit le 2e Validé). Awa Sarr (validée)
+// reçoit un site + une offre validée pour être commandable → support des avis.
+const PRODUCERS = [
+  {
+    slug: 'fatou-ndiaye',
+    type: ProducerType.vegetables,
+    zoneSlug: 'niayes',
+    status: ProducerStatus.pending,
+    whatsappPhone: '+221770000001',
+    bio: 'Maraîchère dans les Niayes. Légumes de saison cultivés sans pesticides.',
+  },
+  {
+    slug: 'ousmane-ba',
+    type: ProducerType.cattle,
+    zoneSlug: 'dahra',
+    status: ProducerStatus.pending,
+    whatsappPhone: '+221770000002',
+    bio: 'Éleveur bovin à Dahra. Zébus Gobra et viande de bœuf.',
+  },
+  {
+    slug: 'awa-sarr',
+    type: ProducerType.fish,
+    zoneSlug: 'joal',
+    status: ProducerStatus.validated,
+    whatsappPhone: '+221770000003',
+    bio: 'Mareyeuse à Joal-Fadiouth. Poisson frais débarqué du jour.',
+  },
+  {
+    slug: 'cheikh-fall',
+    type: ProducerType.sheep,
+    zoneSlug: 'mbour',
+    status: ProducerStatus.suspended,
+    whatsappPhone: '+221770000004',
+    bio: 'Éleveur ovin à Mbour. Moutons Ladoum et Touabire.',
+  },
+  {
+    slug: 'khady-diallo',
+    type: ProducerType.poultry,
+    zoneSlug: 'thies-ville',
+    status: ProducerStatus.blacklisted,
+    whatsappPhone: '+221770000005',
+    bio: 'Aviculteur à Thiès. Poulets de chair.',
   },
 ] as const;
 
@@ -258,22 +368,62 @@ async function main(): Promise<void> {
   });
   log(`producer  Mor Diop · poultry · validated (zone Pout)`);
 
-  // 4. Sites de Mor (reset complet pour idempotence).
+  // 3b. Producteurs additionnels (Lot 9) — un par statut pour alimenter la
+  // file de validation admin + démontrer la note moyenne. Upsert par userId
+  // (idempotent). validatedAt/validatedBy posés pour validated/suspended
+  // (états atteints après une validation admin) ; pending/blacklisted restent
+  // sans validation.
+  for (const p of PRODUCERS) {
+    const userId = userIdBySlug.get(p.slug);
+    const zoneId = zoneIdBySlug.get(p.zoneSlug);
+    if (!userId || !zoneId) {
+      throw new Error(`Seed invariant: missing user or zone for producer ${p.slug}`);
+    }
+    const wasValidated =
+      p.status === ProducerStatus.validated || p.status === ProducerStatus.suspended;
+    const profileData = {
+      type: p.type,
+      status: p.status,
+      zoneId,
+      whatsappPhone: p.whatsappPhone,
+      bio: p.bio,
+      validatedAt: wasValidated ? new Date('2026-03-01T10:00:00Z') : null,
+      validatedBy: wasValidated ? adminUserId : null,
+    };
+    await prisma.producerProfile.upsert({
+      where: { userId },
+      update: profileData,
+      create: { userId, ...profileData },
+    });
+  }
+  const awaUserId = userIdBySlug.get('awa-sarr');
+  const joalZoneId = zoneIdBySlug.get('joal');
+  if (!awaUserId || !joalZoneId) {
+    throw new Error('Seed invariant: missing Awa Sarr user or Joal zone');
+  }
+  log(`producer  +5 producteurs (pending×2, validated, suspended, blacklisted)`);
+
+  // 4. Sites + commerce des producteurs commandables (reset complet pour
+  // idempotence). « Commandables » = ceux qui portent des offres et donc des
+  // commandes : Mor Diop + Awa Sarr (Lot 9). Les autres producteurs n'ont ni
+  // site ni offre, leur profil seul suffit.
   //
   // Ordre de suppression (FK onDelete=Restrict côté offers/order_items) :
   //   order_items  → orders  → pricing_snapshots → offer_photos → offers → sites
-  // En dev, on accepte de wiper toutes les commandes touchant les offres de Mor
-  // pour que le seed reste idempotent. PROD : ce code n'est jamais exécuté
-  // (seed prod = prod-bootstrap.ts séparé, refuse de tourner si DB non vide).
-  const morOfferIds = (
+  // Les producer_ratings partent en cascade avec les orders (FK onDelete=Cascade).
+  // En dev, on accepte de wiper toutes les commandes touchant ces offres pour
+  // que le seed reste idempotent. PROD : ce code n'est jamais exécuté (seed prod
+  // = prod-bootstrap.ts séparé, refuse de tourner si DB non vide).
+  const commerceProducerIds = [morUserId, awaUserId];
+  const seededOfferIds = (
     await prisma.offer.findMany({
-      where: { producerUserId: morUserId },
+      where: { producerUserId: { in: commerceProducerIds } },
       select: { id: true },
     })
   ).map((o) => o.id);
-  if (morOfferIds.length > 0) {
+  if (seededOfferIds.length > 0) {
     const orderItemsToDelete = await prisma.orderItem.findMany({
-      where: { offerId: { in: morOfferIds } },
+      where: { offerId: { in: seededOfferIds } },
       select: { id: true, orderId: true, pricingSnapshotId: true },
     });
     const orderItemIds = orderItemsToDelete.map((i) => i.id);
@@ -294,17 +444,35 @@ async function main(): Promise<void> {
         where: { id: { in: [...new Set(payoutIdsToDelete)] } },
       });
     }
+    // Lot 7 — wipe des pickup_items qui référencent ces order_items (FK
+    // RESTRICT, ajoutée au couplage commande↔tournée). Sans ça, le DELETE
+    // order_items échoue. On supprime ensuite les tournées devenues vides.
+    const pickupIdsToCheck = (
+      await prisma.pickupItem.findMany({
+        where: { orderItemId: { in: orderItemIds } },
+        select: { pickupId: true },
+      })
+    ).map((pi) => pi.pickupId);
+    await prisma.pickupItem.deleteMany({ where: { orderItemId: { in: orderItemIds } } });
+    if (pickupIdsToCheck.length > 0) {
+      await prisma.pickup.deleteMany({
+        where: { id: { in: [...new Set(pickupIdsToCheck)] }, items: { none: {} } },
+      });
+    }
     // Lot 5 — wipe payments des orders qu'on supprime (FK CASCADE depuis order).
     await prisma.payment.deleteMany({ where: { orderId: { in: orderIds } } });
-    await prisma.orderItem.deleteMany({ where: { offerId: { in: morOfferIds } } });
+    await prisma.orderItem.deleteMany({ where: { offerId: { in: seededOfferIds } } });
+    // Les producer_ratings (Lot 9) liés à ces orders partent en cascade.
     await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
     await prisma.pricingSnapshot.deleteMany({ where: { id: { in: snapshotIds } } });
     // audit_log : on garde les entrées historiques (pas de FK, pas de cascade
     // requise). Si tu veux un wipe complet pour debug, ajoute :
     //   await prisma.auditLog.deleteMany({ where: { targetId: { in: orderIds } } });
   }
-  await prisma.offer.deleteMany({ where: { producerUserId: morUserId } });
-  await prisma.productionSite.deleteMany({ where: { producerUserId: morUserId } });
+  await prisma.offer.deleteMany({ where: { producerUserId: { in: commerceProducerIds } } });
+  await prisma.productionSite.deleteMany({
+    where: { producerUserId: { in: commerceProducerIds } },
+  });
   await prisma.productionSite.createMany({
     data: [
       {
@@ -394,6 +562,45 @@ async function main(): Promise<void> {
   });
   log(`offers    3 offres créées (validated × 1, pending × 1, draft × 1)`);
 
+  // 5b. Site + offre validée d'Awa Sarr (mareyeuse) — la rend commandable pour
+  // que La Calebasse puisse passer une commande livrée et la noter (Lot 9).
+  await prisma.productionSite.create({
+    data: {
+      producerUserId: awaUserId,
+      name: 'Débarcadère Joal',
+      type: SiteType.mareyage,
+      zoneId: joalZoneId,
+      addressLine: 'Quai de pêche, Joal-Fadiouth',
+      geoLat: 14.1667,
+      geoLng: -16.8333,
+      vehicleAccess: 'utilitaire',
+      contactName: 'Awa',
+      contactPhone: '+221770000003',
+      pickupHours: 'Matin · 7h-11h',
+    },
+  });
+  const awaSite = await prisma.productionSite.findFirstOrThrow({
+    where: { producerUserId: awaUserId },
+  });
+  await prisma.offer.create({
+    data: {
+      producerUserId: awaUserId,
+      siteId: awaSite.id,
+      category: ProductCategory.fish,
+      status: OfferStatus.validated,
+      title: 'Thiof frais',
+      unit: OfferUnit.kg,
+      quantity: 100,
+      priceFcfa: 2500,
+      availableFrom: new Date('2026-05-26'),
+      qualityNote: 'Pêche du jour · vidé sur demande',
+      submittedAt: new Date('2026-05-25T09:00:00Z'),
+      validatedAt: new Date('2026-05-25T15:00:00Z'),
+      validatedBy: adminUserId,
+    },
+  });
+  log(`offers    +1 offre validée Awa Sarr (Thiof frais)`);
+
   // ─────────────────────────────────────────────────────────────────
   // Pricing rules par défaut · une rule `category` active par catégorie
   // produit, créée par Aïssatou (admin). Permet à `POST /v1/orders` de
@@ -445,6 +652,133 @@ async function main(): Promise<void> {
   log(
     `pricing   ${allCategories.length} rules par défaut (1 par catégorie, model=commission_pct 10%)`,
   );
+
+  // ─────────────────────────────────────────────────────────────────
+  // 6. Commandes livrées + avis (Lot 9) · La Calebasse note Mor & Awa.
+  //
+  // Une note (`producer_ratings`) exige une commande LIVRÉE dont le client est
+  // propriétaire (cf. producerService.createRating, CLAUDE.md §G). On fabrique
+  // donc 3 commandes `delivered`/`paid` pour La Calebasse, chacune avec un
+  // pricing_snapshot figé (composantes cohérentes avec les rules : commission
+  // 10 %, marge 3 %, collecte 120, livraison 200, stockage 50). Numéros
+  // CMD-2026-90xx pour ne pas collisionner avec la séquence order_number_seq.
+  //
+  // Idempotent : ces commandes référencent les offres de Mor/Awa, donc le wipe
+  // de l'étape 4 les supprime au re-run (les producer_ratings partent en
+  // cascade depuis order). On crée le snapshot AVANT l'order pour rester en
+  // écriture scalaire (pas de mélange relation/scalaire Prisma).
+  // ─────────────────────────────────────────────────────────────────
+  const laCalebasseUserId = userIdBySlug.get('la-calebasse');
+  const almadiesZoneId = zoneIdBySlug.get('almadies');
+  if (!laCalebasseUserId || !almadiesZoneId) {
+    throw new Error('Seed invariant: missing La Calebasse user or Almadies zone');
+  }
+  const morPoultryOffer = await prisma.offer.findFirstOrThrow({
+    where: { producerUserId: morUserId, title: 'Poulet entier' },
+  });
+  const awaFishOffer = await prisma.offer.findFirstOrThrow({
+    where: { producerUserId: awaUserId, title: 'Thiof frais' },
+  });
+
+  const ratedOrders = [
+    {
+      orderNumber: 'CMD-2026-9001',
+      offer: morPoultryOffer,
+      producerUserId: morUserId,
+      quantity: 10,
+      deliveredAt: '2026-05-20T16:00:00Z',
+      stars: 5,
+      comment: 'Poulets fermiers excellents, livraison à l’heure.',
+    },
+    {
+      orderNumber: 'CMD-2026-9002',
+      offer: awaFishOffer,
+      producerUserId: awaUserId,
+      quantity: 5,
+      deliveredAt: '2026-05-22T16:00:00Z',
+      stars: 5,
+      comment: 'Thiof très frais, parfait pour le restaurant.',
+    },
+    {
+      orderNumber: 'CMD-2026-9003',
+      offer: morPoultryOffer,
+      producerUserId: morUserId,
+      quantity: 4,
+      deliveredAt: '2026-05-28T16:00:00Z',
+      stars: 4,
+      comment: 'Bonne qualité, un poulet un peu petit.',
+    },
+  ];
+
+  for (const o of ratedOrders) {
+    const producerPrice = o.offer.priceFcfa;
+    const commission = Math.round(producerPrice * 0.1);
+    const safetyMargin = Math.round(producerPrice * 0.03);
+    const collection = 120;
+    const delivery = 200;
+    const storage = 50;
+    const discount = 0;
+    const finalPrice =
+      producerPrice + commission + collection + delivery + storage + safetyMargin - discount;
+    const deliveredAt = new Date(o.deliveredAt);
+
+    const snapshot = await prisma.pricingSnapshot.create({
+      data: {
+        modelUsed: PricingModel.commission_pct,
+        producerPriceFcfa: producerPrice,
+        commissionFcfa: commission,
+        collectionFcfa: collection,
+        deliveryFcfa: delivery,
+        storageFcfa: storage,
+        safetyMarginFcfa: safetyMargin,
+        discountFcfa: discount,
+        finalPriceFcfa: finalPrice,
+        producerShareFcfa: producerPrice,
+        platformShareFcfa: finalPrice - producerPrice,
+        quantity: o.quantity,
+      },
+    });
+
+    const order = await prisma.order.create({
+      data: {
+        orderNumber: o.orderNumber,
+        clientUserId: laCalebasseUserId,
+        status: OrderStatus.delivered,
+        deliveryZoneId: almadiesZoneId,
+        deliveryAddressLine: 'Route des Almadies, Dakar',
+        deliverySlotDate: deliveredAt,
+        deliverySlotPeriod: DeliveryPeriod.morning,
+        totalFcfa: finalPrice * o.quantity,
+        paymentStatus: PaymentStatus.paid,
+        confirmedAt: deliveredAt,
+        collectedAt: deliveredAt,
+        storedAt: deliveredAt,
+        deliveredAt,
+        items: {
+          create: [
+            {
+              offerId: o.offer.id,
+              producerUserId: o.producerUserId,
+              quantity: o.quantity,
+              unitPriceAtOrder: producerPrice,
+              pricingSnapshotId: snapshot.id,
+            },
+          ],
+        },
+      },
+    });
+
+    await prisma.producerRating.create({
+      data: {
+        producerUserId: o.producerUserId,
+        orderId: order.id,
+        clientUserId: laCalebasseUserId,
+        stars: o.stars,
+        comment: o.comment,
+      },
+    });
+  }
+  log(`orders    3 commandes livrées + 3 avis (Mor 5★+4★ → 4.5 · Awa 5★ → 5.0)`);
 }
 
 function log(line: string): void {

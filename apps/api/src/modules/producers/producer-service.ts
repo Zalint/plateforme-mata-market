@@ -6,12 +6,36 @@ import type {
   ProducerProfileCreate,
   ProducerProfilePublic,
   ProducerProfileUpdate,
+  ProducerRatingCreate,
 } from '@mata/shared/schemas';
-import type { Prisma, ProducerStatus } from '@prisma/client';
+import { Prisma, type ProducerStatus } from '@prisma/client';
 import type { FastifyRequest } from 'fastify';
 import { prisma } from '../../lib/prisma.js';
 import { auditService } from '../audit/index.js';
-import { toProducerAdmin, toProducerPublic } from './mappers.js';
+import { orderService } from '../orders/index.js';
+import { type RatingAggregate, toProducerAdmin, toProducerPublic } from './mappers.js';
+
+/**
+ * Agrégats de notation (moyenne + nombre d'avis) pour un ensemble de producteurs.
+ * Une seule requête `groupBy` → pas de N+1 sur la liste admin.
+ */
+async function ratingAggregates(producerUserIds: string[]): Promise<Map<string, RatingAggregate>> {
+  const map = new Map<string, RatingAggregate>();
+  if (producerUserIds.length === 0) return map;
+  const rows = await prisma.producerRating.groupBy({
+    by: ['producerUserId'],
+    where: { producerUserId: { in: producerUserIds } },
+    _avg: { stars: true },
+    _count: { _all: true },
+  });
+  for (const r of rows) {
+    map.set(r.producerUserId, {
+      avg: r._avg.stars === null ? null : Math.round(r._avg.stars * 10) / 10,
+      count: r._count._all,
+    });
+  }
+  return map;
+}
 
 /**
  * Service producteurs · CRUD profil + transitions de statut.
@@ -149,8 +173,9 @@ export const producerService = {
       }),
       prisma.producerProfile.count({ where }),
     ]);
+    const ratings = await ratingAggregates(rows.map((r) => r.userId));
     return {
-      producers: rows.map(toProducerAdmin),
+      producers: rows.map((r) => toProducerAdmin(r, ratings.get(r.userId))),
       meta: {
         page: query.page,
         limit: query.limit,
@@ -169,7 +194,60 @@ export const producerService = {
       include: userInclude,
     });
     if (!row) throw new DomainError('NOT_FOUND', 'Producteur introuvable');
-    return toProducerAdmin(row);
+    const ratings = await ratingAggregates([userId]);
+    return toProducerAdmin(row, ratings.get(userId));
+  },
+
+  /**
+   * Notation d'un producteur par un client, pour une commande LIVRÉE dont il
+   * est propriétaire (Lot 9). 1 note par (commande, producteur) — l'unicité DB
+   * (`@@unique`) garantit l'idempotence. Validation de la commande via
+   * l'interface publique `orderService` (§G3). Audit `producer.rating.create`.
+   */
+  async createRating(args: {
+    actorUserId: string;
+    producerUserId: string;
+    input: ProducerRatingCreate;
+    request?: FastifyRequest;
+  }): Promise<void> {
+    const { actorUserId, producerUserId, input, request } = args;
+
+    const order = await orderService.getById(input.orderId);
+    if (order.status !== 'delivered') {
+      throw new DomainError('CONFLICT', 'Notation possible uniquement après livraison');
+    }
+    if (order.clientUserId !== actorUserId) {
+      throw new DomainError('FORBIDDEN', "Cette commande n'est pas la vôtre");
+    }
+    if (!order.items.some((i) => i.producerUserId === producerUserId)) {
+      throw new DomainError('VALIDATION', "Ce producteur n'est pas dans cette commande");
+    }
+
+    try {
+      await prisma.producerRating.create({
+        data: {
+          producerUserId,
+          orderId: input.orderId,
+          clientUserId: actorUserId,
+          stars: input.stars,
+          comment: input.comment ?? null,
+        },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+        throw new DomainError('CONFLICT', 'Vous avez déjà noté ce producteur pour cette commande');
+      }
+      throw e;
+    }
+
+    await auditService.log({
+      actorUserId,
+      action: 'producer.rating.create',
+      targetType: 'producer',
+      targetId: producerUserId,
+      newValue: { orderId: input.orderId, stars: input.stars },
+      request,
+    });
   },
 
   /**
