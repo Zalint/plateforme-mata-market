@@ -101,11 +101,16 @@ export function middleware(request: NextRequest): NextResponse {
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 
-  // Auth check : redirect vers login si pas de cookie refresh et route protégée
+  // Auth check : redirect vers login si pas de cookie refresh et route protégée.
+  // On bâtit l'URL sur l'origine PUBLIQUE (dérivée de KEYCLOAK_REDIRECT_URI) et
+  // non sur `request.url` : derrière le reverse-proxy, ce dernier porte l'hôte
+  // interne du conteneur (localhost:3000) → la redirection partirait vers
+  // localhost. Fallback sur request.url si la variable est absente.
   if (!isPublic && pathname !== '/') {
     const hasRefresh = request.cookies.has(COOKIE_REFRESH);
     if (!hasRefresh) {
-      const loginUrl = new URL('/auth/login', request.url);
+      const base = originOf(process.env.KEYCLOAK_REDIRECT_URI) ?? request.url;
+      const loginUrl = new URL('/auth/login', base);
       return NextResponse.redirect(loginUrl);
     }
   }
