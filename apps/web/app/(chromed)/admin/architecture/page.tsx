@@ -259,11 +259,23 @@ export default function AdminArchitecturePage(): React.JSX.Element {
           Chaque module suit le même patron et ne communique avec les autres que via son{' '}
           <code className="bg-stone-100 px-1 rounded">index.ts</code> (interface publique) :
         </p>
-        <pre className="text-xs sm:text-sm bg-stone-900 text-stone-100 rounded-xl p-4 overflow-x-auto leading-relaxed mb-5">{`modules/<domaine>/
+        <pre className="text-xs sm:text-sm bg-stone-900 text-stone-100 rounded-xl p-4 overflow-x-auto leading-relaxed mb-3">{`modules/<domaine>/
 ├─ <domaine>-routes.ts    parse la requête → appelle le service → retourne
 ├─ <domaine>-service.ts   TOUTE la logique métier (accès Prisma)
-├─ index.ts               exporte routes + service (seul point d'entrée public)
+├─ mappers.ts             (si besoin) ligne DB → DTO de sortie (toX…)
+├─ <helpers>.ts           (si besoin) helpers du domaine — ex. idempotency.ts,
+│                          order-numbering.ts, code-service.ts, bank-details-service.ts
+├─ index.ts               interface publique (exporte routes + service)
 └─ __tests__/             tests d'intégration (vraie Postgres)`}</pre>
+        <p className="text-xs text-stone-500 mb-5">
+          Les fichiers <span className="font-semibold text-stone-900">(si besoin)</span> n’existent
+          que dans les modules qui en ont l’usage. Exemples : <code>orders</code> →{' '}
+          <code>idempotency.ts</code> + <code>order-numbering.ts</code> ; <code>offers</code> /{' '}
+          <code>orders</code> → <code>mappers.ts</code> ; <code>teleconsult</code> →{' '}
+          <code>code-service.ts</code> + <code>session-service.ts</code> ; <code>producers</code> →{' '}
+          <code>bank-details-service.ts</code>. Seul ce que le module expose dans{' '}
+          <code>index.ts</code> est visible des autres modules.
+        </p>
         <div className="space-y-4">
           {MODULE_GROUPS.map((g) => (
             <div key={g.domain}>
