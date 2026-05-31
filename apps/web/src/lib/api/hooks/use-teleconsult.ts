@@ -30,6 +30,28 @@ export function useGenerateTeleconsultCode() {
   });
 }
 
+/**
+ * Session d'assistance active dont le PRODUCTEUR courant est la cible (ou null).
+ * Sert à désactiver « Me faire aider » quand un conseiller assiste déjà le
+ * producteur (générer un nouveau code serait inutile — le démarrage serait en
+ * conflit). Gatée au rôle producer.
+ */
+export function useMyAssistanceSession() {
+  const token = useAuthToken();
+  const { data: me } = useMe();
+  return useQuery({
+    queryKey: ['teleconsult', 'active-as-producer'],
+    queryFn: ({ signal }) =>
+      apiClient.get<TeleconsultSessionOutput | null>(
+        '/v1/teleconsult/sessions/active-as-producer',
+        token,
+        signal,
+      ),
+    enabled: !!token && me?.role === 'producer',
+    refetchInterval: 30_000,
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────
 // Teleconsultant / admin side
 

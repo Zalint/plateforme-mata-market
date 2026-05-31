@@ -238,6 +238,31 @@ async function getActiveForTeleconsultantInternal(
   });
 }
 
+/** Session active dont le PRODUCTEUR est la cible (pour l'écran « Me faire aider »). */
+async function getActiveForProducerInternal(
+  producerUserId: string,
+): Promise<TeleconsultSessionOutput | null> {
+  const now = new Date();
+  const session = await prisma.teleconsultSession.findFirst({
+    where: {
+      producerUserId,
+      closedAt: null,
+      expiresAt: { gt: now },
+    },
+    include: {
+      teleconsultant: { select: { displayName: true } },
+      producer: { select: { id: true, username: true, displayName: true, phone: true } },
+    },
+    orderBy: { startedAt: 'desc' },
+  });
+  if (!session) return null;
+  return toSessionOutput({
+    session,
+    teleconsultantDisplayName: session.teleconsultant.displayName,
+    producer: session.producer,
+  });
+}
+
 async function getByIdInternal(sessionId: string): Promise<TeleconsultSessionOutput> {
   const session = await prisma.teleconsultSession.findUnique({
     where: { id: sessionId },
@@ -386,6 +411,7 @@ export const sessionService = {
   start: startSessionInternal,
   close: closeSessionInternal,
   getActiveForTeleconsultant: getActiveForTeleconsultantInternal,
+  getActiveForProducer: getActiveForProducerInternal,
   getById: getByIdInternal,
   resolveActiveForTeleconsultant,
   expireOverdue: expireOverdueInternal,

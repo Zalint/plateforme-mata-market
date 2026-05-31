@@ -138,6 +138,24 @@ export async function teleconsultRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // ─────────────────────────────────────────────────────────────
+  // GET /v1/teleconsult/sessions/active-as-producer
+  // Session active dont le PRODUCTEUR courant est la cible (ou null) — pour
+  // que l'écran « Me faire aider » désactive la génération d'un code inutile
+  // quand un conseiller l'assiste déjà.
+
+  typed.get(
+    '/v1/teleconsult/sessions/active-as-producer',
+    {
+      schema: { response: { 200: TeleconsultSessionOptionalSchema } },
+    },
+    async (req) => {
+      requireRole(req, 'producer');
+      const user = requireUser(req);
+      return sessionService.getActiveForProducer(user.id);
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────
   // GET /v1/teleconsult/sessions/:id
   // Détail (admin / teleconsultant de la session / producer concerné).
 

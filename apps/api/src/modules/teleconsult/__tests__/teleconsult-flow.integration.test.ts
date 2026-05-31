@@ -325,6 +325,28 @@ describe('sessionService.close + getActive', () => {
     });
     expect(audit).not.toBeNull();
   });
+
+  it('getActiveForProducer renvoie la session active du producteur, null sinon', async () => {
+    const { code } = await codeService.generateForProducer({ producerUserId: producer.id });
+    const session = await sessionService.start({
+      teleconsultantUserId: teleconsultant.id,
+      producerUsername: producer.username ?? 'mor.test',
+      code,
+    });
+
+    const mine = await sessionService.getActiveForProducer(producer.id);
+    expect(mine?.id).toBe(session.id);
+    // Un user sans session active comme producteur cible → null.
+    expect(await sessionService.getActiveForProducer(teleconsultant.id)).toBeNull();
+
+    // Après fermeture, plus de session active pour le producteur.
+    await sessionService.close({
+      sessionId: session.id,
+      closedByUserId: producer.id,
+      closedByRole: 'producer',
+    });
+    expect(await sessionService.getActiveForProducer(producer.id)).toBeNull();
+  });
 });
 
 describe('sessionService.expireOverdue', () => {
