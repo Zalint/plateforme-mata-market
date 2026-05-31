@@ -1,6 +1,6 @@
 import { DomainError } from '@mata/shared/errors';
 import { IdempotencyKeySchema } from '@mata/shared/schemas';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { FastifyRequest } from 'fastify';
 import { prisma } from '../../lib/prisma.js';
 import { auditService } from '../audit/index.js';
@@ -71,43 +71,82 @@ export async function withIdempotency<T>(
   const key = readKeyHeader(args.request);
   const scope = buildScope(args.request, args.scopeOwner);
 
-  // 1. Lookup cache
-  const cached = await prisma.idempotencyRecord.findUnique({
-    where: { key_scope: { key, scope } },
-  });
-  if (cached) {
-    // Audit du replay seulement si on a un acteur (skip pour invité, cf. FK).
-    if (args.actorUserId) {
-      await auditService.log({
-        actorUserId: args.actorUserId,
-        action: 'order.idempotent_replay',
-        targetType: 'idempotency',
-        newValue: { key, scope, replayedStatus: cached.statusCode },
-        request: args.request,
-      });
+  // 1. RÉSERVE la clé AVANT d'exécuter le handler. On insère un record provisoire
+  //    (statusCode 0 = « en cours »). La PK composite ([key, scope]) garantit
+  //    qu'une seule requête concurrente gagne la réservation ; les autres tombent
+  //    en P2002 et ne ré-exécutent PAS le handler (sinon double commande créée).
+  try {
+    await prisma.idempotencyRecord.create({
+      data: { key, scope, statusCode: 0, responseBody: {} as Prisma.InputJsonValue },
+    });
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      return replayExisting<T>(args, key, scope);
     }
-    return {
-      body: cached.responseBody as T,
-      statusCode: cached.statusCode,
-      replay: true,
-    };
+    throw err;
   }
 
-  // 2. Exécute le handler
-  const body = await args.handler();
-  const statusCode = 201; // POST /v1/orders renvoie 201 Created
+  // 2. Exécute le handler. En cas d'échec, on LIBÈRE la réservation pour que le
+  //    client puisse retenter (les erreurs ne sont pas cachées — politique inchangée).
+  let body: T;
+  try {
+    body = await args.handler();
+  } catch (err) {
+    await prisma.idempotencyRecord
+      .delete({ where: { key_scope: { key, scope } } })
+      .catch(() => {
+        // Best-effort : si la suppression échoue, le record provisoire sera
+        // purgé par le cron TTL ; on ne masque pas l'erreur d'origine.
+      });
+    throw err;
+  }
 
-  // 3. Cache la response (2xx uniquement — handler throw sinon)
-  await prisma.idempotencyRecord.create({
-    data: {
-      key,
-      scope,
-      statusCode,
-      responseBody: body as Prisma.InputJsonValue,
-    },
+  // 3. Finalise le record avec la response (201 Created).
+  const statusCode = 201;
+  await prisma.idempotencyRecord.update({
+    where: { key_scope: { key, scope } },
+    data: { statusCode, responseBody: body as Prisma.InputJsonValue },
   });
 
   return { body, statusCode, replay: false };
+}
+
+/**
+ * Rejoue le résultat d'une requête identique déjà traitée (ou en cours).
+ * - Record finalisé (statusCode ≠ 0) → renvoie la response cachée (replay).
+ * - Record encore provisoire (statusCode 0) → une requête identique est en
+ *   cours de traitement : on renvoie un CONFLICT déterministe plutôt que de
+ *   ré-exécuter le handler.
+ */
+async function replayExisting<T>(
+  args: WithIdempotencyArgs<T>,
+  key: string,
+  scope: string,
+): Promise<IdempotencyOutcome<T>> {
+  const existing = await prisma.idempotencyRecord.findUnique({
+    where: { key_scope: { key, scope } },
+  });
+  if (!existing || existing.statusCode === 0) {
+    throw new DomainError(
+      'CONFLICT',
+      'Une requête identique est en cours de traitement, réessayez dans un instant',
+    );
+  }
+  // Audit du replay seulement si on a un acteur (skip pour invité, cf. FK).
+  if (args.actorUserId) {
+    await auditService.log({
+      actorUserId: args.actorUserId,
+      action: 'order.idempotent_replay',
+      targetType: 'idempotency',
+      newValue: { key, scope, replayedStatus: existing.statusCode },
+      request: args.request,
+    });
+  }
+  return {
+    body: existing.responseBody as T,
+    statusCode: existing.statusCode,
+    replay: true,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────

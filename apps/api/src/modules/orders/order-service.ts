@@ -244,15 +244,26 @@ async function transitionStatusInternal(args: TransitionArgs): Promise<OrderOutp
       );
     }
 
-    const data: Prisma.OrderUpdateInput = { status: to };
+    const data: Prisma.OrderUpdateManyMutationInput = { status: to };
     if (to === 'confirmed') data.confirmedAt = new Date();
     if (to === 'collected') data.collectedAt = new Date();
     if (to === 'stored') data.storedAt = new Date();
     if (to === 'delivered') data.deliveredAt = new Date();
 
-    const result = await tx.order.update({
-      where: { id: orderId },
+    // Compare-and-swap : on conditionne l'update au statut LU (current.status).
+    // Si une transition concurrente a déjà changé le statut entre le findUnique
+    // et ici, `count` vaut 0 → on échoue déterministe (pas d'écrasement silencieux).
+    const swapped = await tx.order.updateMany({
+      where: { id: orderId, status: current.status },
       data,
+    });
+    if (swapped.count === 0) {
+      throw new DomainError('CONFLICT', `Transition concurrente détectée depuis ${current.status}`, {
+        details: { from: current.status, to },
+      });
+    }
+    const result = await tx.order.findUniqueOrThrow({
+      where: { id: orderId },
       include: orderInclude,
     });
 

@@ -116,19 +116,23 @@ async function verifyAndConsumeInternal(args: {
   // Comparaison bcrypt (constant-time côté lib).
   const ok = await bcrypt.compare(args.code, candidate.codeHash);
   if (!ok) {
-    await prisma.teleconsultCode.update({
-      where: { id: candidate.id },
+    await prisma.teleconsultCode.updateMany({
+      where: { id: candidate.id, usedAt: null },
       data: { failedAttempts: { increment: 1 } },
     });
     await maybeApplyLockout(args.producerUserId);
     return null;
   }
 
-  // Succès : marque used_at, reset failed_attempts (clean slate).
-  await prisma.teleconsultCode.update({
-    where: { id: candidate.id },
+  // Succès : consommation ATOMIQUE. `updateMany` conditionné à `usedAt: null`
+  // → si deux requêtes concurrentes passent toutes deux `bcrypt.compare`, une
+  // seule obtient `count === 1` ; l'autre voit 0 (code déjà consommé) et échoue.
+  // Empêche le double-usage d'un même code (§G8).
+  const consumed = await prisma.teleconsultCode.updateMany({
+    where: { id: candidate.id, usedAt: null },
     data: { usedAt: now, failedAttempts: 0, lockedUntil: null },
   });
+  if (consumed.count !== 1) return null;
   return candidate.id;
 }
 
