@@ -1,0 +1,32 @@
+# Reverse-proxy Caddy — HTTPS automatique (Let's Encrypt).
+# Les variables {$PUBLIC_DOMAIN} / {$ACME_EMAIL} viennent de l'environnement
+# (cf. service caddy dans docker-compose.yml).
+
+{
+	email {$ACME_EMAIL}
+}
+
+# Web (Next.js) — inclut les Route Handlers /api/auth/* (OIDC)
+app.{$PUBLIC_DOMAIN} {
+	reverse_proxy app:3000
+}
+
+# API (Fastify) — le navigateur l'appelle en direct (NEXT_PUBLIC_API_BASE_URL)
+api.{$PUBLIC_DOMAIN} {
+	reverse_proxy app:4000
+}
+
+# Keycloak (SSO)
+auth.{$PUBLIC_DOMAIN} {
+	reverse_proxy keycloak:8080
+}
+
+# n8n (automatisations) — optionnel
+n8n.{$PUBLIC_DOMAIN} {
+	reverse_proxy n8n:5678
+}
+
+# MailHog (emails de test) — optionnel
+mail.{$PUBLIC_DOMAIN} {
+	reverse_proxy mailhog:8025
+}

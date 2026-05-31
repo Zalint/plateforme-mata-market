@@ -1,0 +1,13 @@
+# Contexte de build Docker — exclut ce qui ne doit jamais entrer dans une image.
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+**/coverage
+**/.git
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+**/playwright-report
+**/test-results

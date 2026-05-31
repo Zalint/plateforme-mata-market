@@ -1,0 +1,165 @@
+# Déploiement de TEST en ligne (VPS) — stack complète « mode dev ».
+#
+# Lance TOUS les services ensemble : Postgres (app + Keycloak), Keycloak (realm
+# importé + thème MATA), n8n, MailHog, l'app (api + web en mode dev) et Caddy
+# (reverse-proxy HTTPS automatique).
+#
+# Pré-requis : un VPS avec Docker + un domaine pointant 3 sous-domaines vers le
+# VPS (app., api., auth.). Voir docs/DEPLOY-VPS.md.
+#
+#   cd infra/deploy
+#   cp .env.example .env   &&   nano .env       # renseigner domaine + secrets
+#   docker compose up -d --build
+#
+# ⚠️ Stack de DÉVELOPPEMENT en ligne (test). Pour la prod → render.yaml.
+
+name: mata-deploy
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mata
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: mata
+    volumes:
+      - app-db:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mata -d mata']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  keycloak-db:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KC_DB_PASSWORD}
+      POSTGRES_DB: keycloak
+    volumes:
+      - kc-db:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U keycloak -d keycloak']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    restart: unless-stopped
+    command: ['start', '--import-realm']
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD}
+      # Derrière Caddy (TLS terminé par Caddy → HTTP en interne).
+      KC_HOSTNAME: https://auth.${PUBLIC_DOMAIN}
+      KC_HTTP_ENABLED: 'true'
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: 'true'
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_ADMIN_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+    volumes:
+      - ../keycloak:/opt/keycloak/data/import:ro
+      - ../keycloak/themes:/opt/keycloak/themes:ro
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    environment:
+      N8N_HOST: n8n.${PUBLIC_DOMAIN}
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://n8n.${PUBLIC_DOMAIN}/
+      N8N_EDITOR_BASE_URL: https://n8n.${PUBLIC_DOMAIN}/
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      MATA_N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET}
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: 'false'
+      N8N_RUNNERS_ENABLED: 'true'
+      N8N_DIAGNOSTICS_ENABLED: 'false'
+      GENERIC_TIMEZONE: Africa/Dakar
+    volumes:
+      - n8n-data:/home/node/.n8n
+      - ../n8n:/import:ro
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    restart: unless-stopped
+
+  # app = api (Fastify, tsx watch) + web (Next dev) — mode dev, env au runtime.
+  app:
+    build:
+      context: ../..
+      dockerfile: infra/deploy/Dockerfile.devstack
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: '4000'
+      LOG_LEVEL: info
+      # — API —
+      DATABASE_URL: postgresql://mata:${POSTGRES_PASSWORD}@postgres:5432/mata
+      PUBLIC_WEB_URL: https://app.${PUBLIC_DOMAIN}
+      KEYCLOAK_URL: https://auth.${PUBLIC_DOMAIN}
+      KEYCLOAK_REALM: mata
+      KEYCLOAK_CLIENT_API_AUDIENCE: mata-api
+      KEYCLOAK_ADMIN_CLIENT_ID: mata-admin-bootstrap
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KC_ADMIN_BOOTSTRAP_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      BICTORYS_API_KEY: ${BICTORYS_API_KEY}
+      BICTORYS_API_SECRET: ${BICTORYS_API_SECRET}
+      BICTORYS_WEBHOOK_SECRET: ${BICTORYS_WEBHOOK_SECRET}
+      BICTORYS_API_BASE_URL: ${BICTORYS_API_BASE_URL}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM}
+      HCAPTCHA_SECRET: ${HCAPTCHA_SECRET}
+      N8N_BASE_URL: http://n8n:5678/webhook
+      N8N_WEBHOOK_SECRET: ${N8N_WEBHOOK_SECRET}
+      # — WEB (Next dev lit NEXT_PUBLIC_* au runtime) —
+      API_BASE_URL: http://app:4000
+      KEYCLOAK_REDIRECT_URI: https://app.${PUBLIC_DOMAIN}/api/auth/callback
+      KEYCLOAK_CLIENT_ID: mata-web
+      NEXT_PUBLIC_API_BASE_URL: https://api.${PUBLIC_DOMAIN}
+      NEXT_PUBLIC_KEYCLOAK_URL: https://auth.${PUBLIC_DOMAIN}
+      NEXT_PUBLIC_KEYCLOAK_REALM: mata
+      NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: mata-web
+      NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      NEXT_PUBLIC_HCAPTCHA_SITEKEY: ${NEXT_PUBLIC_HCAPTCHA_SITEKEY}
+      NEXT_PUBLIC_SHOW_MOCKUP: ${NEXT_PUBLIC_SHOW_MOCKUP}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - app
+      - keycloak
+
+volumes:
+  app-db:
+  kc-db:
+  n8n-data:
+  caddy-data:
+  caddy-config:
