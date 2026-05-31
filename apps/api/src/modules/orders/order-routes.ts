@@ -103,7 +103,7 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (req) => {
-      requireRole(req, 'admin');
+      requireRole(req, 'admin', 'teleconsultant');
       const orders = await orderService.listAdmin(req.query);
       return { orders };
     },
@@ -127,8 +127,10 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
       const user = requireUser(req);
       const order = await orderService.getById(req.params.id);
 
-      // Permission compound : admin, owner client, ou producteur d'un item.
-      if (user.role === 'admin' || user.role === 'super_admin') return order;
+      // Permission compound : admin/staff, owner client, ou producteur d'un item.
+      if (user.role === 'admin' || user.role === 'super_admin' || user.role === 'teleconsultant') {
+        return order;
+      }
       if (order.clientUserId === user.id) return order;
       if (user.role === 'producer' && order.items.some((i) => i.producerUserId === user.id)) {
         return order;
@@ -155,7 +157,7 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (req) => {
-      requireRole(req, 'admin');
+      requireRole(req, 'admin', 'teleconsultant');
       const user = requireUser(req);
       return orderService.transitionStatus({
         actorUserId: user.id,

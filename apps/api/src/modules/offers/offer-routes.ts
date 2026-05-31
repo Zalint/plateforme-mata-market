@@ -138,7 +138,7 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
     '/v1/offers/:id/validate',
     { schema: { params: OfferIdParamSchema, response: { 200: OfferOutputSchema } } },
     async (req) => {
-      requireRole(req, 'admin');
+      requireRole(req, 'admin', 'teleconsultant');
       return offerService.validate({
         ...resolveAuditActor(req),
         offerId: req.params.id,
@@ -157,7 +157,7 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (req) => {
-      requireRole(req, 'admin');
+      requireRole(req, 'admin', 'teleconsultant');
       return offerService.reject({
         ...resolveAuditActor(req),
         offerId: req.params.id,
@@ -215,7 +215,7 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (req) => {
-      requireRole(req, 'admin');
+      requireRole(req, 'admin', 'teleconsultant');
       return offerService.listAdmin(req.query);
     },
   );

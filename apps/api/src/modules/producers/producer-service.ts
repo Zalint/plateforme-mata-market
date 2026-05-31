@@ -2,6 +2,8 @@ import { DomainError } from '@mata/shared/errors';
 import type {
   ProducerAdminListQuery,
   ProducerAdminListResponse,
+  ProducerOnboardInput,
+  ProducerOnboardResponse,
   ProducerProfileAdmin,
   ProducerProfileCreate,
   ProducerProfilePublic,
@@ -11,6 +13,8 @@ import type {
 } from '@mata/shared/schemas';
 import { Prisma, type ProducerStatus } from '@prisma/client';
 import type { FastifyRequest } from 'fastify';
+import { generateTempPassword, keycloakAdmin } from '../../lib/keycloak-admin.js';
+import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { auditService } from '../audit/index.js';
 import { orderService } from '../orders/index.js';
@@ -107,6 +111,99 @@ export const producerService = {
       request,
     });
     return toProducerPublic(created);
+  },
+
+  /**
+   * Onboarding d'un producteur PAR LE STAFF (téléconseiller ou admin) — Lot 9.
+   *
+   * Le staff crée le compte d'un producteur tiers : on provisionne d'abord un
+   * compte Keycloak (username = téléphone, mot de passe temporaire forcé à
+   * changer), puis on crée en transaction la ligne `users` (role producer) +
+   * le `producer_profile` en statut `pending` (« à valider » par l'admin).
+   *
+   * Le mot de passe temporaire est renvoyé UNE SEULE FOIS (jamais persisté,
+   * jamais loggé) pour que le téléconseiller le communique au producteur.
+   * Si la transaction DB échoue après la création Keycloak, on supprime le
+   * compte Keycloak (rollback best-effort) pour ne pas laisser d'orphelin.
+   *
+   * Audit `producer.onboard` (actor = staff, target = nouveau producteur).
+   */
+  async onboardByStaff(args: {
+    actorUserId: string;
+    input: ProducerOnboardInput;
+    request?: FastifyRequest;
+  }): Promise<ProducerOnboardResponse> {
+    const { actorUserId, input, request } = args;
+
+    // Garde DB en amont : téléphone déjà rattaché à un user → CONFLICT (évite
+    // un appel Keycloak inutile). L'unicité reste garantie côté DB (P2002).
+    const existing = await prisma.user.findUnique({ where: { phone: input.phone } });
+    if (existing) {
+      throw new DomainError('CONFLICT', 'Un utilisateur avec ce téléphone existe déjà');
+    }
+
+    const tempPassword = generateTempPassword();
+    const keycloakId = await keycloakAdmin.createUser({
+      phone: input.phone,
+      displayName: input.displayName,
+      tempPassword,
+      realmRole: 'producer',
+    });
+
+    let profile: ProducerProfilePublic;
+    try {
+      const created = await prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            keycloakId,
+            username: input.phone,
+            phone: input.phone,
+            displayName: input.displayName,
+            role: 'producer',
+          },
+        });
+        return tx.producerProfile.create({
+          data: {
+            userId: user.id,
+            type: input.type,
+            zoneId: input.zoneId,
+            whatsappPhone: input.whatsappPhone,
+            bio: input.bio,
+            // status omis → défaut `pending` (cf. schema.prisma).
+          },
+          include: userInclude,
+        });
+      });
+      profile = toProducerPublic(created);
+    } catch (err) {
+      // La DB a échoué après la création Keycloak : on supprime le compte
+      // Keycloak pour ne pas laisser un user sans profil MATA. Best-effort —
+      // un échec de rollback est loggé mais n'écrase pas l'erreur d'origine.
+      await keycloakAdmin.deleteUser(keycloakId).catch((rollbackErr: unknown) => {
+        logger.error(
+          {
+            keycloakId,
+            err: rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr),
+          },
+          'producer.onboard.rollback_failed',
+        );
+      });
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new DomainError('CONFLICT', 'Téléphone ou compte déjà utilisé');
+      }
+      throw err;
+    }
+
+    await auditService.log({
+      actorUserId,
+      action: 'producer.onboard',
+      targetType: 'producer',
+      targetId: profile.userId,
+      newValue: { type: input.type, zoneId: input.zoneId, phone: input.phone },
+      request,
+    });
+
+    return { profile, tempPassword };
   },
 
   /**

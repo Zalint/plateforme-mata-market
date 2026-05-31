@@ -5,6 +5,8 @@ import {
   ProducerAdminListQuerySchema,
   ProducerAdminListResponseSchema,
   ProducerBlacklistInputSchema,
+  ProducerOnboardInputSchema,
+  ProducerOnboardResponseSchema,
   ProducerProfileAdminSchema,
   ProducerProfileCreateSchema,
   ProducerProfilePublicSchema,
@@ -162,6 +164,35 @@ export async function producerRoutes(app: FastifyInstance): Promise<void> {
         request: req,
       });
       return reply.code(204).send();
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────
+  // Onboarding producteur par le staff (Lot 9)
+  //
+  // Le téléconseiller (ou l'admin) crée le compte d'un producteur tiers :
+  // provisionne un compte Keycloak (username = téléphone, mdp temporaire) +
+  // profil en statut `pending`. Le mdp temporaire est renvoyé une seule fois.
+  // C'est le SEUL pouvoir « producteur » du téléconseiller : la validation
+  // (validate/suspend/blacklist) reste admin only.
+
+  typed.post(
+    '/v1/producers',
+    {
+      schema: {
+        body: ProducerOnboardInputSchema,
+        response: { 201: ProducerOnboardResponseSchema },
+      },
+    },
+    async (req, reply) => {
+      requireRole(req, 'admin', 'teleconsultant');
+      const user = requireUser(req);
+      const result = await producerService.onboardByStaff({
+        actorUserId: user.id,
+        input: req.body,
+        request: req,
+      });
+      return reply.code(201).send(result);
     },
   );
 

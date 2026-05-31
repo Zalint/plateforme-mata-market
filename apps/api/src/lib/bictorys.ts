@@ -75,7 +75,7 @@ export function requireBictorysConfig(): BictorysConfig {
 // Helper httpFetch — timeout 10s + retry exp 3× base 500ms (CLAUDE.md §G5)
 
 type HttpFetchOptions = {
-  method: 'GET' | 'POST';
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
   url: string;
   headers?: Record<string, string>;
   body?: unknown; // JSON-serialisable (content-type: application/json)

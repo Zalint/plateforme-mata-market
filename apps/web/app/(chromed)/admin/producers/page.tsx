@@ -46,6 +46,12 @@ export default function AdminProducersPage(): React.JSX.Element {
             {data?.meta.total ?? 0} producteur{(data?.meta.total ?? 0) > 1 ? 's' : ''}
           </p>
         </div>
+        <Link
+          href="/admin/producers/new"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-mata-700 hover:bg-mata-800 text-white text-sm font-bold"
+        >
+          <Icon name="user-plus" className="w-4 h-4" /> Créer un producteur
+        </Link>
       </div>
 
       <div className="flex items-center gap-2 mb-4 overflow-x-auto hide-scrollbar">

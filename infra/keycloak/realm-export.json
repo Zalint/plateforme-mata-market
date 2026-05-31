@@ -159,6 +159,14 @@
       "realmRoles": ["teleconsultant"]
     },
     {
+      "username": "service-account-mata-admin-bootstrap",
+      "enabled": true,
+      "serviceAccountClientId": "mata-admin-bootstrap",
+      "clientRoles": {
+        "realm-management": ["manage-users", "view-users", "query-users", "view-realm"]
+      }
+    },
+    {
       "id": "a1000001-0000-4000-8000-000000000001",
       "username": "fatou.ndiaye",
       "enabled": true,

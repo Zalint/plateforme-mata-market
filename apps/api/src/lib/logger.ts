@@ -10,6 +10,7 @@ export const logger = pino({
       'req.headers.cookie',
       'req.headers["x-bictorys-signature"]',
       '*.password',
+      '*.tempPassword',
       '*.code',
       '*.secret',
       '*.apiKey',

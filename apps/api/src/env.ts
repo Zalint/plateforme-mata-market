@@ -36,6 +36,14 @@ const envSchema = z.object({
   KEYCLOAK_REALM: z.string().optional(),
   KEYCLOAK_CLIENT_API_AUDIENCE: z.string().optional(),
 
+  // Service account Keycloak (client confidentiel, scope `manage-users`) pour
+  // l'Admin REST API : provisioning des comptes producteurs onboardés par le
+  // téléconseiller (Lot 9). Optionnels ici ; `requireKeycloakAdminConfig()`
+  // (lib/keycloak-admin.ts) refuse l'onboarding si absents. Le secret ne
+  // transite jamais côté client et n'est jamais loggé (§G8).
+  KEYCLOAK_ADMIN_CLIENT_ID: z.string().optional(),
+  KEYCLOAK_ADMIN_CLIENT_SECRET: z.string().optional(),
+
   // Bictorys (Lot 5) — paiement (checkout hosted) + disbursement (reversements).
   // Les 4 vars sont optionnelles ici (NODE_ENV=test peut tourner sans),
   // mais `requireBictorysConfig()` côté lib/bictorys.ts refuse de booter

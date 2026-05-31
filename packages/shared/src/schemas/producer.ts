@@ -133,6 +133,29 @@ export const ProducerProfileUpdateSchema = ProducerProfileCreateSchema.partial()
 export type ProducerProfileUpdate = z.infer<typeof ProducerProfileUpdateSchema>;
 
 /**
+ * Onboarding d'un producteur PAR LE STAFF (téléconseiller ou admin) — Lot 9.
+ *
+ * Contrairement à `ProducerProfileCreateSchema` (le producteur crée SON propre
+ * profil sur son JWT), ici le staff crée le compte d'un tiers : il faut donc
+ * l'identité du producteur (nom + téléphone) car un compte Keycloak est
+ * provisionné à la volée (username = téléphone, mot de passe temporaire). Le
+ * profil est créé en statut `pending` (« à valider » par l'admin).
+ *
+ * Pas d'email (V1 : identité par téléphone, cf. mémoire projet). `bankDetails`
+ * et `documents` restent hors de ce payload (endpoints dédiés audités).
+ */
+export const ProducerOnboardInputSchema = z.object({
+  displayName: z.string().min(2).max(120),
+  phone: PhoneSnSchema,
+  type: ProducerTypeSchema,
+  zoneId: UuidSchema,
+  whatsappPhone: PhoneSnSchema.optional(),
+  bio: BioSchema,
+});
+
+export type ProducerOnboardInput = z.infer<typeof ProducerOnboardInputSchema>;
+
+/**
  * Sortie API publique (sans bank_details ni documents sensibles).
  *
  * Une variante `*Admin` réservée à l'admin exposera documents + indicateur
@@ -154,6 +177,18 @@ export const ProducerProfilePublicSchema = z.object({
 });
 
 export type ProducerProfilePublic = z.infer<typeof ProducerProfilePublicSchema>;
+
+/**
+ * Réponse de l'onboarding staff : le profil créé + le mot de passe temporaire,
+ * renvoyé **une seule fois** pour que le téléconseiller le communique au
+ * producteur (jamais re-consultable, jamais loggé — pino redact `*.tempPassword`).
+ */
+export const ProducerOnboardResponseSchema = z.object({
+  profile: ProducerProfilePublicSchema,
+  tempPassword: z.string().min(1),
+});
+
+export type ProducerOnboardResponse = z.infer<typeof ProducerOnboardResponseSchema>;
 
 export const ProducerProfileAdminSchema = ProducerProfilePublicSchema.extend({
   phone: z.string().nullable(), // contact principal user.phone (PII admin-only)

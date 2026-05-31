@@ -5,6 +5,8 @@ import type {
   BankDetailsRevealResponse,
   ProducerAdminListQuery,
   ProducerAdminListResponse,
+  ProducerOnboardInput,
+  ProducerOnboardResponse,
   ProducerProfileAdmin,
   ProducerProfileCreate,
   ProducerProfilePublic,
@@ -59,6 +61,26 @@ export function useUpdateMyBankDetails() {
   return useMutation({
     mutationFn: (input: BankDetailsClear) =>
       apiClient.put<void>('/v1/producers/me/bank-details', input, token),
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Onboarding par le staff (téléconseiller / admin)
+
+/**
+ * Crée un producteur pour le compte d'un tiers (téléconseiller ou admin).
+ * Provisionne un compte Keycloak + profil `pending` et renvoie le mot de passe
+ * temporaire UNE SEULE FOIS (à communiquer au producteur, jamais re-consultable).
+ */
+export function useOnboardProducer() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: ProducerOnboardInput) =>
+      apiClient.post<ProducerOnboardResponse>('/v1/producers', input, token),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['producers', 'admin'] });
+    },
   });
 }
 

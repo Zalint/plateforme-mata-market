@@ -10,8 +10,11 @@ import { prisma } from '../../lib/prisma.js';
  */
 
 export type AuditAction =
+  // Utilisateurs (création par un admin, tous rôles)
+  | 'user.create'
   // Producteurs
   | 'producer.create'
+  | 'producer.onboard'
   | 'producer.update'
   | 'producer.suspend'
   | 'producer.blacklist'
