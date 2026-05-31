@@ -48,13 +48,15 @@ export default async function LoginPage({
               </div>
             ) : null}
 
-            <Link
+            {/* <a> simple : /api/auth/login redirige en externe vers Keycloak. Un
+                <Link> tenterait un fetch RSC → « Failed to fetch » qui flashe. */}
+            <a
               href="/api/auth/login"
               className="mt-8 w-full inline-flex items-center justify-center gap-2 py-3.5 rounded-xl bg-mata-700 hover:bg-mata-800 text-white font-bold shadow-soft transition"
             >
               <Icon name="log-in" className="w-5 h-5" />
               Continuer avec Keycloak
-            </Link>
+            </a>
 
             <Link
               href="/welcome"

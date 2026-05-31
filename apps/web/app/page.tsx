@@ -59,12 +59,14 @@ export default function HomeCatalogPage(): React.JSX.Element {
             </span>
           </Link>
           <div className="flex-1" />
-          <Link
+          {/* <a> simple : /api/auth/login redirige en externe vers Keycloak. Un
+              <Link> tenterait un fetch RSC → « Failed to fetch » qui flashe. */}
+          <a
             href="/api/auth/login"
             className="px-3 py-2 rounded-xl text-sm font-semibold text-stone-700 hover:bg-stone-100"
           >
             Se connecter
-          </Link>
+          </a>
           <Link
             href="/guest/checkout"
             className="relative px-3 py-2 bg-mata-700 hover:bg-mata-800 text-white rounded-xl text-sm font-bold flex items-center gap-2"

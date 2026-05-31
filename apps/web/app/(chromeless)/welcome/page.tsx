@@ -1,5 +1,4 @@
 import { Icon } from '@mata/ui';
-import Link from 'next/link';
 
 /**
  * Page de bienvenue — entrée publique de l'app. Propose les 3 rôles de démo.
@@ -23,13 +22,17 @@ export default function WelcomePage(): React.JSX.Element {
         </p>
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Link
+          {/* <a> simple (pas de <Link> Next) : /api/auth/login est un Route Handler
+              qui redirige EN EXTERNE vers Keycloak. Un <Link> tenterait un fetch RSC
+              de cette route → « TypeError: Failed to fetch » qui flashe avant la
+              navigation complète. Un <a> fait une navigation full-page propre. */}
+          <a
             href="/api/auth/login"
             className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl bg-mata-700 hover:bg-mata-800 text-white font-bold shadow-soft transition"
           >
             <Icon name="log-in" className="w-5 h-5" />
             Se connecter via Keycloak
-          </Link>
+          </a>
           {showMockup && (
             <a
               href="/mockup/index.html"
