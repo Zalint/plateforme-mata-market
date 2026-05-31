@@ -102,6 +102,12 @@ services:
       NODE_ENV: development
       PORT: '4000'
       LOG_LEVEL: info
+      # Turbo en mode strict (défaut) ne transmet aux tâches que les variables
+      # déclarées dans turbo.json (globalEnv). En conteneur, l'env vient de
+      # docker-compose (pas d'un .env sur disque), donc on passe Turbo en mode
+      # "loose" pour que `pnpm dev` propage TOUTES les variables ci-dessous à
+      # l'API et au web. (En local, les .env sur disque masquaient le souci.)
+      TURBO_ENV_MODE: loose
       # — API —
       DATABASE_URL: postgresql://mata:${POSTGRES_PASSWORD}@postgres:5432/mata
       PUBLIC_WEB_URL: https://app.${PUBLIC_DOMAIN}

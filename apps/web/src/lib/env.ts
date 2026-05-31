@@ -42,22 +42,33 @@ const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
+/**
+ * Normalise une variable d'env : chaîne vide → `undefined`. Sinon
+ * `z.string().min(1).optional()` (et les enums) rejettent `""` au lieu de le
+ * traiter comme "non fourni". Indispensable en conteneur où les variables non
+ * renseignées sont injectées comme chaînes vides (docker-compose), pas absentes.
+ * Aligné sur `apps/api/src/env.ts`.
+ */
+function orUndef(value: string | undefined): string | undefined {
+  return value === '' ? undefined : value;
+}
+
 function parseEnv(): Env {
   const parsed = envSchema.safeParse({
-    NODE_ENV: process.env.NODE_ENV,
-    KEYCLOAK_URL: process.env.KEYCLOAK_URL,
-    KEYCLOAK_REALM: process.env.KEYCLOAK_REALM,
-    KEYCLOAK_CLIENT_ID: process.env.KEYCLOAK_CLIENT_ID,
-    KEYCLOAK_REDIRECT_URI: process.env.KEYCLOAK_REDIRECT_URI,
-    API_BASE_URL: process.env.API_BASE_URL,
-    NEXT_PUBLIC_KEYCLOAK_URL: process.env.NEXT_PUBLIC_KEYCLOAK_URL,
-    NEXT_PUBLIC_KEYCLOAK_REALM: process.env.NEXT_PUBLIC_KEYCLOAK_REALM,
-    NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID,
-    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL,
-    NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
-    NEXT_PUBLIC_VAPID_PUBLIC_KEY: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY,
-    NEXT_PUBLIC_HCAPTCHA_SITEKEY: process.env.NEXT_PUBLIC_HCAPTCHA_SITEKEY,
-    NEXT_PUBLIC_SHOW_MOCKUP: process.env.NEXT_PUBLIC_SHOW_MOCKUP,
+    NODE_ENV: orUndef(process.env.NODE_ENV),
+    KEYCLOAK_URL: orUndef(process.env.KEYCLOAK_URL),
+    KEYCLOAK_REALM: orUndef(process.env.KEYCLOAK_REALM),
+    KEYCLOAK_CLIENT_ID: orUndef(process.env.KEYCLOAK_CLIENT_ID),
+    KEYCLOAK_REDIRECT_URI: orUndef(process.env.KEYCLOAK_REDIRECT_URI),
+    API_BASE_URL: orUndef(process.env.API_BASE_URL),
+    NEXT_PUBLIC_KEYCLOAK_URL: orUndef(process.env.NEXT_PUBLIC_KEYCLOAK_URL),
+    NEXT_PUBLIC_KEYCLOAK_REALM: orUndef(process.env.NEXT_PUBLIC_KEYCLOAK_REALM),
+    NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: orUndef(process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID),
+    NEXT_PUBLIC_API_BASE_URL: orUndef(process.env.NEXT_PUBLIC_API_BASE_URL),
+    NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: orUndef(process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME),
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY: orUndef(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY),
+    NEXT_PUBLIC_HCAPTCHA_SITEKEY: orUndef(process.env.NEXT_PUBLIC_HCAPTCHA_SITEKEY),
+    NEXT_PUBLIC_SHOW_MOCKUP: orUndef(process.env.NEXT_PUBLIC_SHOW_MOCKUP),
   });
   if (!parsed.success) {
     const issues = parsed.error.issues
