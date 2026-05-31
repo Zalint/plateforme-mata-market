@@ -26,6 +26,8 @@ type ProductCardProps = {
   unit: OfferUnit;
   priceFcfa: number;
   subtitle?: string; // ex: "3 producteurs · Pout, Thiès"
+  /** URL d'une photo de l'offre. Si absente → emoji de catégorie (fallback). */
+  imageUrl?: string;
   onClick?: () => void;
   className?: string;
 };
@@ -42,6 +44,7 @@ export function ProductCard({
   unit,
   priceFcfa,
   subtitle,
+  imageUrl,
   onClick,
   className,
 }: ProductCardProps): React.JSX.Element {
@@ -56,11 +59,16 @@ export function ProductCard({
     >
       <div
         className={clsx(
-          'aspect-square shrink-0 flex items-center justify-center text-6xl lg:text-7xl',
-          CATEGORY_BG[category],
+          'aspect-square shrink-0 overflow-hidden',
+          !imageUrl && 'flex items-center justify-center text-6xl lg:text-7xl',
+          !imageUrl && CATEGORY_BG[category],
         )}
       >
-        {CATEGORY_EMOJI[category]}
+        {imageUrl ? (
+          <img src={imageUrl} alt={title} className="w-full h-full object-cover" loading="lazy" />
+        ) : (
+          CATEGORY_EMOJI[category]
+        )}
       </div>
       <div className="p-3 flex-1 flex flex-col">
         <div className="flex items-center gap-1">

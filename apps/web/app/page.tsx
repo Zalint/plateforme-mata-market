@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useGuestCatalog } from '../src/lib/api';
 import { useCart } from '../src/lib/cart/use-cart';
+import { cloudinaryThumb } from '../src/lib/cloudinary-url';
 
 /**
  * Accueil public (racine `/`) · catalogue invité.
@@ -131,6 +132,7 @@ export default function HomeCatalogPage(): React.JSX.Element {
                   unit={o.unit}
                   priceFcfa={o.priceFcfa}
                   subtitle={o.qualityNote ?? undefined}
+                  imageUrl={cloudinaryThumb(o.photoPublicIds[0]) ?? undefined}
                   className="flex-1"
                 />
                 <button
