@@ -1,4 +1,4 @@
-# Restart le stack dev MATA pour les tests manuels.
+﻿# Restart le stack dev MATA pour les tests manuels.
 #
 # Usage :
 #   pnpm dev:up                             # stack complète (infra + mock + dev)
