@@ -1,7 +1,9 @@
 import {
   ORDER_STATUS_LABEL_FR,
+  ORDER_TRANSITIONS,
   type OrderStatus,
   PICKUP_STATUS_LABEL_FR,
+  PICKUP_TRANSITIONS,
   type PickupStatus,
 } from '@mata/shared/constants';
 import { Icon, type IconName, StatusBadge, type StatusTone } from '@mata/ui';
@@ -153,21 +155,42 @@ const MENUS: MenuDef[] = [
   },
 ];
 
-const LINK_STEPS: { icon: IconName; title: string; desc: string }[] = [
+// Flux nominal (sans `cancelled`, qui est une branche terminale) et extras
+// (états atteints uniquement par branche) — alimentent le stepper.
+const ORDER_FLOW = ORDER_ROWS.filter((r) => r.status !== 'cancelled');
+const ORDER_EXTRA = ORDER_ROWS.filter((r) => r.status === 'cancelled');
+const PICKUP_FLOW = PICKUP_ROWS.filter((r) => r.status !== 'cancelled');
+const PICKUP_EXTRA = PICKUP_ROWS.filter((r) => r.status === 'cancelled');
+
+type LinkStep = {
+  icon: IconName;
+  action: string;
+  from: { status: OrderStatus; tone: StatusTone };
+  to: { status: OrderStatus; tone: StatusTone };
+  desc: string;
+};
+
+const LINK_STEPS: LinkStep[] = [
   {
     icon: 'plus',
-    title: 'Créer une tournée → commande « En collecte »',
-    desc: 'Quand l’admin crée une tournée incluant les items d’une commande, cette commande passe automatiquement de Confirmée à En collecte, et apparaît dans « Mes collectes » des producteurs concernés.',
+    action: 'Créer la tournée',
+    from: { status: 'confirmed', tone: 'success' },
+    to: { status: 'collecting', tone: 'warning' },
+    desc: 'La commande apparaît dans « Mes collectes » des producteurs concernés.',
   },
   {
     icon: 'check-circle',
-    title: 'Tournée « Effectuée » → commande « Collectée »',
-    desc: 'Lorsque la tournée passe à Effectuée, chaque commande dont TOUS les items sont collectés passe de En collecte à Collectée (une commande peut être répartie sur plusieurs tournées).',
+    action: 'Tournée « Effectuée »',
+    from: { status: 'collecting', tone: 'warning' },
+    to: { status: 'collected', tone: 'info' },
+    desc: 'Dès que TOUS les items de la commande sont collectés (multi-tournées possible).',
   },
   {
     icon: 'x',
-    title: 'Annuler une tournée → retour « Confirmée »',
-    desc: 'Si une tournée est annulée, ses items sont libérés. Les commandes qui n’ont plus aucune tournée active reviennent de En collecte à Confirmée, et redeviennent planifiables.',
+    action: 'Annuler la tournée',
+    from: { status: 'collecting', tone: 'warning' },
+    to: { status: 'confirmed', tone: 'success' },
+    desc: 'Si la commande n’a plus aucune tournée active → elle redevient planifiable.',
   },
 ];
 
@@ -186,24 +209,71 @@ function Card({
   );
 }
 
-function StatusList<S extends string>({
-  rows,
+/**
+ * Diagramme d'état vertical (stepper) data-driven : le flux nominal relié par
+ * un rail, et pour chaque état ses transitions secondaires (arêtes de la matrice
+ * autres que l'étape suivante) en annotation. `extra` = états atteints seulement
+ * par branche (ex. Annulée), affichés sous un séparateur.
+ */
+function StateStepper<S extends string>({
+  flow,
+  extra,
+  transitions,
   label,
 }: {
-  rows: StatusRow<S>[];
+  flow: StatusRow<S>[];
+  extra: StatusRow<S>[];
+  transitions: Record<S, readonly S[]>;
   label: Record<S, string>;
 }): React.JSX.Element {
+  const order = flow.map((f) => f.status);
   return (
-    <ul className="space-y-2.5">
-      {rows.map((r) => (
-        <li key={r.status} className="flex items-start gap-3">
-          <span className="shrink-0 mt-0.5 w-28">
-            <StatusBadge tone={r.tone}>{label[r.status]}</StatusBadge>
-          </span>
-          <span className="text-sm text-stone-600">{r.desc}</span>
-        </li>
-      ))}
-    </ul>
+    <div>
+      <ol>
+        {flow.map((r, i) => {
+          const next: S | undefined = order[i + 1];
+          const branches = transitions[r.status].filter((t) => t !== next);
+          const isLast = i === flow.length - 1;
+          return (
+            <li key={r.status} className="flex gap-3">
+              <div className="flex flex-col items-center pt-1.5">
+                <span className="w-2.5 h-2.5 rounded-full bg-mata-700 shrink-0" />
+                {!isLast && <span className="w-px grow bg-stone-200 my-1" />}
+              </div>
+              <div className={`flex-1 ${isLast ? '' : 'pb-5'}`}>
+                <StatusBadge tone={r.tone}>{label[r.status]}</StatusBadge>
+                <p className="text-sm text-stone-600 mt-1">{r.desc}</p>
+                {branches.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    {branches.map((t) => (
+                      <span
+                        key={t}
+                        className="inline-flex items-center gap-1 text-xs text-stone-500"
+                      >
+                        <Icon name="arrow-right" className="w-3 h-3 text-stone-400" />
+                        {label[t]}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      {extra.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-dashed border-stone-200 space-y-2.5">
+          {extra.map((r) => (
+            <div key={r.status} className="flex items-start gap-3">
+              <span className="shrink-0 mt-0.5 w-28">
+                <StatusBadge tone={r.tone}>{label[r.status]}</StatusBadge>
+              </span>
+              <span className="text-sm text-stone-600">{r.desc}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -227,7 +297,12 @@ export default function AdminGuidePage(): React.JSX.Element {
           Une commande suit ces étapes, dans l'ordre. Les étapes « En collecte » et « Collectée »
           sont pilotées par les tournées (voir plus bas) ; les autres sont pilotées par l'admin.
         </p>
-        <StatusList rows={ORDER_ROWS} label={ORDER_STATUS_LABEL_FR} />
+        <StateStepper
+          flow={ORDER_FLOW}
+          extra={ORDER_EXTRA}
+          transitions={ORDER_TRANSITIONS}
+          label={ORDER_STATUS_LABEL_FR}
+        />
       </Card>
 
       <Card title="Cycle de vie d'une tournée de collecte">
@@ -235,7 +310,12 @@ export default function AdminGuidePage(): React.JSX.Element {
           Une tournée regroupe les produits de plusieurs commandes / producteurs d'une même zone,
           pour un même passage du collecteur.
         </p>
-        <StatusList rows={PICKUP_ROWS} label={PICKUP_STATUS_LABEL_FR} />
+        <StateStepper
+          flow={PICKUP_FLOW}
+          extra={PICKUP_EXTRA}
+          transitions={PICKUP_TRANSITIONS}
+          label={PICKUP_STATUS_LABEL_FR}
+        />
       </Card>
 
       <Card title="Le lien commande ↔ tournée (automatique)">
@@ -245,13 +325,21 @@ export default function AdminGuidePage(): React.JSX.Element {
         </p>
         <ul className="space-y-4">
           {LINK_STEPS.map((s) => (
-            <li key={s.title} className="flex items-start gap-3">
+            <li key={s.action} className="flex items-start gap-3">
               <div className="shrink-0 w-9 h-9 rounded-lg bg-mata-50 flex items-center justify-center">
                 <Icon name={s.icon} className="w-5 h-5 text-mata-700" />
               </div>
-              <div>
-                <div className="font-semibold text-stone-900 text-sm">{s.title}</div>
-                <div className="text-sm text-stone-600 mt-0.5">{s.desc}</div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-stone-900 text-sm">{s.action}</span>
+                  <span className="text-stone-300">·</span>
+                  <StatusBadge tone={s.from.tone}>
+                    {ORDER_STATUS_LABEL_FR[s.from.status]}
+                  </StatusBadge>
+                  <Icon name="arrow-right" className="w-3.5 h-3.5 text-stone-400" />
+                  <StatusBadge tone={s.to.tone}>{ORDER_STATUS_LABEL_FR[s.to.status]}</StatusBadge>
+                </div>
+                <div className="text-sm text-stone-600 mt-1">{s.desc}</div>
               </div>
             </li>
           ))}
