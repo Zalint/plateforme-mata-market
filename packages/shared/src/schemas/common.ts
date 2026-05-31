@@ -36,6 +36,19 @@ export const FcfaAmountSchema = z
   .positive('Montant FCFA strictement positif')
   .max(200_000_000, 'Montant FCFA trop élevé (max 200 000 000)');
 
+/**
+ * Montant FCFA pour les AGRÉGATS de reporting (KPIs dashboard) : entier ≥ 0.
+ * Contrairement à `FcfaAmountSchema` (prix unitaire strictement positif), une
+ * somme/agrégat peut légitimement valoir 0 (aucune commande du jour, aucun
+ * reversement en attente). Utiliser `FcfaAmountSchema` ici ferait échouer la
+ * validation de réponse (→ 500) dès qu'un total vaut 0.
+ */
+export const FcfaAmountNonNegativeSchema = z
+  .number()
+  .int('Montant FCFA en entiers (pas de centimes)')
+  .nonnegative('Montant FCFA ≥ 0')
+  .max(200_000_000, 'Montant FCFA trop élevé (max 200 000 000)');
+
 // ─────────────────────────────────────────────────────────────────
 // Dates
 

@@ -1,6 +1,11 @@
-import { KpiCard, RoleBadge } from '@mata/ui';
+'use client';
+
+import { KpiCard, Money, RoleBadge } from '@mata/ui';
+import { useMyProducerDashboardKpis } from '../../../../src/lib/api';
 
 export default function ProducerHomePage(): React.JSX.Element {
+  const { data } = useMyProducerDashboardKpis();
+
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-5 lg:py-8 max-w-6xl mx-auto">
       <div className="flex items-start justify-between gap-3 flex-wrap mb-5">
@@ -14,10 +19,20 @@ export default function ProducerHomePage(): React.JSX.Element {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard label="Offres actives" value={0} icon="package" />
-        <KpiCard label="À recevoir" value="0 F" icon="wallet" variant="primary" />
-        <KpiCard label="Commandes du mois" value={0} icon="shopping-bag" />
-        <KpiCard label="Note moyenne" value="—" icon="badge-check" />
+        <KpiCard label="Offres actives" value={data?.offresActives ?? '—'} icon="package" />
+        <KpiCard
+          label="À recevoir"
+          value={data ? <Money amount={data.aRecevoirFcfa} /> : '—'}
+          icon="wallet"
+          variant="primary"
+        />
+        <KpiCard label="Commandes du mois" value={data?.commandesDuMois ?? '—'} icon="shopping-bag" />
+        <KpiCard
+          label="Note moyenne"
+          value={data ? (data.ratingAvg === null ? '—' : `★ ${data.ratingAvg}`) : '—'}
+          trend={data ? `${data.ratingCount} avis` : undefined}
+          icon="badge-check"
+        />
       </div>
     </div>
   );
