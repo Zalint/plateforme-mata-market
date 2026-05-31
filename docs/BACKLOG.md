@@ -29,6 +29,33 @@ exacts où ces dettes sont marquées en commentaire inline.
 
 # En cours
 
+## [lot-9→lot-?] Keycloak Admin API en prod (service account + reseed realm)
+
+- **Découvert** : Lot 9 (onboarding producteur/téléconseiller + création de comptes par admin via Keycloak Admin API).
+- **Cible** : déploiement prod (Render).
+- **Pourquoi reporté** : en local le service account `mata-admin-bootstrap` a reçu `manage-users` + `view-realm` (réalisé EN LIVE via l'API master admin ; le `realm-export.json` est aussi mis à jour mais ne s'applique qu'à un **ré-import** du realm — un volume Keycloak déjà initialisé ne ré-importe pas).
+- **Fichiers** : `infra/keycloak/realm-export.json`, `apps/api/src/lib/keycloak-admin.ts`, `apps/api/.env`.
+- **Garde-fou actuel** : `requireKeycloakAdminConfig()` refuse l'onboarding si les vars manquent (message explicite, pas de 500 silencieux).
+- **Risque si non traité** : en prod, sans `KEYCLOAK_ADMIN_CLIENT_SECRET` réel + service account correctement doté (`manage-users`, `view-realm`), toute création de compte échoue (EXTERNAL_FAILURE). À provisionner dans le dashboard Render + vérifier l'import realm prod.
+
+## [lot-9→lot-?] Pas de self-signup public (décision V1)
+
+- **Découvert** : Lot 9 (arbitrage inscription).
+- **Pourquoi reporté** : décision produit — les producteurs sont onboardés par le téléconseiller, les autres comptes par l'admin, les clients peuvent commander en **invité** sans compte. Pas d'écran d'inscription public.
+- **Risque si non traité** : aucun à court terme. Si on veut du self-service client plus tard : soit registration native Keycloak, soit écran custom (déjà étudié).
+
+## [lot-9→lot-?] Pas de "réinitialiser le mot de passe" (compte créé par le staff)
+
+- **Découvert** : Lot 9 (mot de passe temporaire affiché une seule fois).
+- **Pourquoi reporté** : MVP — si le mdp temporaire est perdu avant 1re connexion, l'admin doit le réinitialiser directement dans la console Keycloak.
+- **Risque si non traité** : friction support léger. Prévoir un bouton "régénérer le mot de passe" (Keycloak Admin API `reset-password`) si le besoin se confirme.
+
+## [lot-9→lot-?] Différenciation client_pro / client_particulier non implémentée
+
+- **Découvert** : Lot 9.
+- **Pourquoi reporté** : décision "on laisse tel quel". Les deux rôles ont aujourd'hui exactement les mêmes droits/parcours/pricing ; le rôle distinct est un marqueur de segmentation.
+- **Risque si non traité** : aucun. Évolution future possible : pricing pro / facturation (TVA, NINEA) / conditions de paiement.
+
 ## [lot-9→lot-?] Une commande répartie sur plusieurs tournées créées séparément
 
 - **Découvert** : Lot 9 (couplage commande ↔ tournée, Option 1)

@@ -1,3 +1,4 @@
+export * from './hooks/use-admin-users';
 export * from './hooks/use-auth-me';
 export * from './hooks/use-catalog';
 export * from './hooks/use-dashboard';

@@ -28,6 +28,7 @@ import { producerRoutes } from './modules/producers/index.js';
 import { siteRoutes } from './modules/sites/index.js';
 import { teleconsultPlugin, teleconsultRoutes } from './modules/teleconsult/index.js';
 import { uploadsRoutes } from './modules/uploads/index.js';
+import { userRoutes } from './modules/users/index.js';
 import { zoneRoutes } from './modules/zones/index.js';
 import { authRoutes } from './routes/auth.js';
 import { healthRoutes } from './routes/health.js';
@@ -114,6 +115,7 @@ async function buildServer(): Promise<void> {
   await app.register(pickupRoutes); // Lot 7
   await app.register(notificationRoutes); // Lot 7
   await app.register(dashboardRoutes); // Lot 9 — KPIs accueil admin
+  await app.register(userRoutes); // Lot 9 — création de comptes par un admin
   await app.register(guestPlugin); // Lot 8 — mode invité (/v1/guest/*)
   await app.register(uploadsRoutes);
 

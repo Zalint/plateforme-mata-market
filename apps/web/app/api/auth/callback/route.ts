@@ -12,11 +12,14 @@ import { getEnv } from '../../../../src/lib/env';
 /** Espace d'atterrissage par rôle après login (chacun arrive chez lui). */
 const LANDING_BY_ROLE: Record<UserRoleValue, string> = {
   producer: '/producer/home',
-  client_pro: '/client/catalog',
-  client_particulier: '/client/catalog',
+  client_pro: '/client/home',
+  client_particulier: '/client/home',
   admin: '/admin/dashboard',
   super_admin: '/admin/dashboard',
-  teleconsultant: '/admin/teleconseil',
+  // Le téléconseiller a un menu restreint (créer producteur / offres / commandes).
+  // On l'atterrit sur les commandes (vue d'activité), pas sur /admin/teleconseil
+  // qui n'est plus dans son périmètre.
+  teleconsultant: '/admin/orders',
 };
 
 /**

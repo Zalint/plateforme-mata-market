@@ -25,12 +25,14 @@ const PRODUCER_NAV: NavItem[] = [
   { href: '/producer/help', label: 'Me faire aider', icon: 'phone-call' },
 ];
 const CLIENT_NAV: NavItem[] = [
+  { href: '/client/home', label: 'Accueil', icon: 'home' },
   { href: '/client/catalog', label: 'Catalogue', icon: 'grid-2x2' },
   { href: '/client/cart', label: 'Mon panier', icon: 'shopping-cart' },
   { href: '/client/orders', label: 'Mes commandes', icon: 'package-check' },
 ];
 const ADMIN_NAV: NavItem[] = [
   { href: '/admin/dashboard', label: 'Dashboard', icon: 'layout-dashboard' },
+  { href: '/admin/users/new', label: 'Créer un utilisateur', icon: 'user-plus' },
   { href: '/admin/producers', label: 'Producteurs', icon: 'users' },
   { href: '/admin/offers', label: 'Validation offres', icon: 'badge-check' },
   { href: '/admin/orders', label: 'Commandes', icon: 'shopping-bag' },
@@ -40,6 +42,15 @@ const ADMIN_NAV: NavItem[] = [
   { href: '/admin/pricing', label: 'Pricing', icon: 'calculator' },
   { href: '/admin/guide', label: "Guide d'utilisation", icon: 'help-circle' },
 ];
+// Téléconseiller : périmètre volontairement restreint (cf. décision produit).
+// Il onboarde des producteurs (statut « à valider »), valide les offres et
+// gère les commandes — rien d'autre. La validation/suspension producteur, les
+// paiements, le pricing, etc. restent admin only (vérifié aussi côté API §G8).
+const TELECONSULTANT_NAV: NavItem[] = [
+  { href: '/admin/producers/new', label: 'Créer un producteur', icon: 'user-plus' },
+  { href: '/admin/offers', label: 'Validation offres', icon: 'badge-check' },
+  { href: '/admin/orders', label: 'Commandes', icon: 'shopping-bag' },
+];
 
 type NavSectionDef = { key: string; title: string; items: NavItem[] };
 
@@ -47,14 +58,16 @@ const ALL_SECTIONS: NavSectionDef[] = [
   { key: 'producer', title: 'Producteur', items: PRODUCER_NAV },
   { key: 'client', title: 'Client', items: CLIENT_NAV },
   { key: 'admin', title: 'Admin MATA', items: ADMIN_NAV },
+  { key: 'teleconsultant', title: 'Téléconseiller', items: TELECONSULTANT_NAV },
 ];
 
 /**
  * Sections de nav visibles par rôle. La sidebar reflète l'espace propre de
  * l'utilisateur : les pages producteur/client sont liées à SON profil (un admin
  * n'a pas de profil producteur). Ceci ne fait que l'AFFICHAGE — l'autorisation
- * réelle reste vérifiée côté API à chaque endpoint (§G8). `teleconsultant`
- * accède à l'espace Admin (où vit « Téléconseil ») — à affiner si besoin.
+ * réelle reste vérifiée côté API à chaque endpoint (§G8). Le `teleconsultant`
+ * a un périmètre restreint (créer un producteur, valider les offres, gérer les
+ * commandes), distinct de l'espace Admin complet.
  */
 const SECTIONS_BY_ROLE: Record<UserRoleValue, readonly string[]> = {
   producer: ['producer'],
@@ -62,7 +75,7 @@ const SECTIONS_BY_ROLE: Record<UserRoleValue, readonly string[]> = {
   client_particulier: ['client'],
   admin: ['admin'],
   super_admin: ['admin'],
-  teleconsultant: ['admin'],
+  teleconsultant: ['teleconsultant'],
 };
 
 /**
