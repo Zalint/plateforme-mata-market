@@ -9,7 +9,12 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { prisma } from '../../lib/prisma.js';
-import { assertOwnership, requireRole, requireUser } from '../auth/index.js';
+import {
+  assertOwnership,
+  requireProducerOrDelegate,
+  requireRole,
+  requireUser,
+} from '../auth/index.js';
 import { siteService } from './site-service.js';
 
 const SiteIdParamSchema = z.object({ id: UuidSchema });
@@ -25,8 +30,9 @@ export async function siteRoutes(app: FastifyInstance): Promise<void> {
     '/v1/sites/me',
     { schema: { response: { 200: SiteListResponseSchema } } },
     async (req) => {
-      const user = requireUser(req);
-      const sites = await siteService.listMine(user.id);
+      // Producteur direct OU téléconseiller/admin via session déléguée.
+      const { ownerUserId } = requireProducerOrDelegate(req);
+      const sites = await siteService.listMine(ownerUserId);
       return { sites };
     },
   );
