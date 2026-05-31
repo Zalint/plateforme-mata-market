@@ -24,7 +24,12 @@ RUN pnpm install --frozen-lockfile
 # Code + build des packages partagés + client Prisma
 COPY . .
 RUN pnpm --filter @mata/shared build && pnpm --filter @mata/ui build
-RUN pnpm --filter @mata/api exec prisma generate
+# `prisma generate` ne se connecte PAS à la base : il lit juste le schéma pour
+# générer le client TypeScript. Mais prisma.config.ts valide DATABASE_URL à
+# l'import → on fournit une URL factice de build (le vrai DATABASE_URL est
+# injecté au runtime par docker-compose).
+RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" \
+    pnpm --filter @mata/api exec prisma generate
 
 EXPOSE 3000 4000
 
