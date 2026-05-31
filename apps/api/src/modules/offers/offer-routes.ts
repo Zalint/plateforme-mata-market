@@ -19,7 +19,6 @@ import {
   assertOwnership,
   requireProducerOrDelegate,
   requireRole,
-  requireUser,
   resolveAuditActor,
 } from '../auth/index.js';
 import { offerService } from './offer-service.js';
@@ -45,8 +44,10 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (req) => {
-      const user = requireUser(req);
-      const offers = await offerService.listMine(user.id, req.query.status);
+      // Producteur direct OU téléconseiller/admin via session déléguée : on
+      // résout le producteur cible (ownerUserId) pour lister SES offres.
+      const { ownerUserId } = requireProducerOrDelegate(req);
+      const offers = await offerService.listMine(ownerUserId, req.query.status);
       return { offers };
     },
   );

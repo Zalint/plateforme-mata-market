@@ -1,4 +1,4 @@
-# Restart le stack dev MATA pour les tests manuels.
+﻿# Restart le stack dev MATA pour les tests manuels.
 #
 # Usage :
 #   pnpm dev:up                             # stack complète (infra + mock + dev)
@@ -35,6 +35,29 @@ Set-Location -Path (Join-Path $PSScriptRoot '..')
 
 Write-Host "`n=== MATA dev restart ===`n" -ForegroundColor Cyan
 
+# Attend que les ports soient REELLEMENT libres. Re-tue tout listener qui
+# re-prend un port (ex: un tsx watch d'un ancien `pnpm dev` qui respawn l'API
+# quand un rebuild de package modifie un dist) -> evite EADDRINUSE.
+function Wait-PortsFree {
+    param([int[]]$Ports, [int]$TimeoutSec = 15)
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    while ((Get-Date) -lt $deadline) {
+        $busy = @()
+        foreach ($p in $Ports) {
+            $c = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue
+            if ($c) {
+                $busy += $p
+                $c | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object {
+                    Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue
+                }
+            }
+        }
+        if ($busy.Count -eq 0) { return $true }
+        Start-Sleep -Milliseconds 400
+    }
+    return $false
+}
+
 # ── 1. Kill processes occupant les ports dev ───────────────────────
 # Ciblé sur les ports dev (web 3000, api 4000, mock Bictorys 4001) plutôt que
 # `Get-Process node | Stop-Process` qui tuait TOUS les node.exe de la machine
@@ -50,9 +73,13 @@ $pids = $pids | Sort-Object -Unique
 if ($pids) {
     foreach ($procId in $pids) { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue }
     Write-Host "      $($pids.Count) process(es) on dev ports killed" -ForegroundColor Green
-    Start-Sleep -Milliseconds 800
 } else {
     Write-Host "      no process on dev ports" -ForegroundColor Gray
+}
+if (Wait-PortsFree -Ports $devPorts) {
+    Write-Host "      dev ports free" -ForegroundColor Green
+} else {
+    Write-Host "      WARNING: a dev port is still busy after 15s (an old dev watcher may be running elsewhere)" -ForegroundColor Red
 }
 
 # ── 2. Docker infra (DB + Keycloak + Mailhog) ──────────────────────
@@ -141,5 +168,10 @@ if ($WithN8n) {
     Write-Host "  n8n ──────────── http://localhost:5678" -ForegroundColor Cyan
 }
 Write-Host "`n  Ctrl+C pour arrêter api/web · ferme la fenêtre du mock pour l'arrêter`n" -ForegroundColor Gray
+
+# Garde-fou final : un ancien watcher a pu re-prendre 3000/4000 pendant le
+# build/reseed. On les libere juste avant que turbo ne les bind. On NE touche
+# PAS a 4001 : le mock Bictorys vient d'y etre demarre volontairement.
+[void](Wait-PortsFree -Ports @(3000, 4000))
 
 pnpm dev

@@ -29,6 +29,23 @@ exacts où ces dettes sont marquées en commentaire inline.
 
 # En cours
 
+## [lot-9→lot-?] Délégation téléconseil : course au rechargement d'une page producteur
+
+- **Découvert** : Lot 9 (test Puppeteer du flux « Assister un producteur » → « Offres de Mor »).
+- **Pourquoi reporté** : la sessionId téléconseil est stockée EN MÉMOIRE only (sécurité,
+  ne survit pas au refresh). Sur un **rechargement complet** d'une page producteur
+  (`/producer/offers`, `/producer/sites`) pendant une session, la requête `/v1/producers/me`
+  part AVANT que `useActiveTeleconsultSession` ait re-rempli le singleton → pas d'en-tête
+  `X-Teleconsult-Session-Id` → écran « créez votre profil ». Corrigé pour la nav INTERNE
+  (liens `<Link>` client-side qui préservent le singleton), mais un **F5 / accès URL directe**
+  sur ces pages reproduit la course.
+- **Fichiers** : apps/web/app/(chromed)/admin/teleconseil/page.tsx (liens), hooks producteur.
+- **Garde-fou actuel** : le flux normal (téléconseil → liens) marche ; après F5, re-cliquer
+  le lien depuis la page téléconseil rétablit le contexte.
+- **Risque si non traité** : confusion UX si le conseiller rafraîchit une page producteur en
+  session. Fix propre : gater les requêtes des pages producteur sur la résolution de la
+  session active (quand rôle = teleconsultant/admin) avant de fire `/me`.
+
 ## [lot-9→lot-?] Keycloak Admin API en prod (service account + reseed realm)
 
 - **Découvert** : Lot 9 (onboarding producteur/téléconseiller + création de comptes par admin via Keycloak Admin API).

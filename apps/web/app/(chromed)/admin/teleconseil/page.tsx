@@ -1,6 +1,7 @@
 'use client';
 
 import { Icon, useConfirm, useToast } from '@mata/ui';
+import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import {
   useActiveTeleconsultSession,
@@ -189,18 +190,23 @@ export default function AdminTeleconseilPage(): React.JSX.Element {
                   .
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                  <a
+                  {/* Navigation CLIENT-SIDE (Link) obligatoire : un <a> rechargerait
+                      la page et viderait le singleton mémoire qui porte la sessionId
+                      (stockée en mémoire only, par sécurité). Sans ça, la page
+                      producteur appellerait /v1/producers/me sans X-Teleconsult-Session-Id
+                      et afficherait « créez votre profil ». */}
+                  <Link
                     href="/producer/offers"
                     className="px-3 py-2 rounded-lg bg-mata-700 hover:bg-mata-800 text-white text-center font-semibold"
                   >
                     Offres de {active.producer.displayName.split(' ')[0]}
-                  </a>
-                  <a
+                  </Link>
+                  <Link
                     href="/producer/sites"
                     className="px-3 py-2 rounded-lg bg-stone-100 hover:bg-stone-200 text-stone-700 text-center font-semibold"
                   >
                     Ses sites
-                  </a>
+                  </Link>
                 </div>
               </div>
             </>

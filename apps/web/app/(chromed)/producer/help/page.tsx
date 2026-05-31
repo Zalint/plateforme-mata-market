@@ -2,7 +2,7 @@
 
 import { Icon, useToast } from '@mata/ui';
 import { useRouter } from 'next/navigation';
-import { useGenerateTeleconsultCode } from '../../../../src/lib/api';
+import { useGenerateTeleconsultCode, useMyAssistanceSession } from '../../../../src/lib/api';
 
 /**
  * Producer / Aide · WF3-1 du mockup (workflows/teleconseil/1).
@@ -17,6 +17,7 @@ const SUPPORT_PHONE = '+221 33 800 00 00';
 export default function ProducerHelpPage(): React.JSX.Element {
   const router = useRouter();
   const generate = useGenerateTeleconsultCode();
+  const { data: activeAssist } = useMyAssistanceSession();
   const toast = useToast();
 
   async function handleGenerate(): Promise<void> {
@@ -58,15 +59,26 @@ export default function ProducerHelpPage(): React.JSX.Element {
                 </div>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleGenerate}
-              disabled={generate.isPending}
-              className="mt-4 w-full py-3 rounded-xl bg-mata-700 hover:bg-mata-800 disabled:bg-stone-300 text-white font-bold flex items-center justify-center gap-2 shadow-soft"
-            >
-              <Icon name="key-round" className="w-4 h-4" />
-              {generate.isPending ? 'Generation…' : 'Me faire aider par MATA'}
-            </button>
+            {activeAssist ? (
+              <div className="mt-4 rounded-xl border-2 border-green-200 bg-green-50 p-3 text-sm text-green-900 flex items-start gap-2">
+                <Icon name="shield-check" className="w-4 h-4 mt-0.5 shrink-0 text-green-600" />
+                <span>
+                  Un conseiller MATA vous assiste déjà (session{' '}
+                  <strong>{activeAssist.sessionNumber}</strong>). Pas besoin d&apos;un nouveau code
+                  — vous gardez le contrôle et pouvez l&apos;interrompre à tout moment.
+                </span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleGenerate}
+                disabled={generate.isPending}
+                className="mt-4 w-full py-3 rounded-xl bg-mata-700 hover:bg-mata-800 disabled:bg-stone-300 text-white font-bold flex items-center justify-center gap-2 shadow-soft"
+              >
+                <Icon name="key-round" className="w-4 h-4" />
+                {generate.isPending ? 'Generation…' : 'Me faire aider par MATA'}
+              </button>
+            )}
             {generate.isError && (
               <div className="mt-3 text-xs text-red-700 p-2 bg-red-50 rounded-lg border border-red-200">
                 {generate.error.message}

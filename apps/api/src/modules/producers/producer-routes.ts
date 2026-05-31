@@ -19,7 +19,7 @@ import {
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { requireRole, requireUser } from '../auth/index.js';
+import { requireProducerOrDelegate, requireRole, requireUser } from '../auth/index.js';
 import { assertActionAllowedDuringTeleconsult } from '../teleconsult/index.js';
 import { bankDetailsService } from './bank-details-service.js';
 import { producerService } from './producer-service.js';
@@ -57,8 +57,11 @@ export async function producerRoutes(app: FastifyInstance): Promise<void> {
     '/v1/producers/me',
     { schema: { response: { 200: MyProfileResponseSchema } } },
     async (req) => {
-      const user = requireUser(req);
-      const profile = await producerService.getMyProfile(user.id);
+      // Producteur direct OU téléconseiller/admin via session déléguée : on
+      // résout le producteur cible pour afficher SON profil (sinon le conseiller
+      // verrait « créez votre profil » au lieu du profil du producteur assisté).
+      const { ownerUserId } = requireProducerOrDelegate(req);
+      const profile = await producerService.getMyProfile(ownerUserId);
       return { profile };
     },
   );

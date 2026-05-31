@@ -40,14 +40,17 @@ const ADMIN_NAV: NavItem[] = [
   { href: '/admin/payments', label: 'Paiements', icon: 'wallet' },
   { href: '/admin/teleconseil', label: 'Téléconseil', icon: 'headphones' },
   { href: '/admin/pricing', label: 'Pricing', icon: 'calculator' },
+  { href: '/admin/architecture', label: 'App archi', icon: 'scroll-text' },
   { href: '/admin/guide', label: "Guide d'utilisation", icon: 'help-circle' },
 ];
 // Téléconseiller : périmètre volontairement restreint (cf. décision produit).
-// Il onboarde des producteurs (statut « à valider »), valide les offres et
-// gère les commandes — rien d'autre. La validation/suspension producteur, les
-// paiements, le pricing, etc. restent admin only (vérifié aussi côté API §G8).
+// Il onboarde des producteurs (statut « à valider »), les assiste via session
+// déléguée (code 6 chiffres, /admin/teleconseil), valide les offres et gère les
+// commandes. La validation/suspension producteur, les paiements, le pricing,
+// etc. restent admin only (vérifié aussi côté API §G8).
 const TELECONSULTANT_NAV: NavItem[] = [
   { href: '/admin/producers/new', label: 'Créer un producteur', icon: 'user-plus' },
+  { href: '/admin/teleconseil', label: 'Assister un producteur', icon: 'headphones' },
   { href: '/admin/offers', label: 'Validation offres', icon: 'badge-check' },
   { href: '/admin/orders', label: 'Commandes', icon: 'shopping-bag' },
 ];

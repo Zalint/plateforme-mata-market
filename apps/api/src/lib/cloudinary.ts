@@ -16,7 +16,11 @@ import { env } from '../env.js';
  * INVARIANTS DE SÉCURITÉ :
  *  - `API_SECRET` ne quitte JAMAIS le serveur
  *  - `folder` est figé côté serveur (le client ne choisit pas où il upload)
- *  - `max_file_size` et `allowed_formats` sont inclus dans la signature
+ *  - `allowed_formats` est inclus dans la signature (Cloudinary refuse les
+ *    formats non autorisés). NB : `max_file_size` n'est PAS un paramètre d'upload
+ *    Cloudinary — on ne le signe donc PAS (sinon la signature ne correspond plus
+ *    aux params réellement envoyés → 401). La taille est contrôlée côté client
+ *    (pré-check) via `maxFileSize` renvoyé dans le payload.
  *
  * Référence : CLAUDE.md §G5 « Cloudinary : upload direct navigateur avec
  *             signature serveur. Jamais API_SECRET côté client. »
@@ -74,11 +78,13 @@ export function signUpload(input: SignUploadInput): UploadSignaturePayload {
   const maxFileSize = input.maxFileSize ?? DEFAULT_MAX_BYTES;
   const allowedFormats = (input.allowedFormats ?? DEFAULT_FORMATS).join(',');
 
-  // Paramètres signés (ordre alphabétique des clés)
+  // Paramètres signés (ordre alphabétique). DOIT correspondre EXACTEMENT aux
+  // params envoyés par le client à Cloudinary (hors file/api_key/signature),
+  // sinon Cloudinary recalcule une signature différente → 401. `max_file_size`
+  // n'est pas un param d'upload Cloudinary → exclu de la signature.
   const params: Record<string, string | number> = {
     allowed_formats: allowedFormats,
     folder: input.folder,
-    max_file_size: maxFileSize,
     timestamp,
   };
   const signature = computeSignature(params, apiSecret);

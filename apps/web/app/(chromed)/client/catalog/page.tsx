@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useCatalogOffers } from '../../../../src/lib/api';
 import { useCart } from '../../../../src/lib/cart/use-cart';
+import { cloudinaryThumb } from '../../../../src/lib/cloudinary-url';
 
 /**
  * Client / Catalogue · offres validées MATA (lecture publique authentifiée).
@@ -101,6 +102,7 @@ export default function ClientCatalogPage(): React.JSX.Element {
                 unit={o.unit}
                 priceFcfa={o.priceFcfa}
                 subtitle={`${o.producer.displayName} · ${o.site.name}`}
+                imageUrl={cloudinaryThumb(o.photoPublicIds[0]) ?? undefined}
                 className="flex-1"
               />
               <button

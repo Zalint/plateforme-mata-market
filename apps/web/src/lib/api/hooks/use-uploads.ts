@@ -38,14 +38,22 @@ export async function uploadToCloudinary(
   signature: SignatureResponse,
   file: File,
 ): Promise<{ publicId: string; secureUrl: string }> {
+  // Pré-check taille côté client (le max_file_size n'est pas enforce par la
+  // signature Cloudinary — cf. lib/cloudinary.ts).
+  if (file.size > signature.maxFileSize) {
+    const mb = (signature.maxFileSize / (1024 * 1024)).toFixed(0);
+    throw new Error(`Fichier trop volumineux (max ${mb} Mo)`);
+  }
+
   const formData = new FormData();
   formData.append('file', file);
   formData.append('api_key', signature.apiKey);
   formData.append('timestamp', String(signature.timestamp));
   formData.append('folder', signature.folder);
+  // `allowed_formats` DOIT être envoyé car il fait partie des params signés —
+  // sinon la signature recalculée par Cloudinary diffère → 401.
+  formData.append('allowed_formats', signature.allowedFormats);
   formData.append('signature', signature.signature);
-  // Note : max_file_size et allowed_formats sont vérifiés côté Cloudinary
-  // via la signature ; les renvoyer ici n'est pas utile pour le upload.
 
   const res = await fetch(signature.uploadUrl, { method: 'POST', body: formData });
   if (!res.ok) {

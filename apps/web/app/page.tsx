@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import { useGuestCatalog } from '../src/lib/api';
 import { useCart } from '../src/lib/cart/use-cart';
+import { cloudinaryThumb } from '../src/lib/cloudinary-url';
 
 /**
  * Accueil public (racine `/`) · catalogue invité.
@@ -58,12 +59,14 @@ export default function HomeCatalogPage(): React.JSX.Element {
             </span>
           </Link>
           <div className="flex-1" />
-          <Link
+          {/* <a> simple : /api/auth/login redirige en externe vers Keycloak. Un
+              <Link> tenterait un fetch RSC → « Failed to fetch » qui flashe. */}
+          <a
             href="/api/auth/login"
             className="px-3 py-2 rounded-xl text-sm font-semibold text-stone-700 hover:bg-stone-100"
           >
             Se connecter
-          </Link>
+          </a>
           <Link
             href="/guest/checkout"
             className="relative px-3 py-2 bg-mata-700 hover:bg-mata-800 text-white rounded-xl text-sm font-bold flex items-center gap-2"
@@ -131,6 +134,7 @@ export default function HomeCatalogPage(): React.JSX.Element {
                   unit={o.unit}
                   priceFcfa={o.priceFcfa}
                   subtitle={o.qualityNote ?? undefined}
+                  imageUrl={cloudinaryThumb(o.photoPublicIds[0]) ?? undefined}
                   className="flex-1"
                 />
                 <button
