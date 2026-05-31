@@ -324,6 +324,21 @@ describe('sessionService.close + getActive', () => {
       where: { action: 'teleconsult.session.end', actorUserId: teleconsultant.id },
     });
     expect(audit).not.toBeNull();
+
+    // Idempotence : refermer la même session est un no-op réussi (pas de throw)
+    // et NE DOIT PAS créer une 2e ligne d'audit teleconsult.session.end.
+    await expect(
+      sessionService.close({
+        sessionId: session.id,
+        closedByUserId: teleconsultant.id,
+        closedByRole: 'teleconsultant',
+      }),
+    ).resolves.toMatchObject({ id: session.id });
+
+    const endAuditCount = await prisma.auditLog.count({
+      where: { action: 'teleconsult.session.end', targetId: session.id },
+    });
+    expect(endAuditCount).toBe(1);
   });
 
   it('getActiveForProducer renvoie la session active du producteur, null sinon', async () => {

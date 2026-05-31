@@ -37,9 +37,9 @@ export default function ProducerHelpPage(): React.JSX.Element {
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-5 lg:py-8 max-w-md mx-auto">
       <div className="bg-white rounded-2xl border border-stone-200 shadow-card overflow-hidden">
-        <div className="px-5 py-3 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
-          <Icon name="smartphone" className="w-4 h-4 text-amber-700" />
-          <span className="text-xs font-bold text-amber-900 uppercase tracking-wider">
+        <div className="px-5 py-3 bg-mata-50 border-b border-mata-200 flex items-center gap-2">
+          <Icon name="smartphone" className="w-4 h-4 text-mata-700" />
+          <span className="text-xs font-bold text-stone-900 uppercase tracking-wider">
             Cote producteur
           </span>
         </div>
@@ -60,8 +60,8 @@ export default function ProducerHelpPage(): React.JSX.Element {
               </div>
             </div>
             {activeAssist ? (
-              <div className="mt-4 rounded-xl border-2 border-green-200 bg-green-50 p-3 text-sm text-green-900 flex items-start gap-2">
-                <Icon name="shield-check" className="w-4 h-4 mt-0.5 shrink-0 text-green-600" />
+              <div className="mt-4 rounded-xl border-2 border-mata-200 bg-mata-50 p-3 text-sm text-stone-900 flex items-start gap-2">
+                <Icon name="shield-check" className="w-4 h-4 mt-0.5 shrink-0 text-mata-700" />
                 <span>
                   Un conseiller MATA vous assiste déjà (session{' '}
                   <strong>{activeAssist.sessionNumber}</strong>). Pas besoin d&apos;un nouveau code
@@ -88,7 +88,7 @@ export default function ProducerHelpPage(): React.JSX.Element {
 
           <div className="mt-5 grid grid-cols-2 gap-3 text-xs text-stone-600">
             <div className="p-3 rounded-xl bg-stone-50 border border-stone-100 flex items-start gap-2">
-              <Icon name="shield-check" className="w-3.5 h-3.5 text-green-600 mt-0.5 shrink-0" />
+              <Icon name="shield-check" className="w-3.5 h-3.5 text-mata-700 mt-0.5 shrink-0" />
               <span>
                 Le conseiller n&apos;aura acces a votre compte que si vous lui donnez un code
               </span>
