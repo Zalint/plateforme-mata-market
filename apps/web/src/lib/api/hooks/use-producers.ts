@@ -10,6 +10,7 @@ import type {
   ProducerProfilePublic,
   ProducerProfileUpdate,
   ProducerRatingCreate,
+  ProducerRatingListResponse,
 } from '@mata/shared/schemas';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../http-client';
@@ -89,6 +90,17 @@ export function useAdminProducer(userId: string | null) {
     queryKey: ['producers', 'admin', userId],
     queryFn: ({ signal }) =>
       apiClient.get<ProducerProfileAdmin>(`/v1/producers/${userId}`, token, signal),
+    enabled: !!token && !!userId,
+  });
+}
+
+/** Avis individuels d'un producteur (admin · détail). */
+export function useProducerRatings(userId: string | null) {
+  const token = useAuthToken();
+  return useQuery({
+    queryKey: ['producers', 'admin', userId, 'ratings'],
+    queryFn: ({ signal }) =>
+      apiClient.get<ProducerRatingListResponse>(`/v1/producers/${userId}/ratings`, token, signal),
     enabled: !!token && !!userId,
   });
 }

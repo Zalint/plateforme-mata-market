@@ -16,6 +16,7 @@ import { producerService } from '../producer-service.js';
  *  4. Refus VALIDATION si le producteur n'est pas dans la commande.
  *  5. Refus CONFLICT sur doublon (unique (orderId, producerUserId)).
  *  Audit `producer.rating.create` écrit.
+ *  6. listRatings : avis joints (n° commande + nom client), liste vide sinon.
  */
 
 const ZONE_SLUG = 'ratings-test-pout';
@@ -243,5 +244,40 @@ describe('producerService.createRating · notation post-livraison', () => {
         input: { orderId, stars: 3 },
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+});
+
+describe('producerService.listRatings · détail admin', () => {
+  it('liste les avis avec n° commande + nom client', async () => {
+    const orderId1 = await deliveredOrderId();
+    await producerService.createRating({
+      actorUserId: client.id,
+      producerUserId: producer.id,
+      input: { orderId: orderId1, stars: 5, comment: 'Parfait' },
+    });
+    const orderId2 = await deliveredOrderId();
+    await producerService.createRating({
+      actorUserId: client.id,
+      producerUserId: producer.id,
+      input: { orderId: orderId2, stars: 3 },
+    });
+
+    const { ratings } = await producerService.listRatings(producer.id);
+    expect(ratings).toHaveLength(2);
+    // On retrouve les items par orderId (pas d'assertion d'ordre sur des inserts
+    // quasi simultanés, pour éviter le flaky — cf. CLAUDE.md §G6).
+    const r1 = ratings.find((r) => r.orderId === orderId1);
+    const r2 = ratings.find((r) => r.orderId === orderId2);
+    expect(r1?.stars).toBe(5);
+    expect(r1?.comment).toBe('Parfait');
+    expect(r1?.clientDisplayName).toBe('Resto R');
+    expect(r1?.orderNumber).toMatch(/^CMD-/);
+    expect(r2?.stars).toBe(3);
+    expect(r2?.comment).toBeNull();
+  });
+
+  it('retourne une liste vide si aucun avis', async () => {
+    const { ratings } = await producerService.listRatings(producer.id);
+    expect(ratings).toEqual([]);
   });
 });

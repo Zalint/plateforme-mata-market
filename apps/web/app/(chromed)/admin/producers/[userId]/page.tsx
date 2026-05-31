@@ -8,6 +8,7 @@ import { useState } from 'react';
 import {
   useAdminProducer,
   useBlacklistProducer,
+  useProducerRatings,
   useRevealBankDetails,
   useSuspendProducer,
   useValidateProducer,
@@ -22,6 +23,7 @@ export default function AdminProducerDetailPage(): React.JSX.Element {
   const params = useParams<{ userId: string }>();
   const userId = params.userId;
   const { data: producer, isLoading } = useAdminProducer(userId);
+  const { data: ratings } = useProducerRatings(userId);
 
   const validate = useValidateProducer();
   const suspend = useSuspendProducer();
@@ -127,6 +129,12 @@ export default function AdminProducerDetailPage(): React.JSX.Element {
                   · Validé le {new Date(producer.validatedAt).toLocaleDateString('fr-FR')}
                 </span>
               )}
+              {' · '}
+              <span className="font-semibold text-stone-700">
+                {producer.ratingCount > 0
+                  ? `★ ${(producer.ratingAvg ?? 0).toFixed(1)} (${producer.ratingCount} avis)`
+                  : '★ — (aucun avis)'}
+              </span>
             </div>
             <div className="flex items-center gap-3 mt-2 text-xs text-stone-600 flex-wrap">
               {producer.phone && <span className="tabular-nums">{producer.phone}</span>}
@@ -218,6 +226,37 @@ export default function AdminProducerDetailPage(): React.JSX.Element {
             {producer.documents.map((d) => (
               <li key={d.publicId}>
                 {d.type} — {d.publicId}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="mt-4 bg-white rounded-2xl border border-stone-200 shadow-soft p-5">
+        <h3 className="font-bold text-stone-900 mb-3">Avis ({producer.ratingCount})</h3>
+        {producer.ratingCount === 0 ? (
+          <p className="text-sm text-stone-500">Aucun avis pour le moment.</p>
+        ) : (
+          <ul className="space-y-3">
+            {(ratings?.ratings ?? []).map((r) => (
+              <li key={r.id} className="border border-stone-200 rounded-xl p-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span
+                    className="text-amber-500 text-sm"
+                    role="img"
+                    aria-label={`${r.stars} sur 5`}
+                  >
+                    {'★'.repeat(r.stars)}
+                    <span className="text-stone-300">{'★'.repeat(5 - r.stars)}</span>
+                  </span>
+                  <span className="text-xs text-stone-500">
+                    {new Date(r.createdAt).toLocaleDateString('fr-FR')}
+                  </span>
+                </div>
+                <div className="text-xs text-stone-500 mt-1">
+                  {r.clientDisplayName} · {r.orderNumber}
+                </div>
+                {r.comment && <p className="text-sm text-stone-700 mt-1.5">{r.comment}</p>}
               </li>
             ))}
           </ul>

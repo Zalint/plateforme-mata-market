@@ -7,6 +7,7 @@ import type {
   ProducerProfilePublic,
   ProducerProfileUpdate,
   ProducerRatingCreate,
+  ProducerRatingListResponse,
 } from '@mata/shared/schemas';
 import { Prisma, type ProducerStatus } from '@prisma/client';
 import type { FastifyRequest } from 'fastify';
@@ -196,6 +197,32 @@ export const producerService = {
     if (!row) throw new DomainError('NOT_FOUND', 'Producteur introuvable');
     const ratings = await ratingAggregates([userId]);
     return toProducerAdmin(row, ratings.get(userId));
+  },
+
+  /**
+   * Liste des avis individuels d'un producteur (admin). Joint le numéro de
+   * commande et le nom du client. Triés du plus récent au plus ancien.
+   */
+  async listRatings(producerUserId: string): Promise<ProducerRatingListResponse> {
+    const rows = await prisma.producerRating.findMany({
+      where: { producerUserId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        order: { select: { orderNumber: true } },
+        client: { select: { displayName: true } },
+      },
+    });
+    return {
+      ratings: rows.map((r) => ({
+        id: r.id,
+        orderId: r.orderId,
+        orderNumber: r.order.orderNumber,
+        clientDisplayName: r.client.displayName,
+        stars: r.stars,
+        comment: r.comment,
+        createdAt: r.createdAt.toISOString(),
+      })),
+    };
   },
 
   /**

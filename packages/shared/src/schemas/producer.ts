@@ -183,6 +183,26 @@ export const ProducerRatingCreateSchema = z.object({
 });
 export type ProducerRatingCreate = z.infer<typeof ProducerRatingCreateSchema>;
 
+/**
+ * Avis individuel exposé à l'admin (détail producteur). Joint le n° de
+ * commande et le nom du client pour tracer l'origine de la note.
+ */
+export const ProducerRatingItemSchema = z.object({
+  id: UuidSchema,
+  orderId: UuidSchema,
+  orderNumber: z.string().min(1),
+  clientDisplayName: z.string().min(1),
+  stars: z.number().int().min(1).max(5),
+  comment: z.string().nullable(),
+  createdAt: IsoDateTimeSchema,
+});
+export type ProducerRatingItem = z.infer<typeof ProducerRatingItemSchema>;
+
+export const ProducerRatingListResponseSchema = z.object({
+  ratings: z.array(ProducerRatingItemSchema),
+});
+export type ProducerRatingListResponse = z.infer<typeof ProducerRatingListResponseSchema>;
+
 // ─────────────────────────────────────────────────────────────────
 // Liste admin (paginée + filtres)
 

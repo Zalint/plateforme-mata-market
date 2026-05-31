@@ -10,6 +10,7 @@ import {
   ProducerProfilePublicSchema,
   ProducerProfileUpdateSchema,
   ProducerRatingCreateSchema,
+  ProducerRatingListResponseSchema,
   ProducerSuspendInputSchema,
   UuidSchema,
 } from '@mata/shared/schemas';
@@ -192,6 +193,20 @@ export async function producerRoutes(app: FastifyInstance): Promise<void> {
     async (req) => {
       requireRole(req, 'admin');
       return producerService.getByIdAdmin(req.params.userId);
+    },
+  );
+
+  typed.get(
+    '/v1/producers/:userId/ratings',
+    {
+      schema: {
+        params: UserIdParamSchema,
+        response: { 200: ProducerRatingListResponseSchema },
+      },
+    },
+    async (req) => {
+      requireRole(req, 'admin');
+      return producerService.listRatings(req.params.userId);
     },
   );
 
