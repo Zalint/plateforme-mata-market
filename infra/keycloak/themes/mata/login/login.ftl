@@ -80,5 +80,24 @@
             </#if>
           </div>
         </div>
+
+        <#-- Toggle œil mot de passe : implémenté ici (auto-suffisant) car le JS
+             passwordVisibility.js de base n'est pas actif sur ce thème custom. -->
+        <script>
+          (function () {
+            var btn = document.querySelector('[data-password-toggle]');
+            var input = document.getElementById('password');
+            if (!btn || !input) return;
+            var icon = btn.querySelector('i');
+            btn.addEventListener('click', function () {
+              var willShow = input.type === 'password';
+              input.type = willShow ? 'text' : 'password';
+              btn.setAttribute('aria-label', willShow ? (btn.dataset.labelHide || '') : (btn.dataset.labelShow || ''));
+              if (icon && btn.dataset.iconShow && btn.dataset.iconHide) {
+                icon.className = willShow ? btn.dataset.iconHide : btn.dataset.iconShow;
+              }
+            });
+          })();
+        </script>
     </#if>
 </@layout.registrationLayout>

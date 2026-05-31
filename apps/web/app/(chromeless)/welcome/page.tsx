@@ -1,9 +1,9 @@
 import { Icon } from '@mata/ui';
 
 /**
- * Page de bienvenue — entrée publique de l'app. Propose les 3 rôles de démo.
- * Le lien « Voir la maquette de référence » est MASQUÉ par défaut (artefact de
- * dev) ; réactivable avec NEXT_PUBLIC_SHOW_MOCKUP=true.
+ * Page de bienvenue — entrée publique de l'app : logo + titre + bouton de
+ * connexion. Le lien « Voir la maquette de référence » est MASQUÉ par défaut
+ * (artefact de dev) ; réactivable avec NEXT_PUBLIC_SHOW_MOCKUP=true.
  */
 export default function WelcomePage(): React.JSX.Element {
   const showMockup = process.env.NEXT_PUBLIC_SHOW_MOCKUP === 'true';
@@ -16,10 +16,6 @@ export default function WelcomePage(): React.JSX.Element {
         <h1 className="text-3xl sm:text-4xl font-extrabold text-stone-900 mt-5 tracking-tight">
           MATA · Du champ à l’assiette
         </h1>
-        <p className="text-stone-600 mt-3 max-w-xl mx-auto">
-          Plateforme PMV qui connecte producteurs, clients et back-office MATA. Lot 1 ·
-          authentification + design system.
-        </p>
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
           {/* <a> simple (pas de <Link> Next) : /api/auth/login est un Route Handler
