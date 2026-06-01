@@ -11,6 +11,8 @@ type Photo = { id: string; cloudinaryPublicId: string; position: number };
 type Props = {
   offerId: string;
   existing: Photo[];
+  /** Galerie seule (pas d'ajout/suppression) — vue admin/téléconseiller. */
+  readOnly?: boolean;
 };
 
 /**
@@ -23,7 +25,7 @@ type Props = {
  *
  * API_SECRET Cloudinary jamais côté client (cf. CLAUDE.md §G5).
  */
-export function OfferPhotoUploader({ offerId, existing }: Props): React.JSX.Element {
+export function OfferPhotoUploader({ offerId, existing, readOnly }: Props): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const requestSignature = useUploadSignature();
@@ -91,34 +93,39 @@ export function OfferPhotoUploader({ offerId, existing }: Props): React.JSX.Elem
                 {p.cloudinaryPublicId.split('/').pop()}
               </div>
             )}
-            <button
-              type="button"
-              onClick={() => handleRemove(p.cloudinaryPublicId)}
-              disabled={busy}
-              className="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/95 shadow-soft flex items-center justify-center text-stone-700 hover:text-red-700 disabled:opacity-50"
-              aria-label="Supprimer la photo"
-            >
-              <Icon name="x" className="w-3 h-3" />
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => handleRemove(p.cloudinaryPublicId)}
+                disabled={busy}
+                className="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/95 shadow-soft flex items-center justify-center text-stone-700 hover:text-red-700 disabled:opacity-50"
+                aria-label="Supprimer la photo"
+              >
+                <Icon name="x" className="w-3 h-3" />
+              </button>
+            )}
           </div>
         ))}
-        <label className="aspect-square rounded-xl border-2 border-dashed border-stone-300 flex flex-col items-center justify-center text-stone-400 hover:border-mata-300 hover:text-mata-700 cursor-pointer transition">
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            className="hidden"
-            disabled={busy}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void handleFile(f);
-              // Reset input pour permettre re-upload du même fichier
-              e.target.value = '';
-            }}
-          />
-          <Icon name="camera" className="w-6 h-6" />
-          <span className="text-[10px] font-medium mt-1">{busy ? 'Upload…' : 'Ajouter'}</span>
-        </label>
+        {!readOnly && (
+          <label className="aspect-square rounded-xl border-2 border-dashed border-stone-300 flex flex-col items-center justify-center text-stone-400 hover:border-mata-300 hover:text-mata-700 cursor-pointer transition">
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              disabled={busy}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void handleFile(f);
+                // Reset input pour permettre re-upload du même fichier
+                e.target.value = '';
+              }}
+            />
+            <Icon name="camera" className="w-6 h-6" />
+            <span className="text-[10px] font-medium mt-1">{busy ? 'Upload…' : 'Ajouter'}</span>
+          </label>
+        )}
       </div>
+      {readOnly && existing.length === 0 && <p className="text-sm text-stone-500">Aucune photo.</p>}
       {error && (
         <p className="mt-2 text-xs text-red-700 bg-red-50 px-2 py-1.5 rounded-md">{error}</p>
       )}

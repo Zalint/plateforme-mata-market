@@ -185,6 +185,7 @@ enum OfferStatus {
   changes_requested // renvoyée au producteur pour correction (rejection_reason = feedback, réversible + éditable)
   validated // visible au catalogue, stock dispo
   rejected // refusée par MATA (rejection_reason rempli, définitif)
+  archived // rangée par le producteur (depuis draft/rejected), restaurable en draft
   suspended // masquée par admin ou producteur après validation
 
   // Ajoutés Lot 4 (résolution backlog L2→L4).

@@ -83,6 +83,29 @@ export function useWithdrawOffer() {
   });
 }
 
+export function useArchiveOffer() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<OfferOutput>(`/v1/offers/${id}/archive`, {}, token),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['offers'] });
+    },
+  });
+}
+
+export function useUnarchiveOffer() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.post<OfferOutput>(`/v1/offers/${id}/unarchive`, {}, token),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['offers'] });
+    },
+  });
+}
+
 export function useSuspendOffer() {
   const token = useAuthToken();
   const qc = useQueryClient();

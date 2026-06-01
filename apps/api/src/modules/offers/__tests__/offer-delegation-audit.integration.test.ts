@@ -224,3 +224,33 @@ describe('offerService.requestChanges · pending → changes_requested → re-su
     expect(resubmitted.rejectionReason).toBeNull();
   });
 });
+
+describe('offerService.archive / unarchive', () => {
+  it('archive un brouillon puis le restaure ; refuse d’archiver une offre pending', async () => {
+    const created = await offerService.create(producer.id, offerInput(), {
+      actorUserId: producer.id,
+      onBehalfOfUserId: null,
+    });
+
+    // draft → archived
+    const archived = await offerService.archive({ actorUserId: producer.id, offerId: created.id });
+    expect(archived.status).toBe('archived');
+    const auditArchive = await prisma.auditLog.findFirst({
+      where: { action: 'offer.archive', targetId: created.id },
+    });
+    expect(auditArchive).not.toBeNull();
+
+    // archived → draft (restauration)
+    const restored = await offerService.unarchive({
+      actorUserId: producer.id,
+      offerId: created.id,
+    });
+    expect(restored.status).toBe('draft');
+
+    // Pending n'est pas archivable directement.
+    await offerService.submit({ actorUserId: producer.id, offerId: created.id });
+    await expect(
+      offerService.archive({ actorUserId: producer.id, offerId: created.id }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+});

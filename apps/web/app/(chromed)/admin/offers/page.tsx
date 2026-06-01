@@ -2,6 +2,7 @@
 
 import { OFFER_STATUS_LABEL_FR, OFFER_STATUSES, type OfferStatus } from '@mata/shared/constants';
 import { FilterChip, Icon, OfferCard, usePrompt, useToast } from '@mata/ui';
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import {
   useAdminOffers,
@@ -104,6 +105,12 @@ export default function AdminOffersPage(): React.JSX.Element {
             subtitle={o.submittedAt ? `Soumise le ${formatDate(o.submittedAt)}` : undefined}
             rejectionReason={o.rejectionReason}
           >
+            <Link
+              href={`/producer/offers/${o.id}`}
+              className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold text-stone-600 hover:text-mata-700"
+            >
+              <Icon name="eye" className="w-3.5 h-3.5" /> Voir les détails
+            </Link>
             {o.status === 'pending' && (
               <div className="space-y-2">
                 <div className="grid grid-cols-2 gap-2">

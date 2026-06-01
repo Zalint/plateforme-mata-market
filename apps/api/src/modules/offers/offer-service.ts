@@ -309,6 +309,26 @@ export const offerService = {
     });
   },
 
+  /** Archive un brouillon ou une offre refusée (la range, restaurable). */
+  async archive(input: TransitionInput): Promise<OfferOutput> {
+    return runTransition({
+      ...input,
+      from: ['draft', 'rejected'],
+      action: 'offer.archive',
+      data: { status: 'archived' },
+    });
+  },
+
+  /** Restaure une offre archivée en brouillon pour la retravailler. */
+  async unarchive(input: TransitionInput): Promise<OfferOutput> {
+    return runTransition({
+      ...input,
+      from: ['archived'],
+      action: 'offer.unarchive',
+      data: { status: 'draft' },
+    });
+  },
+
   // ─────────────────────────────────────────────────────────────
   // Photos (attach après upload Cloudinary signé)
 
@@ -393,7 +413,9 @@ async function runTransition(input: {
     | 'offer.request_changes'
     | 'offer.reject'
     | 'offer.suspend'
-    | 'offer.reactivate';
+    | 'offer.reactivate'
+    | 'offer.archive'
+    | 'offer.unarchive';
   data: Prisma.OfferUpdateInput;
   auditExtra?: Record<string, unknown>;
   request?: FastifyRequest;

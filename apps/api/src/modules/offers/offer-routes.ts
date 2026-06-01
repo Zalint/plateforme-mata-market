@@ -240,6 +240,34 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  typed.post(
+    '/v1/offers/:id/archive',
+    { schema: { params: OfferIdParamSchema, response: { 200: OfferOutputSchema } } },
+    async (req) => {
+      const owner = await loadOfferOwner(req.params.id);
+      assertOwnership(req, owner);
+      return offerService.archive({
+        ...resolveAuditActor(req),
+        offerId: req.params.id,
+        request: req,
+      });
+    },
+  );
+
+  typed.post(
+    '/v1/offers/:id/unarchive',
+    { schema: { params: OfferIdParamSchema, response: { 200: OfferOutputSchema } } },
+    async (req) => {
+      const owner = await loadOfferOwner(req.params.id);
+      assertOwnership(req, owner);
+      return offerService.unarchive({
+        ...resolveAuditActor(req),
+        offerId: req.params.id,
+        request: req,
+      });
+    },
+  );
+
   // ─────────────────────────────────────────────────────────────
   // Admin : queue de validation
 

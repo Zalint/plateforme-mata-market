@@ -24,9 +24,11 @@ const FILTERS: { value: FilterValue; label: string }[] = [
   { value: 'all', label: 'Toutes' },
   { value: 'validated', label: OFFER_STATUS_LABEL_FR.validated },
   { value: 'pending', label: OFFER_STATUS_LABEL_FR.pending },
+  { value: 'changes_requested', label: OFFER_STATUS_LABEL_FR.changes_requested },
   { value: 'draft', label: OFFER_STATUS_LABEL_FR.draft },
   { value: 'suspended', label: OFFER_STATUS_LABEL_FR.suspended },
   { value: 'rejected', label: OFFER_STATUS_LABEL_FR.rejected },
+  { value: 'archived', label: OFFER_STATUS_LABEL_FR.archived },
 ];
 
 export default function ProducerOffersPage(): React.JSX.Element {
@@ -44,7 +46,13 @@ export default function ProducerOffersPage(): React.JSX.Element {
   if (!profileData?.profile) return <NoProfileCta />;
 
   const all = data?.offers ?? [];
-  const filtered = filter === 'all' ? all : all.filter((o) => o.status === filter);
+  // « Toutes » masque les archivées (rangées) ; elles restent visibles via leur
+  // propre filtre « Archivées ».
+  const activeCount = all.filter((o) => o.status !== 'archived').length;
+  const filtered =
+    filter === 'all'
+      ? all.filter((o) => o.status !== 'archived')
+      : all.filter((o) => o.status === filter);
   const countsByStatus = all.reduce<Record<string, number>>((acc, o) => {
     acc[o.status] = (acc[o.status] ?? 0) + 1;
     return acc;
@@ -65,7 +73,7 @@ export default function ProducerOffersPage(): React.JSX.Element {
 
       <div className="flex items-center gap-2 mb-4 overflow-x-auto hide-scrollbar">
         {FILTERS.map((f) => {
-          const count = f.value === 'all' ? all.length : (countsByStatus[f.value] ?? 0);
+          const count = f.value === 'all' ? activeCount : (countsByStatus[f.value] ?? 0);
           return (
             <FilterChip
               key={f.value}
