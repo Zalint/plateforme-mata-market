@@ -106,6 +106,17 @@ export function useUnarchiveOffer() {
   });
 }
 
+export function useRelistOffer() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<OfferOutput>(`/v1/offers/${id}/relist`, {}, token),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['offers'] });
+    },
+  });
+}
+
 export function useSuspendOffer() {
   const token = useAuthToken();
   const qc = useQueryClient();

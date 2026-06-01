@@ -102,6 +102,7 @@ async function createOrderInternal(args: CreateOrderArgs): Promise<OrderOutput> 
           quantityReserved: true,
           priceFcfa: true,
           category: true,
+          availableUntil: true,
         },
       });
       if (!offer) {
@@ -112,6 +113,13 @@ async function createOrderInternal(args: CreateOrderArgs): Promise<OrderOutput> 
           'CONFLICT',
           `Offre ${item.offerId} indisponible (statut ${offer.status})`,
         );
+      }
+      // Date limite passée : on refuse même si le cron d'expiration n'a pas
+      // encore basculé le statut (fenêtre entre l'expiration et le cron).
+      const startOfToday = new Date();
+      startOfToday.setUTCHours(0, 0, 0, 0);
+      if (offer.availableUntil && offer.availableUntil < startOfToday) {
+        throw new DomainError('CONFLICT', `Offre ${item.offerId} expirée (date limite dépassée)`);
       }
       const available = offer.quantity - offer.quantityReserved;
       if (item.quantity > available) {
@@ -258,9 +266,13 @@ async function transitionStatusInternal(args: TransitionArgs): Promise<OrderOutp
       data,
     });
     if (swapped.count === 0) {
-      throw new DomainError('CONFLICT', `Transition concurrente détectée depuis ${current.status}`, {
-        details: { from: current.status, to },
-      });
+      throw new DomainError(
+        'CONFLICT',
+        `Transition concurrente détectée depuis ${current.status}`,
+        {
+          details: { from: current.status, to },
+        },
+      );
     }
     const result = await tx.order.findUniqueOrThrow({
       where: { id: orderId },

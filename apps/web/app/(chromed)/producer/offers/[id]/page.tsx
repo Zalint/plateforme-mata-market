@@ -11,6 +11,7 @@ import {
   useMe,
   useOffer,
   useReactivateOffer,
+  useRelistOffer,
   useSubmitOffer,
   useSuspendOffer,
   useUnarchiveOffer,
@@ -35,6 +36,7 @@ export default function ProducerOfferDetailPage(): React.JSX.Element {
   const reactivateOffer = useReactivateOffer();
   const archiveOffer = useArchiveOffer();
   const unarchiveOffer = useUnarchiveOffer();
+  const relistOffer = useRelistOffer();
 
   if (isLoading) return <p className="px-4 py-8 text-sm text-stone-500">Chargement…</p>;
   if (!offer) return <p className="px-4 py-8 text-sm text-red-700">Offre introuvable.</p>;
@@ -180,6 +182,16 @@ export default function ProducerOfferDetailPage(): React.JSX.Element {
                 className="px-4 py-2.5 bg-white border border-stone-200 text-stone-600 rounded-lg text-sm font-semibold hover:bg-stone-50 disabled:opacity-50 flex items-center gap-1.5"
               >
                 <Icon name="package" className="w-4 h-4" /> Archiver
+              </button>
+            )}
+            {offer.status === 'expired' && (
+              <button
+                type="button"
+                onClick={() => relistOffer.mutate(offer.id)}
+                disabled={relistOffer.isPending}
+                className="px-4 py-2.5 bg-mata-700 hover:bg-mata-800 text-white rounded-lg text-sm font-bold disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <Icon name="arrow-left" className="w-4 h-4" /> Relancer (remettre en brouillon)
               </button>
             )}
             {offer.status === 'archived' && (

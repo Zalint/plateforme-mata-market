@@ -329,6 +329,39 @@ export const offerService = {
     });
   },
 
+  /**
+   * Relance une offre expirée en brouillon. On efface l'ancienne date limite
+   * (dépassée) : le producteur en saisira une nouvelle avant de re-soumettre,
+   * sinon le cron la ré-expirerait aussitôt.
+   */
+  async relist(input: TransitionInput): Promise<OfferOutput> {
+    return runTransition({
+      ...input,
+      from: ['expired'],
+      action: 'offer.relist',
+      data: { status: 'draft', availableUntil: null },
+    });
+  },
+
+  /**
+   * Cron : expire les offres dont la date limite (availableUntil) est passée.
+   * Bulk updateMany (pas d'audit par offre — action système, on logue le total
+   * côté job). Une offre `validated`/`reserved` dont availableUntil < aujourd'hui
+   * passe en `expired`. Retourne le nombre traité.
+   */
+  async expireOverdue(): Promise<{ expired: number }> {
+    const startOfToday = new Date();
+    startOfToday.setUTCHours(0, 0, 0, 0);
+    const res = await prisma.offer.updateMany({
+      where: {
+        status: { in: ['validated', 'reserved'] },
+        availableUntil: { lt: startOfToday },
+      },
+      data: { status: 'expired' },
+    });
+    return { expired: res.count };
+  },
+
   // ─────────────────────────────────────────────────────────────
   // Photos (attach après upload Cloudinary signé)
 
@@ -415,7 +448,8 @@ async function runTransition(input: {
     | 'offer.suspend'
     | 'offer.reactivate'
     | 'offer.archive'
-    | 'offer.unarchive';
+    | 'offer.unarchive'
+    | 'offer.relist';
   data: Prisma.OfferUpdateInput;
   auditExtra?: Record<string, unknown>;
   request?: FastifyRequest;

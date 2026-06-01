@@ -81,6 +81,7 @@ export const OFFER_STATUSES = [
   'changes_requested', // renvoyée au producteur pour correction (réversible, éditable)
   'validated', // visible au catalogue, stock dispo
   'rejected', // refusée par MATA (définitif)
+  'expired', // date limite (availableUntil) dépassée — relançable en draft
   'archived', // rangée par le producteur (depuis draft/rejected) — restaurable en draft
   'suspended', // masquée par admin ou producteur
   'reserved', // Lot 4 : stock épuisé temporairement (un cancel peut revenir validated)
@@ -94,6 +95,7 @@ export const OFFER_STATUS_LABEL_FR: Record<OfferStatus, string> = {
   changes_requested: 'À corriger',
   validated: 'Validée',
   rejected: 'Refusée',
+  expired: 'Expirée',
   archived: 'Archivée',
   suspended: 'Suspendue',
   reserved: 'Réservée',

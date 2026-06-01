@@ -254,3 +254,31 @@ describe('offerService.archive / unarchive', () => {
     ).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 });
+
+describe('offerService.expireOverdue / relist', () => {
+  it('expire une offre validée à date limite passée, puis la relance en draft (date effacée)', async () => {
+    const created = await offerService.create(producer.id, offerInput(), {
+      actorUserId: producer.id,
+      onBehalfOfUserId: null,
+    });
+    // Force : validée + date limite dans le passé.
+    await prisma.offer.update({
+      where: { id: created.id },
+      data: { status: 'validated', availableUntil: new Date('2020-01-01T00:00:00Z') },
+    });
+
+    const res = await offerService.expireOverdue();
+    expect(res.expired).toBeGreaterThanOrEqual(1);
+    const row = await prisma.offer.findUnique({ where: { id: created.id } });
+    expect(row?.status).toBe('expired');
+
+    const relisted = await offerService.relist({ actorUserId: producer.id, offerId: created.id });
+    expect(relisted.status).toBe('draft');
+    expect(relisted.availableUntil).toBeNull();
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: 'offer.relist', targetId: created.id },
+    });
+    expect(audit).not.toBeNull();
+  });
+});

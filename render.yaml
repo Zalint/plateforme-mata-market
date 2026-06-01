@@ -266,3 +266,25 @@ services:
         fromDatabase:
           name: mata-db
           property: connectionString
+
+  # expire-offers · passe les offres dont la date limite est dépassée en `expired` (2h UTC)
+  - type: cron
+    name: mata-cron-expire-offers
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    branch: main
+    rootDir: .
+    dockerfilePath: ./infra/docker/api.Dockerfile
+    dockerContext: .
+    schedule: '0 2 * * *'
+    dockerCommand: node dist/jobs/expire-offers.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mata-db
+          property: connectionString

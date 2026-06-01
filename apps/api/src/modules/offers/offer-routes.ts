@@ -268,6 +268,20 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
+  typed.post(
+    '/v1/offers/:id/relist',
+    { schema: { params: OfferIdParamSchema, response: { 200: OfferOutputSchema } } },
+    async (req) => {
+      const owner = await loadOfferOwner(req.params.id);
+      assertOwnership(req, owner);
+      return offerService.relist({
+        ...resolveAuditActor(req),
+        offerId: req.params.id,
+        request: req,
+      });
+    },
+  );
+
   // ─────────────────────────────────────────────────────────────
   // Admin : queue de validation
 
