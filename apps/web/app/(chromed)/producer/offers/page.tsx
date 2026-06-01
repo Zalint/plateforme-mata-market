@@ -27,6 +27,7 @@ const FILTERS: { value: FilterValue; label: string }[] = [
   { value: 'changes_requested', label: OFFER_STATUS_LABEL_FR.changes_requested },
   { value: 'draft', label: OFFER_STATUS_LABEL_FR.draft },
   { value: 'suspended', label: OFFER_STATUS_LABEL_FR.suspended },
+  { value: 'withdrawn', label: OFFER_STATUS_LABEL_FR.withdrawn },
   { value: 'rejected', label: OFFER_STATUS_LABEL_FR.rejected },
   { value: 'expired', label: OFFER_STATUS_LABEL_FR.expired },
   { value: 'archived', label: OFFER_STATUS_LABEL_FR.archived },

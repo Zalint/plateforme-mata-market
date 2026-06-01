@@ -7,8 +7,12 @@ import { useMemo, useState } from 'react';
 import {
   useAdminOffers,
   useCategories,
+  useReactivateOffer,
   useRejectOffer,
   useRequestChangesOffer,
+  useRestoreOffer,
+  useRetireOffer,
+  useSuspendOffer,
   useValidateOffer,
 } from '../../../../src/lib/api';
 
@@ -34,6 +38,10 @@ export default function AdminOffersPage(): React.JSX.Element {
   const validate = useValidateOffer();
   const reject = useRejectOffer();
   const requestChanges = useRequestChangesOffer();
+  const suspend = useSuspendOffer();
+  const reactivate = useReactivateOffer();
+  const retire = useRetireOffer();
+  const restore = useRestoreOffer();
   const prompt = usePrompt();
   const toast = useToast();
 
@@ -64,6 +72,21 @@ export default function AdminOffersPage(): React.JSX.Element {
     if (!reason) return;
     await requestChanges.mutateAsync({ id, reason });
     toast.success('Offre renvoyée au producteur pour correction.');
+  }
+
+  async function handleRetire(id: string): Promise<void> {
+    const reason = await prompt({
+      title: "Retirer l'offre",
+      message:
+        'Retrait unilatéral par MATA. Le producteur ne pourra pas la remettre en ligne — seul MATA pourra la restaurer. Motif (facultatif, visible par le producteur) :',
+      placeholder: 'Ex : retrait temporaire, litige en cours…',
+      confirmLabel: 'Retirer',
+      minLength: 0,
+      maxLength: 300,
+    });
+    if (reason === null) return; // annulé (chaîne vide = retrait sans motif)
+    await retire.mutateAsync({ id, reason: reason || undefined });
+    toast.success('Offre retirée.');
   }
 
   return (
@@ -140,6 +163,46 @@ export default function AdminOffersPage(): React.JSX.Element {
                   <Icon name="pencil" className="w-4 h-4" /> Demander des corrections
                 </button>
               </div>
+            )}
+            {o.status === 'validated' && (
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => suspend.mutate({ id: o.id })}
+                  disabled={suspend.isPending}
+                  className="py-2 rounded-lg bg-white border border-stone-200 hover:bg-stone-50 text-stone-700 text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <Icon name="pause" className="w-4 h-4" /> Suspendre
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleRetire(o.id)}
+                  disabled={retire.isPending}
+                  className="py-2 rounded-lg bg-white border border-mata-300 hover:bg-mata-50 text-mata-700 text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <Icon name="ban" className="w-4 h-4" /> Retirer
+                </button>
+              </div>
+            )}
+            {o.status === 'suspended' && (
+              <button
+                type="button"
+                onClick={() => reactivate.mutate(o.id)}
+                disabled={reactivate.isPending}
+                className="w-full py-2 rounded-lg bg-mata-700 hover:bg-mata-800 text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                <Icon name="eye" className="w-4 h-4" /> Réactiver
+              </button>
+            )}
+            {o.status === 'withdrawn' && (
+              <button
+                type="button"
+                onClick={() => restore.mutate(o.id)}
+                disabled={restore.isPending}
+                className="w-full py-2 rounded-lg bg-mata-700 hover:bg-mata-800 text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                <Icon name="arrow-left" className="w-4 h-4" /> Restaurer (rendre au producteur)
+              </button>
             )}
           </OfferCard>
         ))}

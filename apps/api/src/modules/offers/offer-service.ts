@@ -21,8 +21,11 @@ import { toOfferOutput } from './mappers.js';
  *   draft     → pending      (producer.submit)
  *   pending   → validated    (admin.validate)
  *   pending   → rejected     (admin.reject, rejection_reason)
- *   validated → suspended    (admin OU producer.suspend)
- *   suspended → validated    (admin OU producer.reactivate)
+ *   validated → suspended    (producteur self-service OU modération admin/téléconseiller)
+ *   suspended → validated    (producteur self-service OU modération admin/téléconseiller)
+ *   validated|pending|changes_requested|suspended → withdrawn  (admin.retire, unilatéral)
+ *   withdrawn → draft        (admin.restore — VERROU : le producteur ne peut pas)
+ *   reserved  → sold         (auto : toutes les commandes de l'offre livrées, cf. order-service)
  *
  * PATCH (édition champs) autorisé uniquement en `draft`. Pour modifier
  * une offre publiée, le producteur doit créer une nouvelle offre.
@@ -309,6 +312,33 @@ export const offerService = {
     });
   },
 
+  /**
+   * MATA (admin/téléconseiller) retire une offre UNILATÉRALEMENT. Contrairement
+   * à `suspend` — que le producteur peut lever lui-même — un retrait est un
+   * VERROU : seul MATA peut le défaire via `restore`. La raison facultative est
+   * stockée dans `rejectionReason` et affichée au producteur (lecture seule).
+   * Le contrôle de rôle est fait dans la route (requireRole admin|teleconsultant).
+   */
+  async retire(input: TransitionInput & { reason?: string }): Promise<OfferOutput> {
+    return runTransition({
+      ...input,
+      from: ['validated', 'pending', 'changes_requested', 'suspended'],
+      action: 'offer.retire',
+      data: { status: 'withdrawn', rejectionReason: input.reason ?? null },
+      auditExtra: input.reason ? { reason: input.reason } : undefined,
+    });
+  },
+
+  /** MATA rend la main au producteur : withdrawn → draft (efface le motif). */
+  async restore(input: TransitionInput): Promise<OfferOutput> {
+    return runTransition({
+      ...input,
+      from: ['withdrawn'],
+      action: 'offer.restore',
+      data: { status: 'draft', rejectionReason: null },
+    });
+  },
+
   /** Archive un brouillon ou une offre refusée (la range, restaurable). */
   async archive(input: TransitionInput): Promise<OfferOutput> {
     return runTransition({
@@ -449,7 +479,9 @@ async function runTransition(input: {
     | 'offer.reactivate'
     | 'offer.archive'
     | 'offer.unarchive'
-    | 'offer.relist';
+    | 'offer.relist'
+    | 'offer.retire'
+    | 'offer.restore';
   data: Prisma.OfferUpdateInput;
   auditExtra?: Record<string, unknown>;
   request?: FastifyRequest;

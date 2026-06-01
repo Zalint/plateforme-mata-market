@@ -84,6 +84,7 @@ export const OFFER_STATUSES = [
   'expired', // date limite (availableUntil) dépassée — relançable en draft
   'archived', // rangée par le producteur (depuis draft/rejected) — restaurable en draft
   'suspended', // masquée par admin ou producteur
+  'withdrawn', // retirée unilatéralement par MATA — verrou : seul MATA restaure (→ draft)
   'reserved', // Lot 4 : stock épuisé temporairement (un cancel peut revenir validated)
   'sold', // Lot 4 : épuisé définitivement (tout livré, retiré catalogue)
 ] as const;
@@ -98,6 +99,7 @@ export const OFFER_STATUS_LABEL_FR: Record<OfferStatus, string> = {
   expired: 'Expirée',
   archived: 'Archivée',
   suspended: 'Suspendue',
+  withdrawn: 'Retirée par MATA',
   reserved: 'Réservée',
   sold: 'Vendue',
 };

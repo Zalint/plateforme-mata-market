@@ -31,9 +31,13 @@ const CATEGORY_BG: Record<ProductCategory, string> = {
 const STATUS_TONE: Record<OfferStatus, StatusTone> = {
   draft: 'neutral',
   pending: 'warning',
+  changes_requested: 'warning',
   validated: 'success',
   rejected: 'danger',
+  expired: 'neutral',
+  archived: 'neutral',
   suspended: 'neutral',
+  withdrawn: 'neutral', // retirée par MATA
   reserved: 'info', // Lot 4 : stock épuisé temporairement
   sold: 'neutral', // Lot 4 : épuisé définitivement
 };
@@ -111,11 +115,20 @@ export function OfferCard({
               ⏳ En attente de validation MATA
             </div>
           )}
-          {rejectionReason && (
-            <div className="mt-2 text-xs text-red-700 bg-red-50 inline-block px-2 py-1 rounded-md">
-              Refusée : {rejectionReason}
-            </div>
-          )}
+          {rejectionReason &&
+            (status === 'withdrawn' ? (
+              <div className="mt-2 text-xs text-stone-700 bg-stone-100 inline-block px-2 py-1 rounded-md">
+                Retirée par MATA : {rejectionReason}
+              </div>
+            ) : status === 'changes_requested' ? (
+              <div className="mt-2 text-xs text-amber-800 bg-amber-50 inline-block px-2 py-1 rounded-md">
+                Corrections demandées : {rejectionReason}
+              </div>
+            ) : (
+              <div className="mt-2 text-xs text-red-700 bg-red-50 inline-block px-2 py-1 rounded-md">
+                Refusée : {rejectionReason}
+              </div>
+            ))}
         </div>
       </div>
       {children && <div className="mt-4">{children}</div>}

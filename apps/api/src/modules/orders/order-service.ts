@@ -279,6 +279,10 @@ async function transitionStatusInternal(args: TransitionArgs): Promise<OrderOutp
       include: orderInclude,
     });
 
+    // Offres entièrement écoulées → `sold` (Lot 4). Accumulées ici, auditées
+    // après le commit (une entrée audit par offre vendue).
+    const soldOfferIds: string[] = [];
+
     // Outbox : order.delivered (notif client « commande livrée », dispatch n8n).
     if (to === 'delivered') {
       await tx.outboxEvent.create({
@@ -291,9 +295,33 @@ async function transitionStatusInternal(args: TransitionArgs): Promise<OrderOutp
           } satisfies Prisma.InputJsonValue,
         },
       });
+
+      // Une offre `reserved` (stock 100% réservé) dont TOUTES les commandes la
+      // référençant sont livrées ne peut plus libérer de stock : une commande
+      // livrée est terminale, non annulable. → vente définitive : reserved →
+      // sold, retrait du catalogue (pas de retour `validated`). La commande
+      // courante vient de passer `delivered` ci-dessus, donc déjà comptée.
+      const items = await tx.orderItem.findMany({
+        where: { orderId },
+        select: { offerId: true },
+      });
+      for (const offerId of [...new Set(items.map((i) => i.offerId))]) {
+        const offer = await tx.offer.findUnique({
+          where: { id: offerId },
+          select: { status: true },
+        });
+        if (offer?.status !== 'reserved') continue;
+        const liveItems = await tx.orderItem.count({
+          where: { offerId, order: { status: { notIn: ['delivered', 'cancelled'] } } },
+        });
+        if (liveItems === 0) {
+          await tx.offer.update({ where: { id: offerId }, data: { status: 'sold' } });
+          soldOfferIds.push(offerId);
+        }
+      }
     }
 
-    return { result, from: current.status };
+    return { result, from: current.status, soldOfferIds };
   });
 
   await auditService.log({
@@ -305,6 +333,19 @@ async function transitionStatusInternal(args: TransitionArgs): Promise<OrderOutp
     newValue: { status: to },
     request,
   });
+
+  // Audit `offer.sold` pour chaque offre écoulée par cette livraison (§G3/§G4).
+  for (const offerId of updated.soldOfferIds) {
+    await auditService.log({
+      actorUserId,
+      action: 'offer.sold',
+      targetType: 'offer',
+      targetId: offerId,
+      oldValue: { status: 'reserved' },
+      newValue: { status: 'sold', trigger: 'order.delivered', orderId },
+      request,
+    });
+  }
 
   // Push web (Lot 7, hors chemin critique) : prévient le client à la livraison.
   // `sendToUser` ne throw jamais (§G5) → await sûr après le commit. Mode invité :

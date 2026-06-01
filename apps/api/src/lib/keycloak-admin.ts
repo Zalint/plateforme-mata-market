@@ -226,7 +226,10 @@ async function deleteUserInternal(keycloakId: string): Promise<void> {
     headers: authHeaders(token),
   });
   if (res.status !== 204 && res.status !== 404) {
-    throw new DomainError('EXTERNAL_FAILURE', `Suppression user Keycloak échouée (HTTP ${res.status})`);
+    throw new DomainError(
+      'EXTERNAL_FAILURE',
+      `Suppression user Keycloak échouée (HTTP ${res.status})`,
+    );
   }
 }
 

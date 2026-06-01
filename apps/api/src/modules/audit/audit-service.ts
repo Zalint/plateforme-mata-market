@@ -36,6 +36,9 @@ export type AuditAction =
   | 'offer.archive'
   | 'offer.unarchive'
   | 'offer.relist'
+  | 'offer.retire'
+  | 'offer.restore'
+  | 'offer.sold'
   // Sites
   | 'site.create'
   | 'site.update'

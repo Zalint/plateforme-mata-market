@@ -282,3 +282,56 @@ describe('offerService.expireOverdue / relist', () => {
     expect(audit).not.toBeNull();
   });
 });
+
+describe('offerService.retire / restore · retrait unilatéral MATA', () => {
+  it('retire une offre validée (motif → rejectionReason + audit), puis MATA la restaure en draft', async () => {
+    const created = await offerService.create(producer.id, offerInput(), {
+      actorUserId: producer.id,
+      onBehalfOfUserId: null,
+    });
+    await prisma.offer.update({ where: { id: created.id }, data: { status: 'validated' } });
+
+    // MATA (téléconseiller) retire avec un motif.
+    const retired = await offerService.retire({
+      actorUserId: teleconsultant.id,
+      offerId: created.id,
+      reason: 'Litige qualité en cours côté MATA.',
+    });
+    expect(retired.status).toBe('withdrawn');
+    expect(retired.rejectionReason).toContain('Litige');
+
+    const auditRetire = await prisma.auditLog.findFirst({
+      where: { action: 'offer.retire', targetId: created.id },
+    });
+    expect(auditRetire).not.toBeNull();
+    expect(auditRetire?.actorUserId).toBe(teleconsultant.id);
+
+    // VERROU : on ne peut pas re-soumettre/withdraw depuis withdrawn (statut figé).
+    await expect(
+      offerService.submit({ actorUserId: producer.id, offerId: created.id }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+
+    // MATA restaure → draft, motif effacé.
+    const restored = await offerService.restore({
+      actorUserId: teleconsultant.id,
+      offerId: created.id,
+    });
+    expect(restored.status).toBe('draft');
+    expect(restored.rejectionReason).toBeNull();
+
+    const auditRestore = await prisma.auditLog.findFirst({
+      where: { action: 'offer.restore', targetId: created.id },
+    });
+    expect(auditRestore).not.toBeNull();
+  });
+
+  it('refuse de retirer une offre en brouillon (hors statuts autorisés)', async () => {
+    const created = await offerService.create(producer.id, offerInput(), {
+      actorUserId: producer.id,
+      onBehalfOfUserId: null,
+    });
+    await expect(
+      offerService.retire({ actorUserId: teleconsultant.id, offerId: created.id }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+});

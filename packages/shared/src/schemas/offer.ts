@@ -19,8 +19,10 @@ import {
  *   pending            → changes_requested (admin renvoie pour correction + message)
  *   changes_requested  → pending           (producteur corrige et re-soumet)
  *   pending            → rejected          (admin refuse, définitif, raison obligatoire)
- *   validated → suspended    (admin OU producteur masque)
- *   suspended → validated    (admin OU producteur réactive)
+ *   validated → suspended    (producteur self-service OU modération admin/téléconseiller)
+ *   suspended → validated    (producteur self-service OU modération admin/téléconseiller)
+ *   validated|pending|changes_requested|suspended → withdrawn  (admin/téléconseiller retire, unilatéral)
+ *   withdrawn → draft        (admin/téléconseiller restaure — VERROU : le producteur ne peut pas)
  *
  * PATCH (édition champs) autorisé uniquement en `draft`. Pour modifier
  * une offre publiée le producteur doit créer une nouvelle offre.
@@ -201,3 +203,13 @@ export type OfferSuspendInput = z.infer<typeof OfferSuspendInputSchema>;
 
 // `reactivate` : pas de body, ramène suspended → validated.
 export const OfferReactivateInputSchema = z.object({});
+
+// `retire` : MATA retire l'offre unilatéralement. Raison courte facultative,
+// affichée au producteur (stockée dans rejectionReason côté DB).
+export const OfferRetireInputSchema = z.object({
+  reason: z.string().min(3).max(300).optional(),
+});
+export type OfferRetireInput = z.infer<typeof OfferRetireInputSchema>;
+
+// `restore` : MATA rend la main au producteur (withdrawn → draft). Pas de body.
+export const OfferRestoreInputSchema = z.object({});

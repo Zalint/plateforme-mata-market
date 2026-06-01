@@ -183,7 +183,9 @@ export default function NewProducerPage(): React.JSX.Element {
                 className="mt-1 w-full px-3 py-2.5 border-2 border-stone-200 rounded-lg outline-none focus:border-mata-700 text-sm tabular-nums"
               />
               {phone.length > 4 && !phoneValid && (
-                <p className="mt-1 text-xs text-mata-700">Format attendu : +221 suivi de 9 chiffres.</p>
+                <p className="mt-1 text-xs text-mata-700">
+                  Format attendu : +221 suivi de 9 chiffres.
+                </p>
               )}
             </div>
 

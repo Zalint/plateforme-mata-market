@@ -7,6 +7,7 @@ import {
   OfferOutputSchema,
   OfferRejectInputSchema,
   OfferRequestChangesInputSchema,
+  OfferRetireInputSchema,
   OfferStatusSchema,
   OfferSuspendInputSchema,
   OfferUpdateSchema,
@@ -214,9 +215,14 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (req) => {
-      // Owner OU admin
-      const owner = await loadOfferOwner(req.params.id);
-      assertOwnership(req, owner);
+      // Suspendre = self-service producteur (sur SA propre offre) OU modération
+      // MATA. On autorise le téléconseiller comme l'admin (cohérent avec
+      // validate/reject/retire) ; pour les autres rôles, assertOwnership couvre
+      // owner (producteur) + admin/super_admin + session déléguée.
+      if (req.user?.role !== 'teleconsultant') {
+        const owner = await loadOfferOwner(req.params.id);
+        assertOwnership(req, owner);
+      }
       return offerService.suspend({
         ...resolveAuditActor(req),
         offerId: req.params.id,
@@ -230,8 +236,12 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
     '/v1/offers/:id/reactivate',
     { schema: { params: OfferIdParamSchema, response: { 200: OfferOutputSchema } } },
     async (req) => {
-      const owner = await loadOfferOwner(req.params.id);
-      assertOwnership(req, owner);
+      // Réactiver : même politique que suspendre (self-service producteur OU
+      // modération MATA admin/téléconseiller).
+      if (req.user?.role !== 'teleconsultant') {
+        const owner = await loadOfferOwner(req.params.id);
+        assertOwnership(req, owner);
+      }
       return offerService.reactivate({
         ...resolveAuditActor(req),
         offerId: req.params.id,
@@ -275,6 +285,41 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
       const owner = await loadOfferOwner(req.params.id);
       assertOwnership(req, owner);
       return offerService.relist({
+        ...resolveAuditActor(req),
+        offerId: req.params.id,
+        request: req,
+      });
+    },
+  );
+
+  // Retrait unilatéral par MATA (admin/téléconseiller). VERROU : pas
+  // d'assertOwnership — le producteur ne peut PAS retirer/restaurer, seul MATA.
+  typed.post(
+    '/v1/offers/:id/retire',
+    {
+      schema: {
+        params: OfferIdParamSchema,
+        body: OfferRetireInputSchema,
+        response: { 200: OfferOutputSchema },
+      },
+    },
+    async (req) => {
+      requireRole(req, 'admin', 'teleconsultant');
+      return offerService.retire({
+        ...resolveAuditActor(req),
+        offerId: req.params.id,
+        reason: req.body.reason,
+        request: req,
+      });
+    },
+  );
+
+  typed.post(
+    '/v1/offers/:id/restore',
+    { schema: { params: OfferIdParamSchema, response: { 200: OfferOutputSchema } } },
+    async (req) => {
+      requireRole(req, 'admin', 'teleconsultant');
+      return offerService.restore({
         ...resolveAuditActor(req),
         offerId: req.params.id,
         request: req,

@@ -145,6 +145,31 @@ export function useReactivateOffer() {
   });
 }
 
+// Retrait unilatéral par MATA (admin/téléconseiller). Raison facultative.
+export function useRetireOffer() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; reason?: string }) =>
+      apiClient.post<OfferOutput>(`/v1/offers/${input.id}/retire`, { reason: input.reason }, token),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['offers'] });
+    },
+  });
+}
+
+// Restauration par MATA : withdrawn → draft (rend la main au producteur).
+export function useRestoreOffer() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<OfferOutput>(`/v1/offers/${id}/restore`, {}, token),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['offers'] });
+    },
+  });
+}
+
 export function useAttachOfferPhotos() {
   const token = useAuthToken();
   const qc = useQueryClient();

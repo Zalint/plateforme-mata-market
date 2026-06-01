@@ -188,6 +188,7 @@ enum OfferStatus {
   expired // date limite availableUntil dépassée (cron), relançable en draft
   archived // rangée par le producteur (depuis draft/rejected), restaurable en draft
   suspended // masquée par admin ou producteur après validation
+  withdrawn // retirée unilatéralement par MATA (admin/téléconseiller) — verrou : seul MATA peut la restaurer en draft
 
   // Ajoutés Lot 4 (résolution backlog L2→L4).
   reserved // stock épuisé temporairement (quantityReserved === quantity) — un cancel peut revenir validated

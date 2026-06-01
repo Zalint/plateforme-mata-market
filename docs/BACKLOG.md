@@ -209,6 +209,56 @@ exacts où ces dettes sont marquées en commentaire inline.
 
 # Résolues
 
+## [offers] Statut `withdrawn` (retrait MATA) + déclencheur `sold` + suspend admin — résolue 2026-06-01
+
+Trois manques du cycle de vie d'offre comblés :
+
+1. **`withdrawn` (« Retirée par MATA »)** : retrait unilatéral admin/téléconseiller,
+   distinct de `suspended` (que le producteur peut lever lui-même). VERROU : seul
+   MATA pose (`validated|pending|changes_requested|suspended → withdrawn`) ET défait
+   (`withdrawn → draft`, rend la main au producteur). Motif facultatif stocké dans
+   `rejectionReason`, affiché au producteur en lecture seule.
+2. **`sold` enfin déclenché** : à la transition order `delivered`, une offre `reserved`
+   dont toutes les commandes la référençant sont livrées (donc non annulables) bascule
+   `reserved → sold` (terminal, retrait catalogue). Comblait un sous-trou Lot 4 (le
+   statut existait mais n'était jamais posé). Audit `offer.sold`.
+3. **Suspend côté admin** : il n'existait AUCUN bouton UI admin pour suspendre/retirer
+   une offre validée (la fiche `/producer/offers/[id]` est lecture seule pour l'admin,
+   et `/admin/offers` n'avait d'actions que sur `pending`). Ajout des boutons
+   Suspendre/Réactiver/Retirer/Restaurer dans `/admin/offers`.
+4. **Politique de rôles harmonisée** : `suspend`/`reactivate` étaient en `assertOwnership`
+   pur → un téléconseiller ne pouvait pas suspendre une offre arbitraire (403) alors qu'il
+   peut valider/refuser/retirer (modération). Aligné : suspend/reactivate = **propriétaire
+   (producteur self-service) OU modération (admin/téléconseiller)** — on garde le producteur
+   et on ajoute le téléconseiller. `submit`/`withdraw`/`archive` restent en `assertOwnership`
+   (actes du producteur / délégation, pas de la modération MATA — un brouillon ne se publie
+   pas sans le consentement du producteur). Couvert par `offer-routes-auth.integration.test.ts`
+   (téléconseiller 200, producteur 200, client 403).
+
+- **Fichiers** : schema.prisma (enum `withdrawn` + migration `20260601131127_add_offer_status_withdrawn`),
+  enums.ts (+ label), offer.ts (Zod retire/restore), offer-service.ts (`retire`/`restore` +
+  runTransition), audit-service.ts (`offer.retire`/`offer.restore`/`offer.sold`),
+  offer-routes.ts (routes admin-only), order-service.ts (déclencheur sold), use-offers.ts
+  (hooks), admin/offers/page.tsx (boutons), producer/offers/[id]/page.tsx (bandeau + lecture
+  seule), producer/offers/page.tsx (filtre), offer-card.tsx (STATUS_TONE complété).
+- **Validation** : typecheck (api+web+shared) + biome (fichiers touchés) OK ; intégration
+  offers 9/9 + orders 13/13 verte (testcontainers, dont 3 nouveaux tests : sold complet,
+  partiel sans sold, retire/restore + verrou). `DOCKER_HOST=npipe:////./pipe/dockerDesktopLinuxEngine`.
+- **Note** : `STATUS_TONE` (offer-card.tsx) était incomplet depuis l'ajout de
+  `changes_requested`/`expired`/`archived` (dette silencieuse) — complété ici avec ces trois
+  + `withdrawn`.
+
+## [tech] Formatage Biome KO sur 4 pages non liées (préexistant) — découverte 2026-06-01
+
+- **Découvert** : 2026-06-01 (run `pnpm biome check .` pendant le lot offers withdrawn/sold).
+- **Fichiers** : apps/web/app/(chromed)/admin/producers/new/page.tsx,
+  admin/users/new/page.tsx, client/home/page.tsx, producer/home/page.tsx — `<KpiCard ... />`
+  sur une ligne que Biome veut éclater multi-lignes (format only, pas de bug logique).
+- **Garde-fou actuel** : aucun impact runtime ; uniquement `biome check .` qui sort en erreur.
+- **Risque si non traité** : `pnpm biome check .` (et la CI) reste rouge → masque de vraies
+  régressions de format futures. Fix trivial : `pnpm biome check --write` sur ces 4 fichiers
+  (laissé hors de ce lot par discipline de périmètre §E4 — non lié au cycle de vie d'offre).
+
 ## [seed fix] Wipe seed : `pickup_items` bloquaient le DELETE `order_items` — résolue 2026-05-31
 
 Découvert en enrichissant `dev-seed.ts` (ajout de 5 producteurs + commandes

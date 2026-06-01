@@ -86,8 +86,13 @@ export default function ProducerOfferDetailPage(): React.JSX.Element {
             {offer.qualityNote && (
               <p className="mt-2 text-sm text-stone-600">{offer.qualityNote}</p>
             )}
-            {offer.rejectionReason &&
-              (offer.status === 'changes_requested' ? (
+            {offer.status === 'withdrawn' ? (
+              <div className="mt-3 text-sm text-stone-700 bg-stone-100 border border-stone-200 px-3 py-2 rounded-md">
+                <span className="font-semibold">Retirée par MATA.</span>{' '}
+                {offer.rejectionReason ?? 'Contactez MATA pour la remettre en ligne.'}
+              </div>
+            ) : offer.rejectionReason ? (
+              offer.status === 'changes_requested' ? (
                 <div className="mt-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2 rounded-md">
                   <span className="font-semibold">Corrections demandées par MATA :</span>{' '}
                   {offer.rejectionReason}
@@ -96,7 +101,8 @@ export default function ProducerOfferDetailPage(): React.JSX.Element {
                 <p className="mt-3 text-sm text-red-700 bg-red-50 px-3 py-2 rounded-md">
                   Refusée : {offer.rejectionReason}
                 </p>
-              ))}
+              )
+            ) : null}
           </div>
         </div>
 
