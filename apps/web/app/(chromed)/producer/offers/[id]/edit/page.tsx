@@ -11,9 +11,10 @@ import { useCategories, useMySites, useOffer, useUpdateOffer } from '../../../..
 /**
  * Producer / Offers / [id] / Edit · édition d'une offre.
  *
- * L'édition n'est autorisée QUE sur un brouillon (`draft`) côté API (PATCH
- * rejette 409 sinon). On garde donc l'écran réservé au statut draft : pour
- * modifier une offre publiée, le producteur la repasse d'abord en brouillon.
+ * L'édition est autorisée côté API (offerService.update) quand l'offre est en
+ * `draft` OU `changes_requested` (PATCH rejette 409 sinon). L'écran reflète ce
+ * contrat : pour modifier une offre publiée, le producteur la repasse d'abord
+ * en brouillon depuis sa fiche.
  */
 export default function EditOfferPage(): React.JSX.Element {
   const params = useParams<{ id: string }>();
@@ -55,8 +56,10 @@ function EditForm({ offer }: { offer: OfferOutput }): React.JSX.Element {
   const [unit, setUnit] = useState<OfferUnit>(offer.unit);
   const [quantity, setQuantity] = useState(offer.quantity);
   const [priceFcfa, setPriceFcfa] = useState(offer.priceFcfa);
-  const [availableFrom, setAvailableFrom] = useState(offer.availableFrom);
-  const [availableUntil, setAvailableUntil] = useState(offer.availableUntil ?? '');
+  // Normalise en YYYY-MM-DD : `offer.available*` peut être un datetime ISO
+  // complet, qui rendrait l'<input type="date"> vide.
+  const [availableFrom, setAvailableFrom] = useState(offer.availableFrom.slice(0, 10));
+  const [availableUntil, setAvailableUntil] = useState(offer.availableUntil?.slice(0, 10) ?? '');
   const [siteId, setSiteId] = useState(offer.siteId);
   const [qualityNote, setQualityNote] = useState(offer.qualityNote ?? '');
 

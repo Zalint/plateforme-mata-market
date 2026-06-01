@@ -125,7 +125,7 @@ export function OfferCard({
                 Corrections demandées : {rejectionReason}
               </div>
             ) : (
-              <div className="mt-2 text-xs text-red-700 bg-red-50 inline-block px-2 py-1 rounded-md">
+              <div className="mt-2 text-xs text-mata-800 bg-mata-50 inline-block px-2 py-1 rounded-md">
                 Refusée : {rejectionReason}
               </div>
             ))}

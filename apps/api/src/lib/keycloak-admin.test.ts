@@ -12,12 +12,15 @@ import { keycloakAdmin } from './keycloak-admin.js';
  * recréation par téléphone. Cf. keycloak-admin.createUser.
  */
 
-vi.mock('./env.js', () => ({
+vi.mock('../env.js', () => ({
   env: {
     KEYCLOAK_URL: 'http://kc.test',
     KEYCLOAK_REALM: 'mata',
     KEYCLOAK_ADMIN_CLIENT_ID: 'svc',
     KEYCLOAK_ADMIN_CLIENT_SECRET: 'secret',
+    // Requis par logger.ts (importé transitivement).
+    LOG_LEVEL: 'silent',
+    NODE_ENV: 'test',
   },
 }));
 
@@ -94,6 +97,12 @@ describe('keycloakAdmin.createUser', () => {
     // Réutilise le compte existant (même id), sans le supprimer.
     expect(id).toBe('kc-user-id');
     expect(calledUrls().some((u) => u.endsWith('/reset-password'))).toBe(true);
+    // Réactivation/maj du compte adopté (updateUserBasics → PUT /users/{id}).
+    expect(
+      mockFetch.mock.calls.some(
+        (c) => (c[0] as Call).method === 'PUT' && (c[0] as Call).url?.endsWith('/users/kc-user-id'),
+      ),
+    ).toBe(true);
     expect(mockFetch.mock.calls.some((c) => (c[0] as Call).method === 'DELETE')).toBe(false);
     // Le rôle est (ré)assigné dans tous les cas.
     expect(calledUrls().some((u) => u.endsWith('/role-mappings/realm'))).toBe(true);
