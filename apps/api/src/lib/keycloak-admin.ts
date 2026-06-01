@@ -148,13 +148,64 @@ type CreateUserInput = {
   realmRole: string;
 };
 
+/** Réinitialise le mot de passe (temporaire, changement forcé). Jamais loggé. */
+async function resetPassword(
+  cfg: KeycloakAdminConfig,
+  token: string,
+  keycloakId: string,
+  tempPassword: string,
+): Promise<void> {
+  const res = await httpFetch({
+    method: 'PUT',
+    url: `${cfg.baseUrl}/admin/realms/${cfg.realm}/users/${keycloakId}/reset-password`,
+    headers: authHeaders(token),
+    body: { type: 'password', value: tempPassword, temporary: true },
+  });
+  if (res.status !== 204 && res.status !== 200) {
+    throw new DomainError(
+      'EXTERNAL_FAILURE',
+      `Reset mot de passe Keycloak échoué (HTTP ${res.status})`,
+    );
+  }
+}
+
+/** Met à jour nom + réactive le compte (utilisé lors de l'adoption d'un orphelin). */
+async function updateUserBasics(
+  cfg: KeycloakAdminConfig,
+  token: string,
+  keycloakId: string,
+  displayName: string,
+): Promise<void> {
+  const res = await httpFetch({
+    method: 'PUT',
+    url: `${cfg.baseUrl}/admin/realms/${cfg.realm}/users/${keycloakId}`,
+    headers: authHeaders(token),
+    body: { firstName: displayName, enabled: true },
+  });
+  if (res.status !== 204 && res.status !== 200) {
+    throw new DomainError(
+      'EXTERNAL_FAILURE',
+      `Mise à jour user Keycloak échouée (HTTP ${res.status})`,
+    );
+  }
+}
+
 /**
  * Provisionne un compte utilisateur dans Keycloak :
- *  1. crée le user (username = téléphone, mdp temporaire forcé à changer)
- *  2. assigne le rôle realm demandé
+ *  1. crée le user (username = téléphone, mdp temporaire forcé à changer) ;
+ *     SI un compte existe déjà pour ce téléphone (HTTP 409), on l'ADOPTE
+ *     (reset mdp + réactivation) au lieu d'échouer — cf. note ci-dessous.
+ *  2. assigne le rôle realm demandé (idempotent).
  *
- * Retourne le `keycloakId` (= sub du futur JWT). En cas de conflit (téléphone
- * déjà pris côté Keycloak) → CONFLICT. Le mot de passe n'est jamais loggé.
+ * Adoption des orphelins : un reseed/wipe de la base applicative supprime la
+ * ligne `users` mais PAS le compte Keycloak (bases séparées) → des « orphelins »
+ * KC sans ligne DB s'accumulent et bloquaient toute recréation par téléphone.
+ * Les deux appelants (user-service, producer-service) vérifient la DB EN AMONT
+ * et n'arrivent ici que si AUCUNE ligne `users` n'existe pour ce téléphone ;
+ * un 409 Keycloak est donc forcément un orphelin → on le réutilise. Idempotent
+ * et sûr (un orphelin sans ligne DB n'a aucune autorisation MATA).
+ *
+ * Retourne le `keycloakId` (= sub du futur JWT). Le mot de passe n'est jamais loggé.
  */
 async function createUserInternal(input: CreateUserInput): Promise<string> {
   const cfg = requireKeycloakAdminConfig();
@@ -172,24 +223,40 @@ async function createUserInternal(input: CreateUserInput): Promise<string> {
     },
   });
 
-  if (createRes.status === 409) {
-    throw new DomainError('CONFLICT', 'Un compte Keycloak existe déjà pour ce téléphone');
-  }
-  if (createRes.status !== 201) {
+  let keycloakId: string;
+  let adopted = false;
+
+  if (createRes.status === 201) {
+    // Keycloak renvoie l'id dans le header Location ; httpFetch n'expose pas les
+    // headers, on relit donc le user par username exact.
+    const id = await findUserIdByUsername(cfg, token, input.phone);
+    if (!id) {
+      throw new DomainError('EXTERNAL_FAILURE', 'User Keycloak créé mais introuvable au relookup');
+    }
+    keycloakId = id;
+  } else if (createRes.status === 409) {
+    // Orphelin KC (aucune ligne DB en amont) → adoption : reset mdp + réactivation.
+    const id = await findUserIdByUsername(cfg, token, input.phone);
+    if (!id) {
+      throw new DomainError(
+        'EXTERNAL_FAILURE',
+        'Conflit Keycloak mais compte introuvable au relookup',
+      );
+    }
+    keycloakId = id;
+    adopted = true;
+    await updateUserBasics(cfg, token, keycloakId, input.displayName);
+    await resetPassword(cfg, token, keycloakId, input.tempPassword);
+    logger.info({ keycloakId }, 'keycloak.admin.orphan_adopted');
+  } else {
     throw new DomainError(
       'EXTERNAL_FAILURE',
       `Création user Keycloak échouée (HTTP ${createRes.status})`,
     );
   }
 
-  // Keycloak renvoie l'id dans le header Location ; httpFetch n'expose pas les
-  // headers, on relit donc le user par username exact.
-  const keycloakId = await findUserIdByUsername(cfg, token, input.phone);
-  if (!keycloakId) {
-    throw new DomainError('EXTERNAL_FAILURE', 'User Keycloak créé mais introuvable au relookup');
-  }
-
-  // Assigne le rôle realm demandé.
+  // Assigne le rôle realm demandé (idempotent : réassigner un rôle déjà présent
+  // est sans effet côté Keycloak).
   const role = await getRealmRole(cfg, token, input.realmRole);
   const roleRes = await httpFetch({
     method: 'POST',
@@ -198,21 +265,27 @@ async function createUserInternal(input: CreateUserInput): Promise<string> {
     body: [role],
   });
   if (roleRes.status !== 204 && roleRes.status !== 200) {
-    // Rollback best-effort : on supprime le user pour ne pas laisser un compte
-    // sans rôle (sinon login possible mais aucune autorisation MATA).
-    await deleteUserInternal(keycloakId).catch((err: unknown) => {
-      logger.error(
-        { keycloakId, err: err instanceof Error ? err.message : String(err) },
-        'keycloak.admin.rollback_failed',
-      );
-    });
+    // Rollback best-effort UNIQUEMENT si on vient de créer le compte (pas si on
+    // a adopté un orphelin préexistant — on ne supprime pas un compte qu'on n'a
+    // pas créé dans cette transaction).
+    if (!adopted) {
+      await deleteUserInternal(keycloakId).catch((err: unknown) => {
+        logger.error(
+          { keycloakId, err: err instanceof Error ? err.message : String(err) },
+          'keycloak.admin.rollback_failed',
+        );
+      });
+    }
     throw new DomainError(
       'EXTERNAL_FAILURE',
       `Assignation rôle ${input.realmRole} échouée (HTTP ${roleRes.status})`,
     );
   }
 
-  logger.info({ keycloakId, realmRole: input.realmRole }, 'keycloak.admin.user_provisioned');
+  logger.info(
+    { keycloakId, realmRole: input.realmRole, adopted },
+    'keycloak.admin.user_provisioned',
+  );
   return keycloakId;
 }
 
@@ -226,7 +299,10 @@ async function deleteUserInternal(keycloakId: string): Promise<void> {
     headers: authHeaders(token),
   });
   if (res.status !== 204 && res.status !== 404) {
-    throw new DomainError('EXTERNAL_FAILURE', `Suppression user Keycloak échouée (HTTP ${res.status})`);
+    throw new DomainError(
+      'EXTERNAL_FAILURE',
+      `Suppression user Keycloak échouée (HTTP ${res.status})`,
+    );
   }
 }
 

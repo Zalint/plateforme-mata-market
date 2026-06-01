@@ -169,7 +169,7 @@ beforeEach(async () => {
     data: {
       producerUserId: producer.id,
       siteId: site.id,
-      category: 'poultry',
+      categorySlug: 'poultry',
       status: 'validated',
       title: 'Poulet fermier (guest)',
       unit: 'unit',
@@ -216,6 +216,19 @@ describe('Guest · lectures publiques (sans JWT)', () => {
       expect(res.statusCode).toBe(200);
       const body = res.json() as { zones: Array<{ slug: string }> };
       expect(body.zones.some((z) => z.slug === ZONE_SLUG)).toBe(true);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('GET /v1/guest/categories renvoie les catégories actives sans token', async () => {
+    const app = await buildApp();
+    try {
+      const res = await app.inject({ method: 'GET', url: '/v1/guest/categories' });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as { categories: Array<{ slug: string; isActive: boolean }> };
+      expect(body.categories.some((c) => c.slug === 'poultry')).toBe(true);
+      expect(body.categories.every((c) => c.isActive)).toBe(true);
     } finally {
       await app.close();
     }

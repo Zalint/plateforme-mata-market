@@ -21,8 +21,11 @@ import { toOfferOutput } from './mappers.js';
  *   draft     → pending      (producer.submit)
  *   pending   → validated    (admin.validate)
  *   pending   → rejected     (admin.reject, rejection_reason)
- *   validated → suspended    (admin OU producer.suspend)
- *   suspended → validated    (admin OU producer.reactivate)
+ *   validated → suspended    (producteur self-service OU modération admin/téléconseiller)
+ *   suspended → validated    (producteur self-service OU modération admin/téléconseiller)
+ *   validated|pending|changes_requested|suspended → withdrawn  (admin.retire, unilatéral)
+ *   withdrawn → draft        (admin.restore — VERROU : le producteur ne peut pas)
+ *   reserved  → sold         (auto : toutes les commandes de l'offre livrées, cf. order-service)
  *
  * PATCH (édition champs) autorisé uniquement en `draft`. Pour modifier
  * une offre publiée, le producteur doit créer une nouvelle offre.
@@ -73,12 +76,21 @@ export const offerService = {
     return toOfferOutput(row);
   },
 
-  async listAdmin(query: OfferAdminListQuery): Promise<OfferAdminListResponse> {
-    const where: Prisma.OfferWhereInput = {
+  /**
+   * Liste admin/modération. `scopeWhere` restreint le périmètre de modération
+   * (portée téléconseiller) ; vide `{}` = aucune restriction (admin). Cf.
+   * assignment-scope.scopeOfferWhereForModerator.
+   */
+  async listAdmin(
+    query: OfferAdminListQuery,
+    scopeWhere: Prisma.OfferWhereInput = {},
+  ): Promise<OfferAdminListResponse> {
+    const filters: Prisma.OfferWhereInput = {
       ...(query.status && { status: query.status }),
-      ...(query.category && { category: query.category }),
+      ...(query.category && { categorySlug: query.category }),
       ...(query.q && { title: { contains: query.q, mode: 'insensitive' } }),
     };
+    const where: Prisma.OfferWhereInput = { AND: [filters, scopeWhere] };
     const skip = (query.page - 1) * query.limit;
     const [rows, total] = await Promise.all([
       prisma.offer.findMany({
@@ -122,12 +134,15 @@ export const offerService = {
     if (site.status !== 'active') {
       throw new DomainError('CONFLICT', 'Impossible de créer une offre sur un site archivé');
     }
+    // Catégorie = slug vers product_categories : doit exister ET être active
+    // (remplace l'ancienne validation z.enum, désormais dynamique).
+    await assertCategoryActive(input.category);
 
     const created = await prisma.offer.create({
       data: {
         producerUserId,
         siteId: input.siteId,
-        category: input.category,
+        categorySlug: input.category,
         title: input.title,
         unit: input.unit,
         quantity: input.quantity,
@@ -146,7 +161,7 @@ export const offerService = {
       targetId: created.id,
       newValue: {
         title: created.title,
-        category: created.category,
+        category: created.categorySlug,
         quantity: created.quantity,
         priceFcfa: created.priceFcfa,
       },
@@ -166,18 +181,19 @@ export const offerService = {
   ): Promise<OfferOutput> {
     const existing = await prisma.offer.findUnique({ where: { id: offerId } });
     if (!existing) throw new DomainError('NOT_FOUND', 'Offre introuvable');
-    if (existing.status !== 'draft') {
+    if (existing.status !== 'draft' && existing.status !== 'changes_requested') {
       throw new DomainError(
         'CONFLICT',
-        `PATCH refusé sur status=${existing.status} — créer une nouvelle offre.`,
+        `PATCH refusé sur status=${existing.status} — éditable uniquement en brouillon ou à corriger.`,
       );
     }
+    if (input.category !== undefined) await assertCategoryActive(input.category);
 
     const updated = await prisma.offer.update({
       where: { id: offerId },
       data: {
         siteId: input.siteId,
-        category: input.category,
+        categorySlug: input.category,
         title: input.title,
         unit: input.unit,
         quantity: input.quantity,
@@ -220,9 +236,40 @@ export const offerService = {
   async submit(input: TransitionInput): Promise<OfferOutput> {
     return runTransition({
       ...input,
-      from: ['draft'],
+      // Soumission initiale (draft) OU re-soumission après corrections
+      // (changes_requested). On efface le feedback précédent.
+      from: ['draft', 'changes_requested'],
       action: 'offer.submit',
-      data: { status: 'pending', submittedAt: new Date() },
+      data: { status: 'pending', submittedAt: new Date(), rejectionReason: null },
+    });
+  },
+
+  /**
+   * Admin/téléconseiller renvoie une offre `pending` au producteur pour
+   * correction (réversible). Le message (obligatoire) est stocké dans
+   * `rejectionReason` et affiché au producteur. L'offre redevient éditable.
+   */
+  async requestChanges(input: TransitionInput & { reason: string }): Promise<OfferOutput> {
+    return runTransition({
+      ...input,
+      from: ['pending'],
+      action: 'offer.request_changes',
+      data: { status: 'changes_requested', rejectionReason: input.reason },
+      auditExtra: { reason: input.reason },
+    });
+  },
+
+  /**
+   * Retour en brouillon par le producteur, TANT QUE l'offre est `pending`
+   * (pas encore validée/rejetée). Permet de corriger une offre soumise :
+   * l'édition (PATCH) n'est autorisée qu'en `draft`. Réinitialise `submittedAt`.
+   */
+  async withdraw(input: TransitionInput): Promise<OfferOutput> {
+    return runTransition({
+      ...input,
+      from: ['pending'],
+      action: 'offer.withdraw',
+      data: { status: 'draft', submittedAt: null },
     });
   },
 
@@ -272,6 +319,86 @@ export const offerService = {
       action: 'offer.reactivate',
       data: { status: 'validated', suspendedAt: null, suspendedBy: null },
     });
+  },
+
+  /**
+   * MATA (admin/téléconseiller) retire une offre UNILATÉRALEMENT. Contrairement
+   * à `suspend` — que le producteur peut lever lui-même — un retrait est un
+   * VERROU : seul MATA peut le défaire via `restore`. La raison facultative est
+   * stockée dans `rejectionReason` et affichée au producteur (lecture seule).
+   * Le contrôle de rôle est fait dans la route (requireRole admin|teleconsultant).
+   */
+  async retire(input: TransitionInput & { reason?: string }): Promise<OfferOutput> {
+    return runTransition({
+      ...input,
+      from: ['validated', 'pending', 'changes_requested', 'suspended'],
+      action: 'offer.retire',
+      data: { status: 'withdrawn', rejectionReason: input.reason ?? null },
+      auditExtra: input.reason ? { reason: input.reason } : undefined,
+    });
+  },
+
+  /** MATA rend la main au producteur : withdrawn → draft (efface le motif). */
+  async restore(input: TransitionInput): Promise<OfferOutput> {
+    return runTransition({
+      ...input,
+      from: ['withdrawn'],
+      action: 'offer.restore',
+      data: { status: 'draft', rejectionReason: null },
+    });
+  },
+
+  /** Archive un brouillon ou une offre refusée (la range, restaurable). */
+  async archive(input: TransitionInput): Promise<OfferOutput> {
+    return runTransition({
+      ...input,
+      from: ['draft', 'rejected'],
+      action: 'offer.archive',
+      data: { status: 'archived' },
+    });
+  },
+
+  /** Restaure une offre archivée en brouillon pour la retravailler. */
+  async unarchive(input: TransitionInput): Promise<OfferOutput> {
+    return runTransition({
+      ...input,
+      from: ['archived'],
+      action: 'offer.unarchive',
+      data: { status: 'draft' },
+    });
+  },
+
+  /**
+   * Relance une offre expirée en brouillon. On efface l'ancienne date limite
+   * (dépassée) : le producteur en saisira une nouvelle avant de re-soumettre,
+   * sinon le cron la ré-expirerait aussitôt.
+   */
+  async relist(input: TransitionInput): Promise<OfferOutput> {
+    return runTransition({
+      ...input,
+      from: ['expired'],
+      action: 'offer.relist',
+      data: { status: 'draft', availableUntil: null },
+    });
+  },
+
+  /**
+   * Cron : expire les offres dont la date limite (availableUntil) est passée.
+   * Bulk updateMany (pas d'audit par offre — action système, on logue le total
+   * côté job). Une offre `validated`/`reserved` dont availableUntil < aujourd'hui
+   * passe en `expired`. Retourne le nombre traité.
+   */
+  async expireOverdue(): Promise<{ expired: number }> {
+    const startOfToday = new Date();
+    startOfToday.setUTCHours(0, 0, 0, 0);
+    const res = await prisma.offer.updateMany({
+      where: {
+        status: { in: ['validated', 'reserved'] },
+        availableUntil: { lt: startOfToday },
+      },
+      data: { status: 'expired' },
+    });
+    return { expired: res.count };
   },
 
   // ─────────────────────────────────────────────────────────────
@@ -333,12 +460,37 @@ export const offerService = {
 
 // ─────────────────────────────────────────────────────────────────
 
+/**
+ * Vérifie qu'un slug de catégorie existe ET est actif (table product_categories).
+ * Remplace l'ancienne validation statique z.enum : la taxonomie est dynamique.
+ */
+async function assertCategoryActive(slug: string): Promise<void> {
+  const cat = await prisma.category.findUnique({
+    where: { slug },
+    select: { isActive: true },
+  });
+  if (!cat) throw new DomainError('VALIDATION', `Catégorie inconnue : ${slug}`);
+  if (!cat.isActive) throw new DomainError('CONFLICT', `Catégorie désactivée : ${slug}`);
+}
+
 async function runTransition(input: {
   actorUserId: string;
   onBehalfOfUserId?: string | null;
   offerId: string;
   from: readonly OfferStatus[];
-  action: 'offer.submit' | 'offer.validate' | 'offer.reject' | 'offer.suspend' | 'offer.reactivate';
+  action:
+    | 'offer.submit'
+    | 'offer.withdraw'
+    | 'offer.validate'
+    | 'offer.request_changes'
+    | 'offer.reject'
+    | 'offer.suspend'
+    | 'offer.reactivate'
+    | 'offer.archive'
+    | 'offer.unarchive'
+    | 'offer.relist'
+    | 'offer.retire'
+    | 'offer.restore';
   data: Prisma.OfferUpdateInput;
   auditExtra?: Record<string, unknown>;
   request?: FastifyRequest;

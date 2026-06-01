@@ -41,7 +41,6 @@ import {
   PrismaClient,
   ProducerStatus,
   ProducerType,
-  ProductCategory,
   SiteType,
   UserRole,
 } from '@prisma/client';
@@ -318,6 +317,20 @@ async function main(): Promise<void> {
     log(`user      ${saved.role.padEnd(15)} ${saved.displayName.padEnd(20)} kc=${kcShort}`);
   }
 
+  // 1b. Portée de modération du téléconseiller seedé : `allProducers = true`
+  // (préserve le comportement dev « voit toutes les offres »). Sans cette ligne,
+  // le nouveau défaut (aucune affectation = aucune offre) viderait sa file de
+  // validation tant que l'admin ne l'a pas configuré via l'écran « Affectations ».
+  const ibrahimaUserId = userIdBySlug.get('ibrahima-ndiaye');
+  if (ibrahimaUserId) {
+    await prisma.teleconsultantScope.upsert({
+      where: { teleconsultantUserId: ibrahimaUserId },
+      update: { allProducers: true },
+      create: { teleconsultantUserId: ibrahimaUserId, allProducers: true },
+    });
+    log('scope     teleconsultant  Ibrahima Ndiaye      allProducers=true');
+  }
+
   // 2. Zones
   const zoneIdBySlug = new Map<string, string>();
   for (const zone of ZONES) {
@@ -514,6 +527,26 @@ async function main(): Promise<void> {
   }
   log(`sites     2 sites créés (Poulailler Pout 1, Ferme Dahra)`);
 
+  // 4b. Catégories produit (taxonomie data-driven). Upsert idempotent : la
+  // migration les seede déjà, on garantit ici leur présence pour un `db:seed`
+  // autonome (et on les réactive si désactivées).
+  const CATEGORIES = [
+    { slug: 'poultry', labelFr: 'Volaille', emoji: '🐓', sortOrder: 1 },
+    { slug: 'eggs', labelFr: 'Œufs', emoji: '🥚', sortOrder: 2 },
+    { slug: 'cattle', labelFr: 'Bovin', emoji: '🐄', sortOrder: 3 },
+    { slug: 'sheep', labelFr: 'Ovin', emoji: '🐑', sortOrder: 4 },
+    { slug: 'vegetables', labelFr: 'Maraîcher', emoji: '🥬', sortOrder: 5 },
+    { slug: 'fish', labelFr: 'Poisson', emoji: '🐟', sortOrder: 6 },
+  ];
+  for (const c of CATEGORIES) {
+    await prisma.category.upsert({
+      where: { slug: c.slug },
+      update: { labelFr: c.labelFr, emoji: c.emoji, sortOrder: c.sortOrder, isActive: true },
+      create: c,
+    });
+  }
+  log(`categories ${CATEGORIES.length} catégories upsertées`);
+
   // 5. Offres de Mor (delete fait plus haut, à l'étape 4, pour respecter
   // l'ordre des FK).
   await prisma.offer.createMany({
@@ -521,7 +554,7 @@ async function main(): Promise<void> {
       {
         producerUserId: morUserId,
         siteId: poutSite.id,
-        category: ProductCategory.poultry,
+        categorySlug: 'poultry',
         status: OfferStatus.validated,
         title: 'Poulet entier',
         unit: OfferUnit.unit,
@@ -536,7 +569,7 @@ async function main(): Promise<void> {
       {
         producerUserId: morUserId,
         siteId: poutSite.id,
-        category: ProductCategory.eggs,
+        categorySlug: 'eggs',
         status: OfferStatus.pending,
         title: 'Œufs frais',
         unit: OfferUnit.tray,
@@ -549,7 +582,7 @@ async function main(): Promise<void> {
       {
         producerUserId: morUserId,
         siteId: dahraSite.id,
-        category: ProductCategory.sheep,
+        categorySlug: 'sheep',
         status: OfferStatus.draft,
         title: 'Mouton sur pied',
         unit: OfferUnit.head,
@@ -586,7 +619,7 @@ async function main(): Promise<void> {
     data: {
       producerUserId: awaUserId,
       siteId: awaSite.id,
-      category: ProductCategory.fish,
+      categorySlug: 'fish',
       status: OfferStatus.validated,
       title: 'Thiof frais',
       unit: OfferUnit.kg,
@@ -617,24 +650,17 @@ async function main(): Promise<void> {
   // ─────────────────────────────────────────────────────────────────
 
   const admin = await prisma.user.findFirstOrThrow({ where: { role: UserRole.admin } });
-  const allCategories: ProductCategory[] = [
-    ProductCategory.poultry,
-    ProductCategory.eggs,
-    ProductCategory.cattle,
-    ProductCategory.sheep,
-    ProductCategory.vegetables,
-    ProductCategory.fish,
-  ];
+  const allCategories: string[] = CATEGORIES.map((c) => c.slug);
 
   // Supprime les rules existantes ciblant ces catégories pour rester idempotent.
   await prisma.pricingRule.deleteMany({
-    where: { scope: PricingScope.category, category: { in: allCategories } },
+    where: { scope: PricingScope.category, categorySlug: { in: allCategories } },
   });
 
   await prisma.pricingRule.createMany({
-    data: allCategories.map((category) => ({
+    data: allCategories.map((categorySlug) => ({
       scope: PricingScope.category,
-      category,
+      categorySlug,
       model: PricingModel.commission_pct,
       commissionPct: 10,
       commissionBase: PricingBase.producer_price,
@@ -779,6 +805,78 @@ async function main(): Promise<void> {
     });
   }
   log(`orders    3 commandes livrées + 3 avis (Mor 5★+4★ → 4.5 · Awa 5★ → 5.0)`);
+
+  // Purge des orphelins Keycloak (cf. fonction) : le wipe de la base applicative
+  // ne touche pas Keycloak → des comptes provisionnés par téléphone (+221…)
+  // s'y accumulent sans ligne `users`. On les supprime pour ne pas bloquer les
+  // recréations futures. Best-effort (jamais bloquant pour le seed).
+  const dbUsernames = new Set(
+    (await prisma.user.findMany({ select: { username: true } }))
+      .map((u) => u.username)
+      .filter((u): u is string => u !== null),
+  );
+  await purgeKeycloakOrphans(dbUsernames);
+}
+
+/**
+ * Supprime les comptes Keycloak « orphelins » : username = téléphone (`+221…`,
+ * donc provisionnés via le flux admin/staff) ET absents de la base applicative
+ * après reseed. Ne touche JAMAIS aux users du realm-export (usernames type
+ * `mor.diop`) ni aux service-accounts. Lit la config depuis `process.env` ;
+ * tout est best-effort (KC absent / erreur → log + skip, le seed ne casse pas).
+ */
+async function purgeKeycloakOrphans(keepUsernames: Set<string>): Promise<void> {
+  const baseUrl = process.env.KEYCLOAK_URL?.replace(/\/$/, '');
+  const realm = process.env.KEYCLOAK_REALM;
+  const clientId = process.env.KEYCLOAK_ADMIN_CLIENT_ID;
+  const clientSecret = process.env.KEYCLOAK_ADMIN_CLIENT_SECRET;
+  if (!baseUrl || !realm || !clientId || !clientSecret) {
+    log('keycloak  purge orphelins ignorée (config admin absente)');
+    return;
+  }
+  try {
+    const tokenRes = await fetch(`${baseUrl}/realms/${realm}/protocol/openid-connect/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+    });
+    if (!tokenRes.ok) {
+      log(`keycloak  purge orphelins ignorée (token HTTP ${tokenRes.status})`);
+      return;
+    }
+    const token = ((await tokenRes.json()) as { access_token?: string }).access_token;
+    if (!token) {
+      log('keycloak  purge orphelins ignorée (token absent)');
+      return;
+    }
+    const auth = { authorization: `Bearer ${token}` };
+    const listRes = await fetch(`${baseUrl}/admin/realms/${realm}/users?max=1000`, {
+      headers: auth,
+    });
+    if (!listRes.ok) {
+      log(`keycloak  purge orphelins ignorée (list HTTP ${listRes.status})`);
+      return;
+    }
+    const kcUsers = (await listRes.json()) as { id: string; username?: string }[];
+    let purged = 0;
+    for (const u of kcUsers) {
+      const username = u.username ?? '';
+      if (!username.startsWith('+')) continue; // jamais les users realm-export / service-accounts
+      if (keepUsernames.has(username)) continue; // a une ligne DB → légitime
+      const del = await fetch(`${baseUrl}/admin/realms/${realm}/users/${u.id}`, {
+        method: 'DELETE',
+        headers: auth,
+      });
+      if (del.ok || del.status === 404) purged += 1;
+    }
+    log(`keycloak  ${purged} orphelin(s) supprimé(s) (comptes téléphone sans ligne DB)`);
+  } catch (err) {
+    log(`keycloak  purge orphelins ignorée (${err instanceof Error ? err.message : 'erreur'})`);
+  }
 }
 
 function log(line: string): void {

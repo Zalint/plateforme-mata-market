@@ -11,7 +11,7 @@ export function toPricingRuleOutput(r: PricingRule): PricingRuleOutput {
   return {
     id: r.id,
     scope: r.scope,
-    category: r.category,
+    category: r.categorySlug ?? r.category,
     offerId: r.offerId,
     model: r.model,
     commissionPct: r.commissionPct,

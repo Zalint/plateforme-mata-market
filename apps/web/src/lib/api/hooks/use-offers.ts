@@ -72,6 +72,51 @@ export function useSubmitOffer() {
   });
 }
 
+export function useWithdrawOffer() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<OfferOutput>(`/v1/offers/${id}/withdraw`, {}, token),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['offers'] });
+    },
+  });
+}
+
+export function useArchiveOffer() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<OfferOutput>(`/v1/offers/${id}/archive`, {}, token),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['offers'] });
+    },
+  });
+}
+
+export function useUnarchiveOffer() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.post<OfferOutput>(`/v1/offers/${id}/unarchive`, {}, token),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['offers'] });
+    },
+  });
+}
+
+export function useRelistOffer() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<OfferOutput>(`/v1/offers/${id}/relist`, {}, token),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['offers'] });
+    },
+  });
+}
+
 export function useSuspendOffer() {
   const token = useAuthToken();
   const qc = useQueryClient();
@@ -94,6 +139,31 @@ export function useReactivateOffer() {
   return useMutation({
     mutationFn: (id: string) =>
       apiClient.post<OfferOutput>(`/v1/offers/${id}/reactivate`, {}, token),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['offers'] });
+    },
+  });
+}
+
+// Retrait unilatéral par MATA (admin/téléconseiller). Raison facultative.
+export function useRetireOffer() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; reason?: string }) =>
+      apiClient.post<OfferOutput>(`/v1/offers/${input.id}/retire`, { reason: input.reason }, token),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['offers'] });
+    },
+  });
+}
+
+// Restauration par MATA : withdrawn → draft (rend la main au producteur).
+export function useRestoreOffer() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<OfferOutput>(`/v1/offers/${id}/restore`, {}, token),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['offers'] });
     },
@@ -143,6 +213,22 @@ export function useValidateOffer() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiClient.post<OfferOutput>(`/v1/offers/${id}/validate`, {}, token),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['offers'] });
+    },
+  });
+}
+
+export function useRequestChangesOffer() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; reason: string }) =>
+      apiClient.post<OfferOutput>(
+        `/v1/offers/${input.id}/request-changes`,
+        { reason: input.reason },
+        token,
+      ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['offers'] });
     },

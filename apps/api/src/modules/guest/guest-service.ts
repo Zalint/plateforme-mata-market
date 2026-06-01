@@ -13,6 +13,7 @@ import type {
 } from '@mata/shared/schemas';
 import type { FastifyRequest } from 'fastify';
 import { catalogService } from '../catalog/index.js';
+import { categoryService } from '../categories/index.js';
 import { orderService, withIdempotency } from '../orders/index.js';
 import { paymentService } from '../payments/index.js';
 import { zoneService } from '../zones/index.js';
@@ -76,6 +77,10 @@ async function getCatalogOfferInternal(id: string): Promise<GuestCatalogOfferDet
 
 async function listZonesInternal() {
   return zoneService.listActive();
+}
+
+async function listCategoriesInternal() {
+  return categoryService.listActive();
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -150,6 +155,7 @@ async function createPaymentIntentInternal(
 
 export const guestService = {
   listZones: listZonesInternal,
+  listCategories: listCategoriesInternal,
   listCatalog: listCatalogInternal,
   getCatalogOffer: getCatalogOfferInternal,
   createOrder: createOrderInternal,

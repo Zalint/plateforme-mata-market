@@ -30,13 +30,23 @@ const include = {
 
 export const catalogService = {
   async listValidated(query: CatalogOfferListQuery): Promise<CatalogOfferListResponse> {
+    // Effet immédiat de la date limite : on masque les offres dont availableUntil
+    // est passée, même avant que le cron d'expiration ne change leur statut.
+    const startOfToday = new Date();
+    startOfToday.setUTCHours(0, 0, 0, 0);
+    const notExpired = {
+      OR: [{ availableUntil: null }, { availableUntil: { gte: startOfToday } }],
+    };
     const where = {
       status: 'validated' as const,
-      ...(query.category && { category: query.category }),
-      ...(query.zoneId && {
-        OR: [{ producer: { zoneId: query.zoneId } }, { site: { zoneId: query.zoneId } }],
-      }),
+      ...(query.category && { categorySlug: query.category }),
       ...(query.q && { title: { contains: query.q, mode: 'insensitive' as const } }),
+      AND: [
+        notExpired,
+        ...(query.zoneId
+          ? [{ OR: [{ producer: { zoneId: query.zoneId } }, { site: { zoneId: query.zoneId } }] }]
+          : []),
+      ],
     };
     const skip = (query.page - 1) * query.limit;
     const [rows, total] = await Promise.all([
@@ -73,7 +83,7 @@ export const catalogService = {
 function toItem(o: Loaded): CatalogOfferItem {
   return {
     id: o.id,
-    category: o.category,
+    category: o.categorySlug ?? o.category ?? '',
     title: o.title,
     unit: o.unit,
     quantity: o.quantity,

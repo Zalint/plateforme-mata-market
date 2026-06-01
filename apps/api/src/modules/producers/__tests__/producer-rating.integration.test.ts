@@ -89,7 +89,7 @@ afterEach(async () => {
   await prisma.producerRating.deleteMany({ where: { producerUserId: producer.id } });
   await prisma.orderItem.deleteMany({});
   await prisma.order.deleteMany({ where: { clientUserId: client.id } });
-  await prisma.pricingSnapshot.deleteMany({ where: { pricingRule: { category: 'poultry' } } });
+  await prisma.pricingSnapshot.deleteMany({ where: { pricingRule: { categorySlug: 'poultry' } } });
   await prisma.auditLog.deleteMany({
     where: { actorUserId: { in: [admin.id, client.id, producer.id] } },
   });
@@ -110,7 +110,7 @@ async function createOffer(): Promise<Offer> {
     data: {
       producerUserId: profile.userId,
       siteId: site.id,
-      category: 'poultry',
+      categorySlug: 'poultry',
       status: 'validated',
       title: `Poulet ratings ${Date.now()}-${Math.random()}`,
       unit: 'unit',

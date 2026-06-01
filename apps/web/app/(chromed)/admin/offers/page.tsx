@@ -2,8 +2,19 @@
 
 import { OFFER_STATUS_LABEL_FR, OFFER_STATUSES, type OfferStatus } from '@mata/shared/constants';
 import { FilterChip, Icon, OfferCard, usePrompt, useToast } from '@mata/ui';
-import { useState } from 'react';
-import { useAdminOffers, useRejectOffer, useValidateOffer } from '../../../../src/lib/api';
+import Link from 'next/link';
+import { useMemo, useState } from 'react';
+import {
+  useAdminOffers,
+  useCategories,
+  useReactivateOffer,
+  useRejectOffer,
+  useRequestChangesOffer,
+  useRestoreOffer,
+  useRetireOffer,
+  useSuspendOffer,
+  useValidateOffer,
+} from '../../../../src/lib/api';
 
 /**
  * Admin / Offers · queue de validation des offres.
@@ -19,8 +30,18 @@ export default function AdminOffersPage(): React.JSX.Element {
     limit: 50,
     status: status === 'all' ? undefined : status,
   });
+  const { data: catData } = useCategories();
+  const emojiBySlug = useMemo(
+    () => new Map((catData?.categories ?? []).map((c) => [c.slug, c.emoji])),
+    [catData],
+  );
   const validate = useValidateOffer();
   const reject = useRejectOffer();
+  const requestChanges = useRequestChangesOffer();
+  const suspend = useSuspendOffer();
+  const reactivate = useReactivateOffer();
+  const retire = useRetireOffer();
+  const restore = useRestoreOffer();
   const prompt = usePrompt();
   const toast = useToast();
 
@@ -36,6 +57,36 @@ export default function AdminOffersPage(): React.JSX.Element {
     if (!reason) return;
     await reject.mutateAsync({ id, reason });
     toast.success('Offre refusée.');
+  }
+
+  async function handleRequestChanges(id: string): Promise<void> {
+    const reason = await prompt({
+      title: 'Demander des corrections',
+      message: 'Expliquez au producteur ce qui doit être corrigé (l’offre lui sera renvoyée).',
+      placeholder: 'Ex : la photo est floue, le prix semble trop élevé pour la saison…',
+      confirmLabel: 'Renvoyer pour correction',
+      multiline: true,
+      minLength: 5,
+      maxLength: 1000,
+    });
+    if (!reason) return;
+    await requestChanges.mutateAsync({ id, reason });
+    toast.success('Offre renvoyée au producteur pour correction.');
+  }
+
+  async function handleRetire(id: string): Promise<void> {
+    const reason = await prompt({
+      title: "Retirer l'offre",
+      message:
+        'Retrait unilatéral par MATA. Le producteur ne pourra pas la remettre en ligne — seul MATA pourra la restaurer. Motif (facultatif, visible par le producteur) :',
+      placeholder: 'Ex : retrait temporaire, litige en cours…',
+      confirmLabel: 'Retirer',
+      minLength: 0,
+      maxLength: 300,
+    });
+    if (reason === null) return; // annulé (chaîne vide = retrait sans motif)
+    await retire.mutateAsync({ id, reason: reason || undefined });
+    toast.success('Offre retirée.');
   }
 
   return (
@@ -67,6 +118,7 @@ export default function AdminOffersPage(): React.JSX.Element {
           <OfferCard
             key={o.id}
             category={o.category}
+            emoji={emojiBySlug.get(o.category)}
             status={o.status}
             title={o.title}
             unit={o.unit}
@@ -76,25 +128,81 @@ export default function AdminOffersPage(): React.JSX.Element {
             subtitle={o.submittedAt ? `Soumise le ${formatDate(o.submittedAt)}` : undefined}
             rejectionReason={o.rejectionReason}
           >
+            <Link
+              href={`/producer/offers/${o.id}`}
+              className="mb-2 inline-flex items-center gap-1.5 text-xs font-semibold text-stone-600 hover:text-mata-700"
+            >
+              <Icon name="eye" className="w-3.5 h-3.5" /> Voir les détails
+            </Link>
             {o.status === 'pending' && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => validate.mutate(o.id)}
+                    disabled={validate.isPending}
+                    className="py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Icon name="check" className="w-4 h-4" /> Valider
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleReject(o.id)}
+                    disabled={reject.isPending}
+                    className="py-2 rounded-lg bg-white border border-stone-200 hover:bg-stone-50 text-mata-700 text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Icon name="x" className="w-4 h-4" /> Refuser
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleRequestChanges(o.id)}
+                  disabled={requestChanges.isPending}
+                  className="w-full py-2 rounded-lg bg-white border border-stone-200 hover:bg-stone-50 text-stone-700 text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <Icon name="pencil" className="w-4 h-4" /> Demander des corrections
+                </button>
+              </div>
+            )}
+            {o.status === 'validated' && (
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => validate.mutate(o.id)}
-                  disabled={validate.isPending}
-                  className="py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  onClick={() => suspend.mutate({ id: o.id })}
+                  disabled={suspend.isPending}
+                  className="py-2 rounded-lg bg-white border border-stone-200 hover:bg-stone-50 text-stone-700 text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
                 >
-                  <Icon name="check" className="w-4 h-4" /> Valider
+                  <Icon name="pause" className="w-4 h-4" /> Suspendre
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleReject(o.id)}
-                  disabled={reject.isPending}
-                  className="py-2 rounded-lg bg-white border border-stone-200 hover:bg-stone-50 text-mata-700 text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  onClick={() => handleRetire(o.id)}
+                  disabled={retire.isPending}
+                  className="py-2 rounded-lg bg-white border border-mata-300 hover:bg-mata-50 text-mata-700 text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
                 >
-                  <Icon name="x" className="w-4 h-4" /> Refuser
+                  <Icon name="ban" className="w-4 h-4" /> Retirer
                 </button>
               </div>
+            )}
+            {o.status === 'suspended' && (
+              <button
+                type="button"
+                onClick={() => reactivate.mutate(o.id)}
+                disabled={reactivate.isPending}
+                className="w-full py-2 rounded-lg bg-mata-700 hover:bg-mata-800 text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                <Icon name="eye" className="w-4 h-4" /> Réactiver
+              </button>
+            )}
+            {o.status === 'withdrawn' && (
+              <button
+                type="button"
+                onClick={() => restore.mutate(o.id)}
+                disabled={restore.isPending}
+                className="w-full py-2 rounded-lg bg-mata-700 hover:bg-mata-800 text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
+              >
+                <Icon name="arrow-left" className="w-4 h-4" /> Restaurer (rendre au producteur)
+              </button>
             )}
           </OfferCard>
         ))}

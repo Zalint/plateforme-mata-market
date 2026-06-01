@@ -54,7 +54,16 @@ async function request<T>(method: string, path: string, opts: RequestOptions): P
   if (res.status === 204) return undefined as T;
   const parsed = await res.json().catch(() => null);
   if (!res.ok) {
-    throw new ApiError(res.status, parsed, `${res.status} ${method} ${path}`);
+    // Préfère le message métier renvoyé par l'API (DomainError → { error, message })
+    // au libellé technique « 409 POST /path » : c'est ce texte qui est affiché à
+    // l'utilisateur (`error.message`). Repli sur le technique si l'API n'en fournit pas.
+    const serverMessage =
+      parsed &&
+      typeof parsed === 'object' &&
+      typeof (parsed as { message?: unknown }).message === 'string'
+        ? (parsed as { message: string }).message
+        : `${res.status} ${method} ${path}`;
+    throw new ApiError(res.status, parsed, serverMessage);
   }
   return parsed as T;
 }

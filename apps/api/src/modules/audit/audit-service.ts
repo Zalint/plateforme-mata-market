@@ -20,14 +20,27 @@ export type AuditAction =
   | 'producer.blacklist'
   | 'producer.validate'
   | 'producer.rating.create'
+  // Catégories produit (taxonomie data-driven)
+  | 'category.create'
+  | 'category.update'
+  // Affectations producteur ↔ téléconseiller (portée de modération)
+  | 'teleconsultant.assignment.set'
   // Offres
   | 'offer.create'
   | 'offer.update'
   | 'offer.validate'
+  | 'offer.request_changes'
   | 'offer.reject'
   | 'offer.suspend'
   | 'offer.reactivate'
   | 'offer.submit'
+  | 'offer.withdraw'
+  | 'offer.archive'
+  | 'offer.unarchive'
+  | 'offer.relist'
+  | 'offer.retire'
+  | 'offer.restore'
+  | 'offer.sold'
   // Sites
   | 'site.create'
   | 'site.update'

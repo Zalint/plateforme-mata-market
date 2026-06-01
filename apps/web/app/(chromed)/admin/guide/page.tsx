@@ -125,7 +125,7 @@ const MENUS: MenuDef[] = [
   },
   {
     role: 'Admin MATA',
-    tone: 'bg-amber-50 text-amber-700',
+    tone: 'bg-mata-50 text-mata-700',
     items: [
       { label: 'Dashboard', desc: 'KPIs et vue d’ensemble de la plateforme.' },
       { label: 'Producteurs', desc: 'Valider, suspendre ou blacklister les producteurs.' },
@@ -401,7 +401,7 @@ export default function AdminGuidePage(): React.JSX.Element {
                     ? 'bg-stone-100 text-stone-500'
                     : c.sign === '='
                       ? 'bg-mata-50 text-mata-700'
-                      : 'bg-amber-50 text-amber-700'
+                      : 'bg-mata-50 text-stone-700'
                 }`}
               >
                 {c.sign}

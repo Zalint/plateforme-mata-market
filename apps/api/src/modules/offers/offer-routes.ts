@@ -6,6 +6,8 @@ import {
   OfferListResponseSchema,
   OfferOutputSchema,
   OfferRejectInputSchema,
+  OfferRequestChangesInputSchema,
+  OfferRetireInputSchema,
   OfferStatusSchema,
   OfferSuspendInputSchema,
   OfferUpdateSchema,
@@ -15,6 +17,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { prisma } from '../../lib/prisma.js';
+import { assertModeratorForProducer, scopeOfferWhereForModerator } from '../assignments/index.js';
 import {
   assertOwnership,
   requireProducerOrDelegate,
@@ -136,13 +139,51 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
   );
 
   typed.post(
+    '/v1/offers/:id/withdraw',
+    { schema: { params: OfferIdParamSchema, response: { 200: OfferOutputSchema } } },
+    async (req) => {
+      // Owner OU délégué : repasse une offre `pending` en `draft` pour la modifier.
+      const owner = await loadOfferOwner(req.params.id);
+      assertOwnership(req, owner);
+      return offerService.withdraw({
+        ...resolveAuditActor(req),
+        offerId: req.params.id,
+        request: req,
+      });
+    },
+  );
+
+  typed.post(
     '/v1/offers/:id/validate',
     { schema: { params: OfferIdParamSchema, response: { 200: OfferOutputSchema } } },
     async (req) => {
-      requireRole(req, 'admin', 'teleconsultant');
+      // Modération scopée : admin = tout ; téléconseiller = ses producteurs affectés.
+      const owner = await loadOfferOwner(req.params.id);
+      await assertModeratorForProducer(req, owner);
       return offerService.validate({
         ...resolveAuditActor(req),
         offerId: req.params.id,
+        request: req,
+      });
+    },
+  );
+
+  typed.post(
+    '/v1/offers/:id/request-changes',
+    {
+      schema: {
+        params: OfferIdParamSchema,
+        body: OfferRequestChangesInputSchema,
+        response: { 200: OfferOutputSchema },
+      },
+    },
+    async (req) => {
+      const owner = await loadOfferOwner(req.params.id);
+      await assertModeratorForProducer(req, owner);
+      return offerService.requestChanges({
+        ...resolveAuditActor(req),
+        offerId: req.params.id,
+        reason: req.body.reason,
         request: req,
       });
     },
@@ -158,7 +199,8 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (req) => {
-      requireRole(req, 'admin', 'teleconsultant');
+      const owner = await loadOfferOwner(req.params.id);
+      await assertModeratorForProducer(req, owner);
       return offerService.reject({
         ...resolveAuditActor(req),
         offerId: req.params.id,
@@ -178,9 +220,16 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
       },
     },
     async (req) => {
-      // Owner OU admin
+      // Suspendre = self-service producteur (sa propre offre) / délégation, OU
+      // modération MATA. Le téléconseiller HORS session est borné à ses
+      // producteurs affectés (assertModeratorForProducer) ; producteur, admin
+      // et délégation passent par assertOwnership.
       const owner = await loadOfferOwner(req.params.id);
-      assertOwnership(req, owner);
+      if (req.user?.role === 'teleconsultant' && !req.actingOnBehalfOf) {
+        await assertModeratorForProducer(req, owner);
+      } else {
+        assertOwnership(req, owner);
+      }
       return offerService.suspend({
         ...resolveAuditActor(req),
         offerId: req.params.id,
@@ -194,9 +243,95 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
     '/v1/offers/:id/reactivate',
     { schema: { params: OfferIdParamSchema, response: { 200: OfferOutputSchema } } },
     async (req) => {
+      // Réactiver : même politique que suspendre (self-service / délégation via
+      // assertOwnership ; téléconseiller-modération borné à ses affectations).
+      const owner = await loadOfferOwner(req.params.id);
+      if (req.user?.role === 'teleconsultant' && !req.actingOnBehalfOf) {
+        await assertModeratorForProducer(req, owner);
+      } else {
+        assertOwnership(req, owner);
+      }
+      return offerService.reactivate({
+        ...resolveAuditActor(req),
+        offerId: req.params.id,
+        request: req,
+      });
+    },
+  );
+
+  typed.post(
+    '/v1/offers/:id/archive',
+    { schema: { params: OfferIdParamSchema, response: { 200: OfferOutputSchema } } },
+    async (req) => {
       const owner = await loadOfferOwner(req.params.id);
       assertOwnership(req, owner);
-      return offerService.reactivate({
+      return offerService.archive({
+        ...resolveAuditActor(req),
+        offerId: req.params.id,
+        request: req,
+      });
+    },
+  );
+
+  typed.post(
+    '/v1/offers/:id/unarchive',
+    { schema: { params: OfferIdParamSchema, response: { 200: OfferOutputSchema } } },
+    async (req) => {
+      const owner = await loadOfferOwner(req.params.id);
+      assertOwnership(req, owner);
+      return offerService.unarchive({
+        ...resolveAuditActor(req),
+        offerId: req.params.id,
+        request: req,
+      });
+    },
+  );
+
+  typed.post(
+    '/v1/offers/:id/relist',
+    { schema: { params: OfferIdParamSchema, response: { 200: OfferOutputSchema } } },
+    async (req) => {
+      const owner = await loadOfferOwner(req.params.id);
+      assertOwnership(req, owner);
+      return offerService.relist({
+        ...resolveAuditActor(req),
+        offerId: req.params.id,
+        request: req,
+      });
+    },
+  );
+
+  // Retrait unilatéral par MATA (modération). VERROU : pas d'assertOwnership —
+  // le producteur ne peut PAS retirer/restaurer. Téléconseiller borné à ses
+  // producteurs affectés ; admin = tout.
+  typed.post(
+    '/v1/offers/:id/retire',
+    {
+      schema: {
+        params: OfferIdParamSchema,
+        body: OfferRetireInputSchema,
+        response: { 200: OfferOutputSchema },
+      },
+    },
+    async (req) => {
+      const owner = await loadOfferOwner(req.params.id);
+      await assertModeratorForProducer(req, owner);
+      return offerService.retire({
+        ...resolveAuditActor(req),
+        offerId: req.params.id,
+        reason: req.body.reason,
+        request: req,
+      });
+    },
+  );
+
+  typed.post(
+    '/v1/offers/:id/restore',
+    { schema: { params: OfferIdParamSchema, response: { 200: OfferOutputSchema } } },
+    async (req) => {
+      const owner = await loadOfferOwner(req.params.id);
+      await assertModeratorForProducer(req, owner);
+      return offerService.restore({
         ...resolveAuditActor(req),
         offerId: req.params.id,
         request: req,
@@ -217,7 +352,10 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req) => {
       requireRole(req, 'admin', 'teleconsultant');
-      return offerService.listAdmin(req.query);
+      // Portée de modération : un téléconseiller ne voit que ses producteurs
+      // affectés (admin/allProducers → tout ; aucune affectation → rien).
+      const scopeWhere = await scopeOfferWhereForModerator(req);
+      return offerService.listAdmin(req.query, scopeWhere);
     },
   );
 }

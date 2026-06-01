@@ -31,7 +31,11 @@ export default function ClientHomePage(): React.JSX.Element {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard label="Commandes en cours" value={data?.commandesEnCours ?? '—'} icon="shopping-bag" />
+        <KpiCard
+          label="Commandes en cours"
+          value={data?.commandesEnCours ?? '—'}
+          icon="shopping-bag"
+        />
         <KpiCard label="Livrées" value={data?.commandesLivrees ?? '—'} icon="package-check" />
         <KpiCard
           label="Total dépensé"

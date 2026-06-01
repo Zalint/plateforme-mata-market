@@ -4,8 +4,13 @@ import type { OfferStatus } from '@mata/shared/constants';
 import { OFFER_STATUS_LABEL_FR } from '@mata/shared/constants';
 import { FilterChip, Icon, OfferCard } from '@mata/ui';
 import Link from 'next/link';
-import { useState } from 'react';
-import { useMyOffers, useMyProducerProfile, useSubmitOffer } from '../../../../src/lib/api';
+import { useMemo, useState } from 'react';
+import {
+  useCategories,
+  useMyOffers,
+  useMyProducerProfile,
+  useSubmitOffer,
+} from '../../../../src/lib/api';
 
 /**
  * Producer / Offers · liste des offres du producteur connecté.
@@ -19,22 +24,37 @@ const FILTERS: { value: FilterValue; label: string }[] = [
   { value: 'all', label: 'Toutes' },
   { value: 'validated', label: OFFER_STATUS_LABEL_FR.validated },
   { value: 'pending', label: OFFER_STATUS_LABEL_FR.pending },
+  { value: 'changes_requested', label: OFFER_STATUS_LABEL_FR.changes_requested },
   { value: 'draft', label: OFFER_STATUS_LABEL_FR.draft },
   { value: 'suspended', label: OFFER_STATUS_LABEL_FR.suspended },
+  { value: 'withdrawn', label: OFFER_STATUS_LABEL_FR.withdrawn },
   { value: 'rejected', label: OFFER_STATUS_LABEL_FR.rejected },
+  { value: 'expired', label: OFFER_STATUS_LABEL_FR.expired },
+  { value: 'archived', label: OFFER_STATUS_LABEL_FR.archived },
 ];
 
 export default function ProducerOffersPage(): React.JSX.Element {
   const [filter, setFilter] = useState<FilterValue>('all');
   const { data: profileData, isLoading: profileLoading } = useMyProducerProfile();
   const { data, isLoading, error } = useMyOffers();
+  const { data: catData } = useCategories();
+  const emojiBySlug = useMemo(
+    () => new Map((catData?.categories ?? []).map((c) => [c.slug, c.emoji])),
+    [catData],
+  );
   const submitOffer = useSubmitOffer();
 
   if (profileLoading) return <p className="px-4 py-8 text-sm text-stone-500">Chargement…</p>;
   if (!profileData?.profile) return <NoProfileCta />;
 
   const all = data?.offers ?? [];
-  const filtered = filter === 'all' ? all : all.filter((o) => o.status === filter);
+  // « Toutes » masque les archivées (rangées) ; elles restent visibles via leur
+  // propre filtre « Archivées ».
+  const activeCount = all.filter((o) => o.status !== 'archived').length;
+  const filtered =
+    filter === 'all'
+      ? all.filter((o) => o.status !== 'archived')
+      : all.filter((o) => o.status === filter);
   const countsByStatus = all.reduce<Record<string, number>>((acc, o) => {
     acc[o.status] = (acc[o.status] ?? 0) + 1;
     return acc;
@@ -55,7 +75,7 @@ export default function ProducerOffersPage(): React.JSX.Element {
 
       <div className="flex items-center gap-2 mb-4 overflow-x-auto hide-scrollbar">
         {FILTERS.map((f) => {
-          const count = f.value === 'all' ? all.length : (countsByStatus[f.value] ?? 0);
+          const count = f.value === 'all' ? activeCount : (countsByStatus[f.value] ?? 0);
           return (
             <FilterChip
               key={f.value}
@@ -90,6 +110,7 @@ export default function ProducerOffersPage(): React.JSX.Element {
           <OfferCard
             key={o.id}
             category={o.category}
+            emoji={emojiBySlug.get(o.category)}
             status={o.status}
             title={o.title}
             unit={o.unit}

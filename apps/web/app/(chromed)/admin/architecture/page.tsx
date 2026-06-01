@@ -79,19 +79,19 @@ const MODULE_GROUPS: ModuleGroup[] = [
   },
   {
     domain: 'Catalogue & offres',
-    tone: 'bg-amber-50 text-amber-700',
+    tone: 'bg-mata-50 text-mata-700',
     modules: 'catalog · offers · producers · sites · zones',
     desc: 'Offres validées, profils producteurs, sites de production, zones.',
   },
   {
     domain: 'Commandes & logistique',
-    tone: 'bg-blue-50 text-blue-700',
+    tone: 'bg-mata-50 text-mata-700',
     modules: 'orders · pickups · guest',
     desc: 'Cycle de commande, tournées de collecte, mode invité.',
   },
   {
     domain: 'Pricing & paiements',
-    tone: 'bg-green-50 text-green-700',
+    tone: 'bg-mata-50 text-mata-700',
     modules: 'pricing · payments · payouts',
     desc: 'Règles à 7 composantes + snapshots, Bictorys, reversements producteurs.',
   },
@@ -200,17 +200,17 @@ export default function AdminArchitecturePage(): React.JSX.Element {
           <Layer
             title="PostgreSQL 18"
             sub="Prisma — source de vérité métier"
-            tone="bg-blue-50 text-blue-700 border-blue-200"
+            tone="bg-mata-50 text-mata-700 border-mata-200"
           />
           <Layer
             title="Keycloak (+ Postgres)"
             sub="OIDC/PKCE — realm mata"
-            tone="bg-amber-50 text-amber-700 border-amber-200"
+            tone="bg-stone-100 text-stone-700 border-stone-200"
           />
           <Layer
             title="n8n"
             sub="Automatisations (Outbox, hors chemin critique)"
-            tone="bg-green-50 text-green-700 border-green-200"
+            tone="bg-stone-100 text-stone-700 border-stone-200"
           />
         </div>
         <p className="text-xs text-stone-500 mt-4">

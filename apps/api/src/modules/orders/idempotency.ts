@@ -92,12 +92,10 @@ export async function withIdempotency<T>(
   try {
     body = await args.handler();
   } catch (err) {
-    await prisma.idempotencyRecord
-      .delete({ where: { key_scope: { key, scope } } })
-      .catch(() => {
-        // Best-effort : si la suppression échoue, le record provisoire sera
-        // purgé par le cron TTL ; on ne masque pas l'erreur d'origine.
-      });
+    await prisma.idempotencyRecord.delete({ where: { key_scope: { key, scope } } }).catch(() => {
+      // Best-effort : si la suppression échoue, le record provisoire sera
+      // purgé par le cron TTL ; on ne masque pas l'erreur d'origine.
+    });
     throw err;
   }
 

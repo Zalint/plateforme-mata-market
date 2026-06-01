@@ -135,6 +135,11 @@ enum SiteStatus {
   @@map("site_status")
 }
 
+// DEPRECATED (lot catégories dynamiques) : l'enum est conservé en Release 1 le
+// temps de la bascule vers la table `product_categories` (FK categorySlug). Il
+// sera supprimé en Release 2 (cf. docs/BACKLOG.md). Ne plus l'utiliser dans le
+// nouveau code — la source de vérité des catégories est désormais le modèle
+// `Category` ci-dessous.
 enum ProductCategory {
   poultry
   eggs
@@ -146,12 +151,44 @@ enum ProductCategory {
   @@map("product_category")
 }
 
+// ─────────────────────────────────────────────────────────────────
+// product_categories · taxonomie produit DATA-DRIVEN (gérable par l'admin)
+//
+// Remplace l'enum ProductCategory (figé, migration par valeur) par une table :
+// l'admin crée/renomme/désactive une catégorie depuis l'UI, sans migration ni
+// déploiement. `slug` est la clé stable (= anciennes valeurs de l'enum) servant
+// de FK sur offers.category_slug et pricing_rules.category_slug.
+//
+// `isActive` = statut métier (PAS un soft-delete générique, §G4) : on désactive
+// au lieu de supprimer pour ne jamais casser une offre/commande qui pointe dessus.
+// Dérogation §E2/§G4 actée dans ARCHITECTURE.md (taxonomie dynamique assumée).
+// ─────────────────────────────────────────────────────────────────
+model Category {
+  slug      String   @id // ex. "poultry", "caprin" — stable, référencé en FK
+  labelFr   String   @map("label_fr")
+  emoji     String
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  offers       Offer[]
+  pricingRules PricingRule[]
+
+  @@index([isActive, sortOrder])
+  @@map("product_categories")
+}
+
 enum OfferStatus {
   draft // brouillon producteur, modifiable
   pending // soumise à MATA pour validation
+  changes_requested // renvoyée au producteur pour correction (rejection_reason = feedback, réversible + éditable)
   validated // visible au catalogue, stock dispo
-  rejected // refusée par MATA (rejection_reason rempli)
+  rejected // refusée par MATA (rejection_reason rempli, définitif)
+  expired // date limite availableUntil dépassée (cron), relançable en draft
+  archived // rangée par le producteur (depuis draft/rejected), restaurable en draft
   suspended // masquée par admin ou producteur après validation
+  withdrawn // retirée unilatéralement par MATA (admin/téléconseiller) — verrou : seul MATA peut la restaurer en draft
 
   // Ajoutés Lot 4 (résolution backlog L2→L4).
   reserved // stock épuisé temporairement (quantityReserved === quantity) — un cancel peut revenir validated
@@ -341,6 +378,12 @@ model User {
   // Lot 9 — notation producteur (avis post-livraison)
   ratingsReceived ProducerRating[] @relation("producer_ratings")
   ratingsGiven    ProducerRating[] @relation("client_ratings")
+  // Affectations producteur ↔ téléconseiller (portée de modération)
+  assignmentsAsTeleconsultant TeleconsultantAssignment[] @relation("tc_assignments")
+  assignmentsAsProducer       TeleconsultantAssignment[] @relation("producer_assignments")
+  assignmentsMade             TeleconsultantAssignment[] @relation("assignment_assigned_by")
+  teleconsultantScope         TeleconsultantScope?       @relation("tc_scope")
+  teleconsultantScopesUpdated TeleconsultantScope[]      @relation("tc_scope_updated_by")
 
   @@index([role, status])
   @@map("users")
@@ -511,9 +554,12 @@ model ProductionSite {
 // offers · offres produit + workflow validation (Lot 2)
 //
 // Workflow status :
-//   draft     → pending      (producteur soumet)
-//   pending   → validated    (admin valide)
-//   pending   → rejected     (admin refuse, rejection_reason obligatoire)
+//   draft             → pending           (producteur soumet)
+//   pending           → draft             (producteur retire, tant que pending)
+//   pending           → validated         (admin valide)
+//   pending           → changes_requested (admin renvoie pour correction, rejection_reason = feedback)
+//   changes_requested → pending           (producteur corrige et re-soumet ; éditable comme draft)
+//   pending           → rejected          (admin refuse, définitif, rejection_reason obligatoire)
 //   validated → suspended    (admin OU producteur masque)
 //   suspended → validated    (admin OU producteur réactive)
 //
@@ -525,7 +571,10 @@ model Offer {
   id               String          @id @default(uuid()) @db.Uuid
   producerUserId   String          @map("producer_user_id") @db.Uuid
   siteId           String          @map("site_id") @db.Uuid
-  category         ProductCategory
+  // DEPRECATED R1 : conservé (nullable) le temps de la bascule, supprimé en R2.
+  category         ProductCategory?
+  // Source de vérité : FK vers product_categories.slug (lot catégories dynamiques).
+  categorySlug     String?         @map("category_slug")
   status           OfferStatus     @default(draft)
   title            String // "Poulet entier" — libre du producteur
   unit             OfferUnit
@@ -550,12 +599,14 @@ model Offer {
   // Relations
   producer     ProducerProfile @relation(fields: [producerUserId], references: [userId], onDelete: Cascade)
   site         ProductionSite  @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  categoryRef  Category?       @relation(fields: [categorySlug], references: [slug], onDelete: Restrict)
   photos       OfferPhoto[]
   pricingRules PricingRule[] // Lot 3 : overrides éventuels pour cette offre
   orderItems   OrderItem[] // Lot 4 : items de commande référençant cette offre
 
   @@index([producerUserId, status])
   @@index([category, status, createdAt(sort: Desc)])
+  @@index([categorySlug, status, createdAt(sort: Desc)])
   @@index([status, createdAt(sort: Desc)])
   @@index([siteId])
   @@map("offers")
@@ -609,8 +660,10 @@ model PricingRule {
   id       String           @id @default(uuid()) @db.Uuid
   scope    PricingScope
   // XOR : exactement un des deux non-null. Enforce par CHECK constraint (migration SQL).
-  category ProductCategory?
-  offerId  String?          @map("offer_id") @db.Uuid
+  // DEPRECATED R1 : `category` (enum) conservé le temps de la bascule, supprimé en R2.
+  category     ProductCategory?
+  categorySlug String?          @map("category_slug") // FK product_categories.slug
+  offerId      String?          @map("offer_id") @db.Uuid
 
   model PricingModel
 
@@ -640,10 +693,12 @@ model PricingRule {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  offer     Offer?            @relation(fields: [offerId], references: [id], onDelete: Cascade)
-  snapshots PricingSnapshot[]
+  offer       Offer?            @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  categoryRef Category?         @relation(fields: [categorySlug], references: [slug], onDelete: Restrict)
+  snapshots   PricingSnapshot[]
 
   @@index([category, validFrom(sort: Desc)])
+  @@index([categorySlug, validFrom(sort: Desc)])
   @@index([offerId, validFrom(sort: Desc)])
   @@map("pricing_rules")
 }
@@ -1110,6 +1165,50 @@ model TeleconsultSession {
   // Index : cleanup cron (sessions expirées à fermer).
   @@index([expiresAt, closedAt])
   @@map("teleconsult_sessions")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Affectations producteur ↔ téléconseiller — PORTÉE DE MODÉRATION
+//
+// Un téléconseiller modère (valider / refuser / demander corrections / retirer /
+// restaurer / suspendre / réactiver) UNIQUEMENT les offres des producteurs qui
+// lui sont affectés. `TeleconsultantScope.allProducers = true` lui donne la
+// portée globale (comme un admin). Défaut (aucune affectation + allProducers
+// false) ⇒ il ne voit AUCUNE offre. M:N (un producteur peut être couvert par
+// plusieurs téléconseillers).
+//
+// N'affecte PAS la délégation : un producteur peut déléguer (code) à n'importe
+// quel téléconseiller, qui agit alors EN TANT QUE ce producteur (self-service),
+// indépendamment de ce mapping.
+// ─────────────────────────────────────────────────────────────────
+
+model TeleconsultantAssignment {
+  id                   String   @id @default(uuid()) @db.Uuid
+  teleconsultantUserId String   @map("teleconsultant_user_id") @db.Uuid
+  producerUserId       String   @map("producer_user_id") @db.Uuid
+  assignedByUserId     String   @map("assigned_by_user_id") @db.Uuid
+  assignedAt           DateTime @default(now()) @map("assigned_at")
+
+  teleconsultant User @relation("tc_assignments", fields: [teleconsultantUserId], references: [id], onDelete: Cascade)
+  producer       User @relation("producer_assignments", fields: [producerUserId], references: [id], onDelete: Cascade)
+  assignedBy     User @relation("assignment_assigned_by", fields: [assignedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([teleconsultantUserId, producerUserId])
+  @@index([teleconsultantUserId])
+  @@index([producerUserId])
+  @@map("teleconsultant_assignments")
+}
+
+model TeleconsultantScope {
+  teleconsultantUserId String   @id @map("teleconsultant_user_id") @db.Uuid
+  allProducers         Boolean  @default(false) @map("all_producers")
+  updatedByUserId      String?  @map("updated_by_user_id") @db.Uuid
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  teleconsultant User  @relation("tc_scope", fields: [teleconsultantUserId], references: [id], onDelete: Cascade)
+  updatedBy      User? @relation("tc_scope_updated_by", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@map("teleconsultant_scope")
 }
 
 // ─────────────────────────────────────────────────────────────────

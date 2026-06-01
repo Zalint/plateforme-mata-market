@@ -26,7 +26,11 @@ export default function ProducerHomePage(): React.JSX.Element {
           icon="wallet"
           variant="primary"
         />
-        <KpiCard label="Commandes du mois" value={data?.commandesDuMois ?? '—'} icon="shopping-bag" />
+        <KpiCard
+          label="Commandes du mois"
+          value={data?.commandesDuMois ?? '—'}
+          icon="shopping-bag"
+        />
         <KpiCard
           label="Note moyenne"
           value={data ? (data.ratingAvg === null ? '—' : `★ ${data.ratingAvg}`) : '—'}

@@ -172,6 +172,12 @@ Write-Host "`n  Ctrl+C pour arrêter api/web · ferme la fenêtre du mock pour l
 # Garde-fou final : un ancien watcher a pu re-prendre 3000/4000 pendant le
 # build/reseed. On les libere juste avant que turbo ne les bind. On NE touche
 # PAS a 4001 : le mock Bictorys vient d'y etre demarre volontairement.
-[void](Wait-PortsFree -Ports @(3000, 4000))
+# On VERIFIE le resultat : si un port reste occupe, on s'arrete avec un message
+# clair plutot que de laisser turbo echouer plus loin sur un EADDRINUSE obscur.
+$portsFree = Wait-PortsFree -Ports @(3000, 4000)
+if (-not $portsFree) {
+    Write-Error "Ports 3000/4000 toujours occupes : libere-les (ou ferme l'ancien 'pnpm dev') puis relance. Abandon."
+    exit 1
+}
 
 pnpm dev

@@ -46,7 +46,7 @@ async function createByAdminInternal(args: {
   // Autres rôles : compte Keycloak + ligne users, sans profil métier.
   const existing = await prisma.user.findUnique({ where: { phone: input.phone } });
   if (existing) {
-    throw new DomainError('CONFLICT', 'Un utilisateur avec ce téléphone existe déjà');
+    throw new DomainError('CONFLICT', 'Ce numéro de téléphone est déjà utilisé par un compte.');
   }
 
   const tempPassword = generateTempPassword();
@@ -81,7 +81,7 @@ async function createByAdminInternal(args: {
       );
     });
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      throw new DomainError('CONFLICT', 'Téléphone ou compte déjà utilisé');
+      throw new DomainError('CONFLICT', 'Ce numéro de téléphone est déjà utilisé par un compte.');
     }
     throw err;
   }

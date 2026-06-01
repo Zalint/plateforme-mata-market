@@ -104,7 +104,7 @@ afterEach(async () => {
   await prisma.orderItem.deleteMany({});
   await prisma.order.deleteMany({ where: { clientUserId: client.id } });
   await prisma.pricingSnapshot.deleteMany({
-    where: { pricingRule: { category: 'poultry' } },
+    where: { pricingRule: { categorySlug: 'poultry' } },
   });
   await prisma.idempotencyRecord.deleteMany({});
   await prisma.auditLog.deleteMany({
@@ -130,7 +130,7 @@ async function createOffer(args: { qty: number; price: number }): Promise<Offer>
     data: {
       producerUserId: profile.userId,
       siteId: site.id,
-      category: 'poultry',
+      categorySlug: 'poultry',
       status: 'validated',
       title: `Poulet test ${Date.now()}`,
       unit: 'unit',
@@ -288,6 +288,79 @@ describe('Order flow · state machine + cancel', () => {
       where: { targetId: order.id, action: 'order.status_change' },
     });
     expect(audits).toHaveLength(6);
+  });
+
+  it('offre `reserved` → `sold` quand toutes ses commandes sont livrées (+ audit offer.sold)', async () => {
+    // Stock entièrement réservé par une seule commande.
+    offer = await createOffer({ qty: 4, price: 3000 });
+    const order = await orderService.create({
+      clientUserId: client.id,
+      input: {
+        items: [{ offerId: offer.id, quantity: 4 }],
+        delivery: {
+          zoneId: zone.id,
+          addressLine: 'Almadies',
+          slotDate: '2026-06-15',
+          slotPeriod: 'morning',
+        },
+      },
+    });
+    expect((await prisma.offer.findUnique({ where: { id: offer.id } }))?.status).toBe('reserved');
+
+    // Cycle complet jusqu'à delivered.
+    for (const to of ['confirmed', 'collecting', 'collected', 'stored', 'delivering'] as const) {
+      await orderService.transitionStatus({ actorUserId: admin.id, orderId: order.id, to });
+    }
+    // Avant la dernière étape : toujours reserved (pas encore livré).
+    expect((await prisma.offer.findUnique({ where: { id: offer.id } }))?.status).toBe('reserved');
+
+    await orderService.transitionStatus({
+      actorUserId: admin.id,
+      orderId: order.id,
+      to: 'delivered',
+    });
+
+    // Toutes les commandes de l'offre livrées → vente définitive.
+    const sold = await prisma.offer.findUnique({ where: { id: offer.id } });
+    expect(sold?.status).toBe('sold');
+
+    const auditSold = await prisma.auditLog.findFirst({
+      where: { action: 'offer.sold', targetId: offer.id },
+    });
+    expect(auditSold).not.toBeNull();
+    expect(auditSold?.actorUserId).toBe(admin.id);
+  });
+
+  it('offre partiellement réservée : reste `validated` (pas de sold) après livraison', async () => {
+    // Stock 10, on ne réserve que 4 → l'offre ne passe jamais `reserved`.
+    offer = await createOffer({ qty: 10, price: 3000 });
+    const order = await orderService.create({
+      clientUserId: client.id,
+      input: {
+        items: [{ offerId: offer.id, quantity: 4 }],
+        delivery: {
+          zoneId: zone.id,
+          addressLine: 'Almadies',
+          slotDate: '2026-06-15',
+          slotPeriod: 'morning',
+        },
+      },
+    });
+    expect((await prisma.offer.findUnique({ where: { id: offer.id } }))?.status).toBe('validated');
+
+    for (const to of [
+      'confirmed',
+      'collecting',
+      'collected',
+      'stored',
+      'delivering',
+      'delivered',
+    ] as const) {
+      await orderService.transitionStatus({ actorUserId: admin.id, orderId: order.id, to });
+    }
+
+    // Pas reserved au départ → pas de bascule sold ; le stock résiduel reste vendable.
+    expect((await prisma.offer.findUnique({ where: { id: offer.id } }))?.status).toBe('validated');
   });
 
   it('refuse 409 transition invalide', async () => {

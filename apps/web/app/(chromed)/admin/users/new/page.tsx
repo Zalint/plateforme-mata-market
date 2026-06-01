@@ -1,10 +1,6 @@
 'use client';
 
-import {
-  PRODUCER_TYPE_LABEL_FR,
-  PRODUCER_TYPES,
-  type ProducerType,
-} from '@mata/shared/constants';
+import { PRODUCER_TYPE_LABEL_FR, PRODUCER_TYPES, type ProducerType } from '@mata/shared/constants';
 import {
   ADMIN_CREATABLE_ROLES,
   type AdminCreatableRole,
@@ -52,19 +48,23 @@ export default function NewUserPage(): React.JSX.Element {
 
   const phoneValid = PHONE_RE.test(phone);
   const producerOk = role !== 'producer' || !!zoneId;
-  const canSubmit =
-    displayName.trim().length >= 2 && phoneValid && producerOk && !create.isPending;
+  const canSubmit = displayName.trim().length >= 2 && phoneValid && producerOk && !create.isPending;
 
-  async function handleSubmit(): Promise<void> {
+  function handleSubmit(): void {
     if (!canSubmit) return;
-    const res = await create.mutateAsync({
-      displayName: displayName.trim(),
-      phone,
-      role,
-      type: role === 'producer' ? type : undefined,
-      zoneId: role === 'producer' ? zoneId : undefined,
-    });
-    setResult(res);
+    // `mutate` (et non `mutateAsync`) : l'erreur est capturée par TanStack Query
+    // (create.isError / create.error) et affichée inline, sans rejection non
+    // gérée (qui produisait l'overlay « ApiError: 409 … » en dev).
+    create.mutate(
+      {
+        displayName: displayName.trim(),
+        phone,
+        role,
+        type: role === 'producer' ? type : undefined,
+        zoneId: role === 'producer' ? zoneId : undefined,
+      },
+      { onSuccess: (res) => setResult(res) },
+    );
   }
 
   function resetForm(): void {
@@ -86,8 +86,8 @@ export default function NewUserPage(): React.JSX.Element {
     <div className="px-4 sm:px-6 lg:px-8 py-5 lg:py-8 max-w-3xl mx-auto">
       <h1 className="text-xl lg:text-2xl font-bold text-stone-900">Créer un utilisateur</h1>
       <p className="text-sm text-stone-500 mt-1">
-        Crée un compte (client, téléconseiller, producteur ou admin). Un mot de passe temporaire
-        est généré, à communiquer à l'utilisateur (il devra le changer à sa première connexion).
+        Crée un compte (client, téléconseiller, producteur ou admin). Un mot de passe temporaire est
+        généré, à communiquer à l'utilisateur (il devra le changer à sa première connexion).
       </p>
 
       {result ? (
@@ -270,7 +270,10 @@ export default function NewUserPage(): React.JSX.Element {
       )}
 
       <div className="mt-4">
-        <Link href="/admin/producers" className="text-sm text-mata-700 font-semibold hover:underline">
+        <Link
+          href="/admin/producers"
+          className="text-sm text-mata-700 font-semibold hover:underline"
+        >
           → Voir les producteurs
         </Link>
       </div>

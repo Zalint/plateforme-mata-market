@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import type { ProductCategory } from '../constants/categories.js';
 import { OFFER_STATUSES, OFFER_UNITS } from '../constants/enums.js';
 import {
   FcfaAmountSchema,
@@ -14,11 +13,16 @@ import {
  * Schemas Offer · offres produit + workflow validation.
  *
  * Workflow status (cf. schema.prisma) :
- *   draft     → pending      (producteur soumet)
- *   pending   → validated    (admin valide)
- *   pending   → rejected     (admin refuse, raison obligatoire)
- *   validated → suspended    (admin OU producteur masque)
- *   suspended → validated    (admin OU producteur réactive)
+ *   draft              → pending           (producteur soumet)
+ *   pending            → draft             (producteur retire, tant que pending)
+ *   pending            → validated         (admin valide)
+ *   pending            → changes_requested (admin renvoie pour correction + message)
+ *   changes_requested  → pending           (producteur corrige et re-soumet)
+ *   pending            → rejected          (admin refuse, définitif, raison obligatoire)
+ *   validated → suspended    (producteur self-service OU modération admin/téléconseiller)
+ *   suspended → validated    (producteur self-service OU modération admin/téléconseiller)
+ *   validated|pending|changes_requested|suspended → withdrawn  (admin/téléconseiller retire, unilatéral)
+ *   withdrawn → draft        (admin/téléconseiller restaure — VERROU : le producteur ne peut pas)
  *
  * PATCH (édition champs) autorisé uniquement en `draft`. Pour modifier
  * une offre publiée le producteur doit créer une nouvelle offre.
@@ -27,19 +31,16 @@ import {
 export const OfferStatusSchema = z.enum(OFFER_STATUSES);
 export const OfferUnitSchema = z.enum(OFFER_UNITS);
 
-// ProductCategory réutilisé depuis constants/categories existant (Lot 1).
-// On reconstruit l'enum Zod ici plutôt que d'exporter une autre version,
-// pour ne pas dupliquer la source.
-const PRODUCT_CATEGORY_KEYS = [
-  'poultry',
-  'eggs',
-  'cattle',
-  'sheep',
-  'vegetables',
-  'fish',
-] as const satisfies readonly ProductCategory[];
-
-export const ProductCategorySchema = z.enum(PRODUCT_CATEGORY_KEYS);
+// Catégorie produit = SLUG vers la table `product_categories` (taxonomie
+// data-driven, gérée par l'admin). On ne valide plus contre un enum figé : le
+// slug doit respecter le format ci-dessous, et son existence + son statut actif
+// sont vérifiés à l'exécution côté service (offer.create) + garantis par la FK
+// Postgres. Cf. ARCHITECTURE.md (dérogation §E2/§G4, taxonomie dynamique).
+export const ProductCategorySchema = z
+  .string()
+  .min(1)
+  .max(40)
+  .regex(/^[a-z][a-z0-9_-]*$/, 'slug invalide (minuscules, chiffres, - ou _)');
 
 // ─────────────────────────────────────────────────────────────────
 // Champs
@@ -187,6 +188,13 @@ export const OfferRejectInputSchema = z.object({
 });
 export type OfferRejectInput = z.infer<typeof OfferRejectInputSchema>;
 
+// `request-changes` : renvoie l'offre au producteur pour correction. Explication
+// obligatoire (grand champ texte), réutilise rejectionReason côté DB.
+export const OfferRequestChangesInputSchema = z.object({
+  reason: z.string().min(5).max(1000),
+});
+export type OfferRequestChangesInput = z.infer<typeof OfferRequestChangesInputSchema>;
+
 // `suspend` : raison courte recommandée (admin OU producteur).
 export const OfferSuspendInputSchema = z.object({
   reason: z.string().min(3).max(300).optional(),
@@ -195,3 +203,13 @@ export type OfferSuspendInput = z.infer<typeof OfferSuspendInputSchema>;
 
 // `reactivate` : pas de body, ramène suspended → validated.
 export const OfferReactivateInputSchema = z.object({});
+
+// `retire` : MATA retire l'offre unilatéralement. Raison courte facultative,
+// affichée au producteur (stockée dans rejectionReason côté DB).
+export const OfferRetireInputSchema = z.object({
+  reason: z.string().min(3).max(300).optional(),
+});
+export type OfferRetireInput = z.infer<typeof OfferRetireInputSchema>;
+
+// `restore` : MATA rend la main au producteur (withdrawn → draft). Pas de body.
+export const OfferRestoreInputSchema = z.object({});

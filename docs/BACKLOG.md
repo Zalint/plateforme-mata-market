@@ -29,6 +29,18 @@ exacts où ces dettes sont marquées en commentaire inline.
 
 # En cours
 
+## [lotcat→lotcat+1] Catégories produit data-driven — Lot 2 (frontend) + Lot 3 (cleanup)
+
+- **Découvert** : lotcat (passage de l'enum `ProductCategory` à une table `product_categories` gérée par l'admin).
+- **Cible** : lot suivant (Lot 2 frontend, puis Lot 3 cleanup).
+- **Fait (Lot 1, backend)** : table `product_categories` + migration `20260531230244_lotcat_categories_part1` (création table + seed 6 catégories + colonne `category_slug` FK sur `offers`/`pricing_rules` + backfill + bascule de la CHECK XOR `pricing_rules` sur `category_slug`) ; module `categories` (service + routes `GET /v1/categories`, `GET/POST/PATCH /v1/admin/categories`) ; `ProductCategorySchema` = slug (format Zod + existence via FK/service) ; `assertCategoryActive` à la création/édition d'offre ; seed + tests d'intégration adaptés ; `ProductCategory` (TS) élargi à `string`, `CATEGORY_EMOJI`/`CATEGORY_LABEL_FR` en `Record<string,string>` fallback.
+- **Fait (Lot 2, frontend)** : endpoint guest `GET /v1/guest/categories` (+ test) ; hooks `useGuestCategories` / `useCategories` / `useAdminCategories` / `useCreateCategory` / `useUpdateCategory` ; listes dynamiques (`page.tsx`, `client/catalog`, `producer/offers/new`) ; emoji/label depuis l'API (prop `emoji` sur `ProductCard`/`OfferCard` + fallbacks) ; écran **Admin → Catégories** (CRUD : créer, éditer label/emoji/ordre, activer/désactiver) + lien sidebar.
+- **À faire — Lot 3 (cleanup)** : 2e migration (release 2) qui SUPPRIME la colonne enum `category` de `offers`/`pricing_rules` + le type Postgres `product_category` + l'index `pricing_rules_category_valid_from_idx` ; retirer les fallbacks `categorySlug ?? category` (mappers offer/pricing, pricing-service/snapshot).
+- **Garde-fou actuel** : colonne enum `category` conservée (nullable) + coalescence `categorySlug ?? category` partout → aucune offre/règle existante cassée.
+- **Risque si non traité** : double source (enum + slug) qui traîne jusqu'au Lot 3 (cleanup).
+- **Validation** : typecheck (api+web+shared) + biome OK ; unit shared 72/72 + api 88/88 ; **suite d'intégration 19 fichiers / 125 tests verte** (testcontainers). Note Windows : testcontainers exige `DOCKER_HOST=npipe:////./pipe/dockerDesktopLinuxEngine` (+ `TESTCONTAINERS_RYUK_DISABLED=true`) car le pipe Docker Desktop n'est pas celui par défaut.
+- **Opérationnel** : toute nouvelle catégorie exige une **règle de pricing** (Admin → Pricing, scope category) avant qu'un client puisse commander, sinon `findActiveRule` → `NOT_FOUND`.
+
 ## [lot-9→lot-?] Délégation téléconseil : course au rechargement d'une page producteur
 
 - **Découvert** : Lot 9 (test Puppeteer du flux « Assister un producteur » → « Offres de Mor »).
@@ -196,6 +208,127 @@ exacts où ces dettes sont marquées en commentaire inline.
 ---
 
 # Résolues
+
+## [users] Orphelins Keycloak + message de conflit lisible — résolue 2026-06-01
+
+Créer un compte (admin → utilisateur) avec un téléphone déjà provisionné renvoyait
+un `409` brut (« ApiError: 409 POST /v1/admin/users ») au lieu d'un message clair,
+et un **reseed** (qui vide la base applicative mais PAS Keycloak) laissait des
+comptes KC **orphelins** (sans ligne `users`) qui bloquaient toute recréation par
+téléphone.
+
+**Correctifs :**
+1. **Anti-orphelin (cause racine)** : `keycloakAdmin.createUser` ADOPTE désormais un
+   compte KC existant sur `409` (reset mdp + réactivation + ré-assignation rôle) au
+   lieu d'échouer. Les deux appelants (`user-service`, `producer-service`) vérifient
+   la DB en amont → un 409 KC = forcément un orphelin → réutilisé. Idempotent : un
+   reseed ne bloque plus rien, l'orphelin est ré-absorbé. Pas de suppression d'un
+   compte adopté (rollback delete uniquement si on vient de créer).
+   Test unitaire `keycloak-admin.test.ts` (httpFetch + env mockés) : 201 → création,
+   409 → adoption (reset mdp, pas de delete).
+2. **Message lisible** : `ApiError.message` (http-client) reprend le message métier
+   de l'API (`body.message`) au lieu du libellé technique « 409 POST … » → bénéficie
+   à TOUT le frontend. Messages backend unifiés et sans jargon : « Ce numéro de
+   téléphone est déjà utilisé par un compte. »
+3. **Plus d'overlay** : page `users/new` passe de `mutateAsync` à `mutate` + `onSuccess`
+   → l'erreur est captée par TanStack (affichée inline), sans rejection non gérée.
+
+- **Fichiers** : keycloak-admin.ts (+ test), http-client.ts, user-service.ts,
+  admin/users/new/page.tsx.
+4. **Purge au reseed (cause amont)** : `dev-seed.ts` supprime en fin de seed les
+   comptes Keycloak orphelins — username = téléphone (`+221…`, provisionnés via le
+   flux admin/staff) absents de la base. Ne touche jamais aux users du realm-export
+   (`mor.diop`…) ni aux service-accounts. Best-effort (KC absent/erreur → skip, le
+   seed ne casse pas). → les orphelins ne s'accumulent plus.
+
+- **Fichiers** : keycloak-admin.ts (+ test), http-client.ts, user-service.ts,
+  admin/users/new/page.tsx, prisma/seeds/dev-seed.ts.
+- **Validation** : typecheck + biome (304) ; unit keycloak-admin 2/2 ; intégration
+  user-create 4/4 ; démo live (adoption de `+221773929671` → compte recréé). La purge
+  au reseed se vérifie au prochain `pnpm dev:up:reseed`.
+
+## [assignments] Portée de modération producteur ↔ téléconseiller — résolue 2026-06-01
+
+Permettre d'affecter des producteurs à un téléconseiller pour borner sa **modération**
+(à 100 producteurs, répartir entre téléconseillers).
+
+**Modèle retenu** (après itération avec Saliou) : le mapping borde la MODÉRATION,
+PAS la délégation.
+- Modération (`valider/refuser/demander corrections/retirer/restaurer/suspendre/réactiver`)
+  → un téléconseiller agit comme l'admin **mais uniquement sur ses producteurs affectés**.
+  3 états : `allProducers=true` → tout ; sous-ensemble coché → ceux-là ; rien (défaut) → AUCUNE offre.
+  La file `/admin/offers` est filtrée ; une action hors périmètre → 403 « …pas affecté ».
+- Délégation (assister via code) → **ouverte** : n'importe quel producteur délègue à
+  n'importe quel téléconseiller (inchangé). Producteur self-service (submit/withdraw/archive)
+  intact.
+
+**Backend (Lot 1)** : tables `teleconsultant_assignments` (M:N) + `teleconsultant_scope`
+(`all_producers`), migration `20260601141644_teleconsultant_assignments` ; module
+`assignments` (service + audit `teleconsultant.assignment.set` + helpers
+`assertModeratorForProducer` / `scopeOfferWhereForModerator`) ; câblage offer-routes
+(file + 7 actions) ; routes admin `GET /v1/assignments/context`,
+`GET`/`PUT /v1/assignments/:teleconsultantUserId` ; seed Ibrahima `allProducers=true`
+(préserve le dev). Tests : `moderation-scope.integration.test.ts` (6) + maj
+`offer-routes-auth` (portée globale).
+
+**Frontend (Lot 2)** : écran admin **« Affectations »** (`/admin/assignments`, lien sidebar) —
+sélection d'un téléconseiller, toggle « Tous les producteurs » ou checklist (recherche +
+filtre zone + overlap M:N « aussi : … »), avertissement « aucun = ne voit rien ».
+Hooks `useAssignmentContext` / `useUpdateAssignmentScope`. Démo Puppeteer : round-trip
+PUT OK (« Modère : 1 producteur »).
+
+**Validation** : typecheck (api+web+shared) + biome (303 fichiers) verts ; intégration
+offres+orders+assignments 31/31.
+
+## [offers] Statut `withdrawn` (retrait MATA) + déclencheur `sold` + suspend admin — résolue 2026-06-01
+
+Trois manques du cycle de vie d'offre comblés :
+
+1. **`withdrawn` (« Retirée par MATA »)** : retrait unilatéral admin/téléconseiller,
+   distinct de `suspended` (que le producteur peut lever lui-même). VERROU : seul
+   MATA pose (`validated|pending|changes_requested|suspended → withdrawn`) ET défait
+   (`withdrawn → draft`, rend la main au producteur). Motif facultatif stocké dans
+   `rejectionReason`, affiché au producteur en lecture seule.
+2. **`sold` enfin déclenché** : à la transition order `delivered`, une offre `reserved`
+   dont toutes les commandes la référençant sont livrées (donc non annulables) bascule
+   `reserved → sold` (terminal, retrait catalogue). Comblait un sous-trou Lot 4 (le
+   statut existait mais n'était jamais posé). Audit `offer.sold`.
+3. **Suspend côté admin** : il n'existait AUCUN bouton UI admin pour suspendre/retirer
+   une offre validée (la fiche `/producer/offers/[id]` est lecture seule pour l'admin,
+   et `/admin/offers` n'avait d'actions que sur `pending`). Ajout des boutons
+   Suspendre/Réactiver/Retirer/Restaurer dans `/admin/offers`.
+4. **Politique de rôles harmonisée** : `suspend`/`reactivate` étaient en `assertOwnership`
+   pur → un téléconseiller ne pouvait pas suspendre une offre arbitraire (403) alors qu'il
+   peut valider/refuser/retirer (modération). Aligné : suspend/reactivate = **propriétaire
+   (producteur self-service) OU modération (admin/téléconseiller)** — on garde le producteur
+   et on ajoute le téléconseiller. `submit`/`withdraw`/`archive` restent en `assertOwnership`
+   (actes du producteur / délégation, pas de la modération MATA — un brouillon ne se publie
+   pas sans le consentement du producteur). Couvert par `offer-routes-auth.integration.test.ts`
+   (téléconseiller 200, producteur 200, client 403).
+
+- **Fichiers** : schema.prisma (enum `withdrawn` + migration `20260601131127_add_offer_status_withdrawn`),
+  enums.ts (+ label), offer.ts (Zod retire/restore), offer-service.ts (`retire`/`restore` +
+  runTransition), audit-service.ts (`offer.retire`/`offer.restore`/`offer.sold`),
+  offer-routes.ts (routes admin-only), order-service.ts (déclencheur sold), use-offers.ts
+  (hooks), admin/offers/page.tsx (boutons), producer/offers/[id]/page.tsx (bandeau + lecture
+  seule), producer/offers/page.tsx (filtre), offer-card.tsx (STATUS_TONE complété).
+- **Validation** : typecheck (api+web+shared) + biome (fichiers touchés) OK ; intégration
+  offers 9/9 + orders 13/13 verte (testcontainers, dont 3 nouveaux tests : sold complet,
+  partiel sans sold, retire/restore + verrou). `DOCKER_HOST=npipe:////./pipe/dockerDesktopLinuxEngine`.
+- **Note** : `STATUS_TONE` (offer-card.tsx) était incomplet depuis l'ajout de
+  `changes_requested`/`expired`/`archived` (dette silencieuse) — complété ici avec ces trois
+  + `withdrawn`.
+
+## [tech] Formatage Biome KO sur 4 pages non liées (préexistant) — découverte 2026-06-01
+
+- **Découvert** : 2026-06-01 (run `pnpm biome check .` pendant le lot offers withdrawn/sold).
+- **Fichiers** : apps/web/app/(chromed)/admin/producers/new/page.tsx,
+  admin/users/new/page.tsx, client/home/page.tsx, producer/home/page.tsx — `<KpiCard ... />`
+  sur une ligne que Biome veut éclater multi-lignes (format only, pas de bug logique).
+- **Garde-fou actuel** : aucun impact runtime ; uniquement `biome check .` qui sort en erreur.
+- **Risque si non traité** : `pnpm biome check .` (et la CI) reste rouge → masque de vraies
+  régressions de format futures. Fix trivial : `pnpm biome check --write` sur ces 4 fichiers
+  (laissé hors de ce lot par discipline de périmètre §E4 — non lié au cycle de vie d'offre).
 
 ## [seed fix] Wipe seed : `pickup_items` bloquaient le DELETE `order_items` — résolue 2026-05-31
 

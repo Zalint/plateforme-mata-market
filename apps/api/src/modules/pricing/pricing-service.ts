@@ -1,4 +1,3 @@
-import type { ProductCategory } from '@mata/shared/constants';
 import { DomainError } from '@mata/shared/errors';
 import type {
   PricingRuleCreate,
@@ -34,7 +33,7 @@ import { computePricing, type PricingEngineInput } from './pricing-engine.js';
 
 export interface FindActiveRuleArgs {
   offerId?: string;
-  category?: ProductCategory;
+  category?: string; // slug product_categories
   at?: Date;
 }
 
@@ -57,7 +56,7 @@ async function findActiveRuleInternal(args: FindActiveRuleArgs) {
   // 2. Fallback rule catégorie
   if (args.category) {
     return prisma.pricingRule.findFirst({
-      where: { scope: 'category', category: args.category, ...validityFilter },
+      where: { scope: 'category', categorySlug: args.category, ...validityFilter },
       orderBy: { validFrom: 'desc' },
     });
   }
@@ -92,7 +91,7 @@ export const pricingService = {
     const created = await prisma.pricingRule.create({
       data: {
         scope: input.scope,
-        category: input.scope === 'category' ? (input.category ?? null) : null,
+        categorySlug: input.scope === 'category' ? (input.category ?? null) : null,
         offerId: input.scope === 'offer' ? (input.offerId ?? null) : null,
         model: input.model,
         commissionPct: input.commissionPct,
@@ -176,7 +175,7 @@ export const pricingService = {
   async listRules(query: PricingRuleListQuery): Promise<PricingRuleOutput[]> {
     const where: Prisma.PricingRuleWhereInput = {
       ...(query.scope && { scope: query.scope }),
-      ...(query.category && { category: query.category }),
+      ...(query.category && { categorySlug: query.category }),
       ...(query.offerId && { offerId: query.offerId }),
       ...(query.activeAt && {
         validFrom: { lte: new Date(query.activeAt) },
@@ -217,19 +216,20 @@ export const pricingService = {
     // Forme offerId : lookup offer (prix producteur) + rule active.
     const offer = await prisma.offer.findUnique({
       where: { id: input.offerId },
-      select: { id: true, priceFcfa: true, category: true },
+      select: { id: true, priceFcfa: true, category: true, categorySlug: true },
     });
     if (!offer) throw new DomainError('NOT_FOUND', 'Offre introuvable');
 
+    const offerCategory = offer.categorySlug ?? offer.category ?? undefined;
     const rule = await findActiveRuleInternal({
       offerId: offer.id,
-      category: offer.category,
+      category: offerCategory,
     });
     if (!rule) {
       throw new DomainError(
         'NOT_FOUND',
         'Aucune règle pricing active pour cette offre (ni override, ni catégorie)',
-        { details: { offerId: offer.id, category: offer.category } },
+        { details: { offerId: offer.id, category: offerCategory } },
       );
     }
 
@@ -294,7 +294,7 @@ function toAuditValue(r: Prisma.PricingRuleGetPayload<Record<string, never>>) {
   return {
     id: r.id,
     scope: r.scope,
-    category: r.category,
+    category: r.categorySlug ?? r.category,
     offerId: r.offerId,
     model: r.model,
     commissionPct: r.commissionPct,
