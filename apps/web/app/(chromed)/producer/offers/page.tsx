@@ -4,8 +4,13 @@ import type { OfferStatus } from '@mata/shared/constants';
 import { OFFER_STATUS_LABEL_FR } from '@mata/shared/constants';
 import { FilterChip, Icon, OfferCard } from '@mata/ui';
 import Link from 'next/link';
-import { useState } from 'react';
-import { useMyOffers, useMyProducerProfile, useSubmitOffer } from '../../../../src/lib/api';
+import { useMemo, useState } from 'react';
+import {
+  useCategories,
+  useMyOffers,
+  useMyProducerProfile,
+  useSubmitOffer,
+} from '../../../../src/lib/api';
 
 /**
  * Producer / Offers · liste des offres du producteur connecté.
@@ -28,6 +33,11 @@ export default function ProducerOffersPage(): React.JSX.Element {
   const [filter, setFilter] = useState<FilterValue>('all');
   const { data: profileData, isLoading: profileLoading } = useMyProducerProfile();
   const { data, isLoading, error } = useMyOffers();
+  const { data: catData } = useCategories();
+  const emojiBySlug = useMemo(
+    () => new Map((catData?.categories ?? []).map((c) => [c.slug, c.emoji])),
+    [catData],
+  );
   const submitOffer = useSubmitOffer();
 
   if (profileLoading) return <p className="px-4 py-8 text-sm text-stone-500">Chargement…</p>;
@@ -90,6 +100,7 @@ export default function ProducerOffersPage(): React.JSX.Element {
           <OfferCard
             key={o.id}
             category={o.category}
+            emoji={emojiBySlug.get(o.category)}
             status={o.status}
             title={o.title}
             unit={o.unit}

@@ -2,8 +2,13 @@
 
 import { OFFER_STATUS_LABEL_FR, OFFER_STATUSES, type OfferStatus } from '@mata/shared/constants';
 import { FilterChip, Icon, OfferCard, usePrompt, useToast } from '@mata/ui';
-import { useState } from 'react';
-import { useAdminOffers, useRejectOffer, useValidateOffer } from '../../../../src/lib/api';
+import { useMemo, useState } from 'react';
+import {
+  useAdminOffers,
+  useCategories,
+  useRejectOffer,
+  useValidateOffer,
+} from '../../../../src/lib/api';
 
 /**
  * Admin / Offers · queue de validation des offres.
@@ -19,6 +24,11 @@ export default function AdminOffersPage(): React.JSX.Element {
     limit: 50,
     status: status === 'all' ? undefined : status,
   });
+  const { data: catData } = useCategories();
+  const emojiBySlug = useMemo(
+    () => new Map((catData?.categories ?? []).map((c) => [c.slug, c.emoji])),
+    [catData],
+  );
   const validate = useValidateOffer();
   const reject = useRejectOffer();
   const prompt = usePrompt();
@@ -67,6 +77,7 @@ export default function AdminOffersPage(): React.JSX.Element {
           <OfferCard
             key={o.id}
             category={o.category}
+            emoji={emojiBySlug.get(o.category)}
             status={o.status}
             title={o.title}
             unit={o.unit}
