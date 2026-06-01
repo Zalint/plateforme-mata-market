@@ -1,4 +1,6 @@
 import {
+  OFFER_STATUS_LABEL_FR,
+  type OfferStatus,
   ORDER_STATUS_LABEL_FR,
   ORDER_TRANSITIONS,
   type OrderStatus,
@@ -54,6 +56,50 @@ const ORDER_ROWS: StatusRow<OrderStatus>[] = [
     status: 'cancelled',
     tone: 'danger',
     desc: 'Annulée par le client (avant collecte) ou par MATA (rupture, problème).',
+  },
+];
+
+// Cycle de vie d'une offre (pas de stepper : flux non linéaire). On distingue le
+// workflow producteur de la modération MATA.
+const OFFER_ROWS: StatusRow<OfferStatus>[] = [
+  { status: 'draft', tone: 'neutral', desc: 'Brouillon du producteur, non soumis. Éditable.' },
+  { status: 'pending', tone: 'warning', desc: 'Soumise à MATA, en attente de validation.' },
+  {
+    status: 'changes_requested',
+    tone: 'warning',
+    desc: 'MATA renvoie l’offre pour correction (feedback). Redevient éditable ; la re-soumission efface le feedback.',
+  },
+  { status: 'validated', tone: 'success', desc: 'Approuvée par MATA et publiée au catalogue.' },
+  { status: 'rejected', tone: 'danger', desc: 'Refusée par MATA (définitif). Archivable.' },
+  {
+    status: 'expired',
+    tone: 'neutral',
+    desc: 'Date limite dépassée → retirée du catalogue. Le producteur peut la relancer (→ brouillon).',
+  },
+  {
+    status: 'archived',
+    tone: 'neutral',
+    desc: 'Rangée par le producteur (depuis brouillon ou refusée). Restaurable en brouillon.',
+  },
+  {
+    status: 'suspended',
+    tone: 'warning',
+    desc: 'Masquée temporairement (par le producteur en self-service OU par MATA). Réactivable.',
+  },
+  {
+    status: 'withdrawn',
+    tone: 'danger',
+    desc: 'Retirée unilatéralement par MATA. Le producteur ne peut pas la remettre — seul MATA restaure (→ brouillon).',
+  },
+  {
+    status: 'reserved',
+    tone: 'info',
+    desc: 'Entièrement réservée par des commandes. Revient « Validée » si une réservation est annulée.',
+  },
+  {
+    status: 'sold',
+    tone: 'neutral',
+    desc: 'Toutes les commandes livrées → vendue définitivement (terminal).',
   },
 ];
 
@@ -131,7 +177,7 @@ const MENUS: MenuDef[] = [
       { label: 'Producteurs', desc: 'Valider, suspendre ou blacklister les producteurs.' },
       {
         label: 'Validation offres',
-        desc: 'Approuver / rejeter les offres avant publication au catalogue.',
+        desc: 'Valider / refuser / demander des corrections / retirer / suspendre les offres. Recherche par offre ou producteur + filtre par producteur.',
       },
       { label: 'Commandes', desc: 'Suivre et faire avancer le cycle des commandes.' },
       {
@@ -140,6 +186,10 @@ const MENUS: MenuDef[] = [
       },
       { label: 'Paiements', desc: 'Suivre les encaissements et reversements.' },
       { label: 'Téléconseil', desc: 'Sessions d’assistance des producteurs (audit complet).' },
+      {
+        label: 'Affectations',
+        desc: 'Définir quels producteurs chaque téléconseiller peut modérer (ou « tous »). N’affecte PAS la délégation (assistance via code).',
+      },
       { label: 'Pricing', desc: 'Règles de prix à 7 composantes et simulateur.' },
     ],
   },
@@ -148,9 +198,18 @@ const MENUS: MenuDef[] = [
     tone: 'bg-stone-100 text-stone-700',
     items: [
       {
-        label: 'Téléconseil (espace Admin)',
-        desc: 'Saisit le code fourni par un producteur pour agir en son nom. Toutes les actions sont journalisées (acteur réel + producteur assisté).',
+        label: 'Créer un producteur',
+        desc: 'Onboarder un nouveau producteur (compte + profil « à valider »).',
       },
+      {
+        label: 'Assister un producteur',
+        desc: 'Saisir le code fourni par un producteur pour agir EN SON NOM (session déléguée, journalisée : acteur réel + producteur assisté). Ouvert à n’importe quel producteur.',
+      },
+      {
+        label: 'Validation offres',
+        desc: 'Modère les offres — UNIQUEMENT celles de ses producteurs affectés (cf. Affectations). Sans affectation : aucune ; « tous » : comme un admin.',
+      },
+      { label: 'Commandes', desc: 'Suivre et faire avancer les commandes.' },
     ],
   },
 ];
@@ -328,10 +387,34 @@ export default function AdminGuidePage(): React.JSX.Element {
         </div>
         <h1 className="text-2xl lg:text-3xl font-bold text-stone-900 mt-1">Guide d'utilisation</h1>
         <p className="text-sm text-stone-500 mt-1">
-          Comment marchent les statuts des commandes, des tournées, leur lien, le calcul du prix, et
-          les menus de chaque profil.
+          Comment marchent les statuts des offres, des commandes et des tournées, leur lien, le
+          calcul du prix, et les menus de chaque profil.
         </p>
       </div>
+
+      <Card title="Cycle de vie d'une offre">
+        <p className="text-sm text-stone-500 mb-4">
+          Une offre navigue entre le workflow du producteur (créer, soumettre, modifier) et la
+          modération MATA (valider, refuser, demander des corrections, suspendre, retirer).
+        </p>
+        <div className="space-y-2.5">
+          {OFFER_ROWS.map((r) => (
+            <div key={r.status} className="flex items-start gap-3">
+              <span className="shrink-0 w-40">
+                <StatusBadge tone={r.tone}>{OFFER_STATUS_LABEL_FR[r.status]}</StatusBadge>
+              </span>
+              <span className="text-sm text-stone-600">{r.desc}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 rounded-xl bg-stone-50 border border-stone-200 p-4 text-sm text-stone-600">
+          <span className="font-semibold text-stone-900">Portée de modération.</span> Un
+          téléconseiller ne modère que les producteurs qui lui sont affectés (écran « Affectations
+          ») ; « tous » lui donne la portée d’un admin. La{' '}
+          <span className="font-semibold">délégation</span> (assister un producteur via code) reste
+          ouverte à tous et est indépendante de ce périmètre.
+        </div>
+      </Card>
 
       <Card title="Cycle de vie d'une commande">
         <p className="text-sm text-stone-500 mb-4">
