@@ -81,14 +81,22 @@ export default function ProducerOfferDetailPage(): React.JSX.Element {
         {/* Actions selon statut */}
         <div className="mt-4 flex gap-2 flex-wrap">
           {offer.status === 'draft' && (
-            <button
-              type="button"
-              onClick={() => submitOffer.mutate(offer.id)}
-              disabled={submitOffer.isPending}
-              className="px-4 py-2.5 bg-mata-700 hover:bg-mata-800 text-white rounded-lg text-sm font-bold disabled:opacity-50"
-            >
-              Soumettre à validation
-            </button>
+            <>
+              <Link
+                href={`/producer/offers/${offer.id}/edit`}
+                className="px-4 py-2.5 bg-white border border-stone-200 text-stone-700 rounded-lg text-sm font-semibold hover:bg-stone-50 flex items-center gap-1.5"
+              >
+                <Icon name="pencil" className="w-4 h-4" /> Modifier
+              </Link>
+              <button
+                type="button"
+                onClick={() => submitOffer.mutate(offer.id)}
+                disabled={submitOffer.isPending}
+                className="px-4 py-2.5 bg-mata-700 hover:bg-mata-800 text-white rounded-lg text-sm font-bold disabled:opacity-50"
+              >
+                Soumettre à validation
+              </button>
+            </>
           )}
           {offer.status === 'pending' && (
             <button
