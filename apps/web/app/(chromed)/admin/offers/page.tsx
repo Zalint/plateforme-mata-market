@@ -3,8 +3,9 @@
 import { OFFER_STATUS_LABEL_FR, OFFER_STATUSES, type OfferStatus } from '@mata/shared/constants';
 import { FilterChip, Icon, OfferCard, usePrompt, useToast } from '@mata/ui';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  useAdminOfferProducers,
   useAdminOffers,
   useCategories,
   useReactivateOffer,
@@ -25,11 +26,24 @@ const FILTERS: (OfferStatus | 'all')[] = ['all', ...OFFER_STATUSES];
 
 export default function AdminOffersPage(): React.JSX.Element {
   const [status, setStatus] = useState<OfferStatus | 'all'>('all');
+  const [producerUserId, setProducerUserId] = useState('');
+  // Recherche libre debouncée (300 ms) : `qInput` = saisie, `q` = valeur envoyée.
+  const [qInput, setQInput] = useState('');
+  const [q, setQ] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setQ(qInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [qInput]);
+
   const { data, isLoading } = useAdminOffers({
     page: 1,
     limit: 50,
     status: status === 'all' ? undefined : status,
+    producerUserId: producerUserId || undefined,
+    q: q.length >= 2 ? q : undefined, // l'API exige 2 caractères min
   });
+  const { data: producersData } = useAdminOfferProducers();
+  const producerOptions = producersData?.producers ?? [];
   const { data: catData } = useCategories();
   const emojiBySlug = useMemo(
     () => new Map((catData?.categories ?? []).map((c) => [c.slug, c.emoji])),
@@ -98,6 +112,33 @@ export default function AdminOffersPage(): React.JSX.Element {
             {data?.meta.total ?? 0} offre{(data?.meta.total ?? 0) > 1 ? 's' : ''} dans ce filtre
           </p>
         </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-2 mb-4">
+        <div className="relative flex-1">
+          <Icon
+            name="search"
+            className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2"
+          />
+          <input
+            value={qInput}
+            onChange={(e) => setQInput(e.target.value)}
+            placeholder="Rechercher (offre ou producteur)…"
+            className="w-full pl-9 pr-3 py-2 border-2 border-stone-200 rounded-lg outline-none focus:border-mata-700 text-sm"
+          />
+        </div>
+        <select
+          value={producerUserId}
+          onChange={(e) => setProducerUserId(e.target.value)}
+          className="px-3 py-2 border-2 border-stone-200 rounded-lg outline-none focus:border-mata-700 text-sm bg-white sm:w-56"
+        >
+          <option value="">Tous les producteurs</option>
+          {producerOptions.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.displayName}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="flex items-center gap-2 mb-4 overflow-x-auto hide-scrollbar">

@@ -88,7 +88,14 @@ export const offerService = {
     const filters: Prisma.OfferWhereInput = {
       ...(query.status && { status: query.status }),
       ...(query.category && { categorySlug: query.category }),
-      ...(query.q && { title: { contains: query.q, mode: 'insensitive' } }),
+      ...(query.producerUserId && { producerUserId: query.producerUserId }),
+      // Recherche libre : titre de l'offre OU nom du producteur.
+      ...(query.q && {
+        OR: [
+          { title: { contains: query.q, mode: 'insensitive' } },
+          { producer: { user: { displayName: { contains: query.q, mode: 'insensitive' } } } },
+        ],
+      }),
     };
     const where: Prisma.OfferWhereInput = { AND: [filters, scopeWhere] };
     const skip = (query.page - 1) * query.limit;
@@ -111,6 +118,28 @@ export const offerService = {
         totalPages: Math.ceil(total / query.limit),
       },
     };
+  },
+
+  /**
+   * Producteurs distincts ayant au moins une offre dans le périmètre du
+   * modérateur (alimente le sélecteur « Producteur » de la file de validation).
+   * `scopeWhere` applique la portée de modération comme `listAdmin`.
+   */
+  async listAdminProducers(
+    scopeWhere: Prisma.OfferWhereInput = {},
+  ): Promise<{ producers: { id: string; displayName: string }[] }> {
+    const rows = await prisma.offer.findMany({
+      where: scopeWhere,
+      select: {
+        producerUserId: true,
+        producer: { select: { user: { select: { displayName: true } } } },
+      },
+      distinct: ['producerUserId'],
+    });
+    const producers = rows
+      .map((r) => ({ id: r.producerUserId, displayName: r.producer.user.displayName }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName, 'fr'));
+    return { producers };
   },
 
   // ─────────────────────────────────────────────────────────────

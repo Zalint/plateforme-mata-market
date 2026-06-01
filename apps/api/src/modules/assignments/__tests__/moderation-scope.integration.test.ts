@@ -214,3 +214,62 @@ describe('Portée de modération · file + actions', () => {
     await app.close();
   });
 });
+
+describe('Recherche + filtre producteur · file de validation', () => {
+  function producerIdsOf(res: { json: () => { offers: { producerUserId: string }[] } }): string[] {
+    return res.json().offers.map((o) => o.producerUserId);
+  }
+
+  it('GET /v1/offers/producers (admin) liste les producteurs ayant des offres', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/offers/producers',
+      headers: as(admin),
+    });
+    expect(res.statusCode).toBe(200);
+    const ids = res.json().producers.map((p: { id: string }) => p.id);
+    expect(ids).toEqual(expect.arrayContaining([p1.id, p2.id]));
+    await app.close();
+  });
+
+  it('q = nom du producteur filtre les offres (branche producteur)', async () => {
+    const app = await buildApp();
+    // « Producteur p1 » n'apparaît que dans le displayName (titre = « Offre p1 »)
+    // → isole la recherche par nom de producteur.
+    const res = await app.inject({
+      method: 'GET',
+      url: '/v1/offers?q=Producteur%20p1',
+      headers: as(admin),
+    });
+    expect(producerIdsOf(res)).toContain(p1.id);
+    expect(producerIdsOf(res)).not.toContain(p2.id);
+    await app.close();
+  });
+
+  it('producerUserId filtre exactement (sélecteur)', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/offers?producerUserId=${p1.id}`,
+      headers: as(admin),
+    });
+    expect(producerIdsOf(res)).toEqual([p1.id]);
+    await app.close();
+  });
+
+  it('GET /v1/offers/producers est scopé pour un téléconseiller', async () => {
+    const app = await buildApp();
+    await app.inject({
+      method: 'PUT',
+      url: `/v1/assignments/${tc1.id}`,
+      headers: as(admin),
+      payload: { allProducers: false, producerUserIds: [p1.id] },
+    });
+    const res = await app.inject({ method: 'GET', url: '/v1/offers/producers', headers: as(tc1) });
+    const ids = res.json().producers.map((p: { id: string }) => p.id);
+    expect(ids).toContain(p1.id);
+    expect(ids).not.toContain(p2.id);
+    await app.close();
+  });
+});

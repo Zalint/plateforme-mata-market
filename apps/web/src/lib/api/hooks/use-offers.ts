@@ -4,6 +4,7 @@ import type { OfferStatus } from '@mata/shared/constants';
 import type {
   OfferAdminListQuery,
   OfferAdminListResponse,
+  OfferAdminProducersResponse,
   OfferAttachPhotosInput,
   OfferCreate,
   OfferListResponse,
@@ -204,6 +205,17 @@ export function useAdminOffers(query: OfferAdminListQuery) {
         signal,
       );
     },
+    enabled: !!token,
+  });
+}
+
+/** Producteurs (scopés) ayant des offres — alimente le sélecteur de la file. */
+export function useAdminOfferProducers() {
+  const token = useAuthToken();
+  return useQuery({
+    queryKey: ['offers', 'admin', 'producers'],
+    queryFn: ({ signal }) =>
+      apiClient.get<OfferAdminProducersResponse>('/v1/offers/producers', token, signal),
     enabled: !!token,
   });
 }

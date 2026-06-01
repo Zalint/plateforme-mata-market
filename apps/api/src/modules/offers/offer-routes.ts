@@ -1,6 +1,7 @@
 import {
   OfferAdminListQuerySchema,
   OfferAdminListResponseSchema,
+  OfferAdminProducersResponseSchema,
   OfferAttachPhotosInputSchema,
   OfferCreateSchema,
   OfferListResponseSchema,
@@ -341,6 +342,18 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
 
   // ─────────────────────────────────────────────────────────────
   // Admin : queue de validation
+
+  // Producteurs (scopés) pour le sélecteur de la file. Route statique →
+  // prioritaire sur /v1/offers/:id côté Fastify.
+  typed.get(
+    '/v1/offers/producers',
+    { schema: { response: { 200: OfferAdminProducersResponseSchema } } },
+    async (req) => {
+      requireRole(req, 'admin', 'teleconsultant');
+      const scopeWhere = await scopeOfferWhereForModerator(req);
+      return offerService.listAdminProducers(scopeWhere);
+    },
+  );
 
   typed.get(
     '/v1/offers',

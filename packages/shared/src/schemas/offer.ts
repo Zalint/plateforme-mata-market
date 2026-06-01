@@ -161,7 +161,8 @@ export type OfferListResponse = z.infer<typeof OfferListResponseSchema>;
 export const OfferAdminListQuerySchema = PaginationQuerySchema.extend({
   status: OfferStatusSchema.optional(),
   category: ProductCategorySchema.optional(),
-  q: z.string().min(2).max(80).optional(), // recherche sur title
+  q: z.string().min(2).max(80).optional(), // recherche libre : titre OU nom du producteur
+  producerUserId: z.string().uuid().optional(), // filtre exact par producteur (sélecteur)
 });
 
 export type OfferAdminListQuery = z.infer<typeof OfferAdminListQuerySchema>;
@@ -172,6 +173,14 @@ export const OfferAdminListResponseSchema = z.object({
 });
 
 export type OfferAdminListResponse = z.infer<typeof OfferAdminListResponseSchema>;
+
+// Liste des producteurs ayant des offres dans le périmètre du modérateur
+// (alimente le sélecteur « Producteur » de la file de validation).
+export const OfferAdminProducersResponseSchema = z.object({
+  producers: z.array(z.object({ id: z.string().uuid(), displayName: z.string() })),
+});
+
+export type OfferAdminProducersResponse = z.infer<typeof OfferAdminProducersResponseSchema>;
 
 // ─────────────────────────────────────────────────────────────────
 // Transitions
