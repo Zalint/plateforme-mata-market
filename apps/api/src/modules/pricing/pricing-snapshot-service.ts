@@ -60,20 +60,21 @@ export const pricingSnapshotService = {
 
     const offer = await db.offer.findUnique({
       where: { id: args.offerId },
-      select: { id: true, priceFcfa: true, category: true },
+      select: { id: true, priceFcfa: true, category: true, categorySlug: true },
     });
     if (!offer) throw new DomainError('NOT_FOUND', 'Offre introuvable');
 
+    const offerCategory = offer.categorySlug ?? offer.category ?? undefined;
     const rule = await pricingService.findActiveRule({
       offerId: offer.id,
-      category: offer.category,
+      category: offerCategory,
       at,
     });
     if (!rule) {
       throw new DomainError(
         'NOT_FOUND',
         'Aucune règle pricing active pour cette offre — impossible de générer le snapshot',
-        { details: { offerId: offer.id, category: offer.category } },
+        { details: { offerId: offer.id, category: offerCategory } },
       );
     }
 

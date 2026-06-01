@@ -25,8 +25,15 @@ describe('CatalogOfferListQuerySchema', () => {
     });
   });
 
-  it('rejette une catégorie inconnue', () => {
-    expect(CatalogOfferListQuerySchema.safeParse({ category: 'beverages' }).success).toBe(false);
+  it('accepte un slug de catégorie au format valide (existence vérifiée côté service)', () => {
+    // Taxonomie data-driven : le schéma valide le FORMAT du slug, pas l'existence
+    // (assurée par la FK + assertCategoryActive côté API). Un slug inconnu mais
+    // bien formé est donc accepté ici.
+    expect(CatalogOfferListQuerySchema.safeParse({ category: 'beverages' }).success).toBe(true);
+  });
+
+  it('rejette une catégorie au format invalide (majuscules / espaces)', () => {
+    expect(CatalogOfferListQuerySchema.safeParse({ category: 'Beverages!' }).success).toBe(false);
   });
 
   it('rejette une recherche trop courte (<2 chars)', () => {

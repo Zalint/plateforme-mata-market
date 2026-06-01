@@ -97,7 +97,7 @@ afterEach(async () => {
   await prisma.pickup.deleteMany({});
   await prisma.orderItem.deleteMany({});
   await prisma.order.deleteMany({ where: { clientUserId: client.id } });
-  await prisma.pricingSnapshot.deleteMany({ where: { pricingRule: { category: 'poultry' } } });
+  await prisma.pricingSnapshot.deleteMany({ where: { pricingRule: { categorySlug: 'poultry' } } });
   await prisma.outboxEvent.deleteMany({ where: { eventType: { startsWith: 'pickup.' } } });
   await prisma.auditLog.deleteMany({
     where: { actorUserId: { in: [admin.id, client.id, producer.id] } },
@@ -119,7 +119,7 @@ async function createOffer(args: { qty: number; price: number }): Promise<Offer>
     data: {
       producerUserId: profile.userId,
       siteId: site.id,
-      category: 'poultry',
+      categorySlug: 'poultry',
       status: 'validated',
       title: `Poulet pickups ${Date.now()}-${Math.random()}`,
       unit: 'unit',

@@ -76,7 +76,7 @@ export const offerService = {
   async listAdmin(query: OfferAdminListQuery): Promise<OfferAdminListResponse> {
     const where: Prisma.OfferWhereInput = {
       ...(query.status && { status: query.status }),
-      ...(query.category && { category: query.category }),
+      ...(query.category && { categorySlug: query.category }),
       ...(query.q && { title: { contains: query.q, mode: 'insensitive' } }),
     };
     const skip = (query.page - 1) * query.limit;
@@ -122,12 +122,15 @@ export const offerService = {
     if (site.status !== 'active') {
       throw new DomainError('CONFLICT', 'Impossible de créer une offre sur un site archivé');
     }
+    // Catégorie = slug vers product_categories : doit exister ET être active
+    // (remplace l'ancienne validation z.enum, désormais dynamique).
+    await assertCategoryActive(input.category);
 
     const created = await prisma.offer.create({
       data: {
         producerUserId,
         siteId: input.siteId,
-        category: input.category,
+        categorySlug: input.category,
         title: input.title,
         unit: input.unit,
         quantity: input.quantity,
@@ -146,7 +149,7 @@ export const offerService = {
       targetId: created.id,
       newValue: {
         title: created.title,
-        category: created.category,
+        category: created.categorySlug,
         quantity: created.quantity,
         priceFcfa: created.priceFcfa,
       },
@@ -172,12 +175,13 @@ export const offerService = {
         `PATCH refusé sur status=${existing.status} — créer une nouvelle offre.`,
       );
     }
+    if (input.category !== undefined) await assertCategoryActive(input.category);
 
     const updated = await prisma.offer.update({
       where: { id: offerId },
       data: {
         siteId: input.siteId,
-        category: input.category,
+        categorySlug: input.category,
         title: input.title,
         unit: input.unit,
         quantity: input.quantity,
@@ -332,6 +336,19 @@ export const offerService = {
 };
 
 // ─────────────────────────────────────────────────────────────────
+
+/**
+ * Vérifie qu'un slug de catégorie existe ET est actif (table product_categories).
+ * Remplace l'ancienne validation statique z.enum : la taxonomie est dynamique.
+ */
+async function assertCategoryActive(slug: string): Promise<void> {
+  const cat = await prisma.category.findUnique({
+    where: { slug },
+    select: { isActive: true },
+  });
+  if (!cat) throw new DomainError('VALIDATION', `Catégorie inconnue : ${slug}`);
+  if (!cat.isActive) throw new DomainError('CONFLICT', `Catégorie désactivée : ${slug}`);
+}
 
 async function runTransition(input: {
   actorUserId: string;

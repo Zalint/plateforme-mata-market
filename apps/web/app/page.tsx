@@ -1,10 +1,9 @@
 'use client';
 
-import { CATEGORY_LABEL_FR, type ProductCategory } from '@mata/shared/constants';
 import { FilterChip, Icon, ProductCard } from '@mata/ui';
 import Link from 'next/link';
-import { useState } from 'react';
-import { useGuestCatalog } from '../src/lib/api';
+import { useMemo, useState } from 'react';
+import { useGuestCatalog, useGuestCategories } from '../src/lib/api';
 import { useCart } from '../src/lib/cart/use-cart';
 import { cloudinaryThumb } from '../src/lib/cloudinary-url';
 
@@ -18,20 +17,18 @@ import { cloudinaryThumb } from '../src/lib/cloudinary-url';
  * est optionnelle (bouton « Se connecter »). Route exemptée d'auth (middleware).
  */
 
-const CATEGORIES: (ProductCategory | 'all')[] = [
-  'all',
-  'poultry',
-  'cattle',
-  'sheep',
-  'eggs',
-  'vegetables',
-  'fish',
-];
-
 export default function HomeCatalogPage(): React.JSX.Element {
-  const [category, setCategory] = useState<ProductCategory | 'all'>('all');
+  const [category, setCategory] = useState<string>('all');
   const [search, setSearch] = useState('');
   const cart = useCart();
+
+  // Catégories actives (taxonomie data-driven) — endpoint guest, sans token.
+  const { data: catData } = useGuestCategories();
+  const categories = catData?.categories ?? [];
+  const emojiBySlug = useMemo(
+    () => new Map(categories.map((c) => [c.slug, c.emoji])),
+    [categories],
+  );
 
   const { data, isLoading, error } = useGuestCatalog({
     page: 1,
@@ -103,9 +100,16 @@ export default function HomeCatalogPage(): React.JSX.Element {
         </div>
 
         <div className="flex gap-2 overflow-x-auto hide-scrollbar mb-5 pb-1">
-          {CATEGORIES.map((c) => (
-            <FilterChip key={c} selected={category === c} onClick={() => setCategory(c)}>
-              {c === 'all' ? 'Tout' : CATEGORY_LABEL_FR[c]}
+          <FilterChip selected={category === 'all'} onClick={() => setCategory('all')}>
+            Tout
+          </FilterChip>
+          {categories.map((c) => (
+            <FilterChip
+              key={c.slug}
+              selected={category === c.slug}
+              onClick={() => setCategory(c.slug)}
+            >
+              {c.emoji} {c.labelFr}
             </FilterChip>
           ))}
         </div>
@@ -130,6 +134,7 @@ export default function HomeCatalogPage(): React.JSX.Element {
               <div key={o.id} className="flex flex-col h-full">
                 <ProductCard
                   category={o.category}
+                  emoji={emojiBySlug.get(o.category)}
                   title={o.title}
                   unit={o.unit}
                   priceFcfa={o.priceFcfa}

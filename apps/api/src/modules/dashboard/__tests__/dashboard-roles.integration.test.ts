@@ -52,7 +52,7 @@ beforeAll(async () => {
     data: {
       producerUserId: producer.id,
       siteId: site.id,
-      category: 'poultry',
+      categorySlug: 'poultry',
       status: 'validated',
       title: 'Offre roles validated',
       unit: 'unit',
@@ -65,7 +65,7 @@ beforeAll(async () => {
     data: {
       producerUserId: producer.id,
       siteId: site.id,
-      category: 'poultry',
+      categorySlug: 'poultry',
       status: 'pending',
       title: 'Offre roles pending',
       unit: 'unit',
@@ -143,7 +143,9 @@ afterAll(async () => {
   await prisma.producerRating.deleteMany({ where: { producerUserId: producerId } });
   await prisma.orderItem.deleteMany({ where: { producerUserId: producerId } });
   await prisma.order.deleteMany({ where: { clientUserId: clientId } });
-  await prisma.pricingSnapshot.deleteMany({ where: { producerShareFcfa: 2500, platformShareFcfa: 500 } });
+  await prisma.pricingSnapshot.deleteMany({
+    where: { producerShareFcfa: 2500, platformShareFcfa: 500 },
+  });
   await prisma.offer.deleteMany({ where: { producerUserId: producerId } });
   await prisma.productionSite.deleteMany({ where: { producerUserId: producerId } });
   await prisma.producerProfile.deleteMany({ where: { userId: producerId } });

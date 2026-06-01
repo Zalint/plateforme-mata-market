@@ -20,6 +20,9 @@ export type AuditAction =
   | 'producer.blacklist'
   | 'producer.validate'
   | 'producer.rating.create'
+  // Catégories produit (taxonomie data-driven)
+  | 'category.create'
+  | 'category.update'
   // Offres
   | 'offer.create'
   | 'offer.update'

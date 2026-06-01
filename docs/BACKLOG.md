@@ -29,6 +29,18 @@ exacts où ces dettes sont marquées en commentaire inline.
 
 # En cours
 
+## [lotcat→lotcat+1] Catégories produit data-driven — Lot 2 (frontend) + Lot 3 (cleanup)
+
+- **Découvert** : lotcat (passage de l'enum `ProductCategory` à une table `product_categories` gérée par l'admin).
+- **Cible** : lot suivant (Lot 2 frontend, puis Lot 3 cleanup).
+- **Fait (Lot 1, backend)** : table `product_categories` + migration `20260531230244_lotcat_categories_part1` (création table + seed 6 catégories + colonne `category_slug` FK sur `offers`/`pricing_rules` + backfill + bascule de la CHECK XOR `pricing_rules` sur `category_slug`) ; module `categories` (service + routes `GET /v1/categories`, `GET/POST/PATCH /v1/admin/categories`) ; `ProductCategorySchema` = slug (format Zod + existence via FK/service) ; `assertCategoryActive` à la création/édition d'offre ; seed + tests d'intégration adaptés ; `ProductCategory` (TS) élargi à `string`, `CATEGORY_EMOJI`/`CATEGORY_LABEL_FR` en `Record<string,string>` fallback.
+- **Fait (Lot 2, frontend)** : endpoint guest `GET /v1/guest/categories` (+ test) ; hooks `useGuestCategories` / `useCategories` / `useAdminCategories` / `useCreateCategory` / `useUpdateCategory` ; listes dynamiques (`page.tsx`, `client/catalog`, `producer/offers/new`) ; emoji/label depuis l'API (prop `emoji` sur `ProductCard`/`OfferCard` + fallbacks) ; écran **Admin → Catégories** (CRUD : créer, éditer label/emoji/ordre, activer/désactiver) + lien sidebar.
+- **À faire — Lot 3 (cleanup)** : 2e migration (release 2) qui SUPPRIME la colonne enum `category` de `offers`/`pricing_rules` + le type Postgres `product_category` + l'index `pricing_rules_category_valid_from_idx` ; retirer les fallbacks `categorySlug ?? category` (mappers offer/pricing, pricing-service/snapshot).
+- **Garde-fou actuel** : colonne enum `category` conservée (nullable) + coalescence `categorySlug ?? category` partout → aucune offre/règle existante cassée.
+- **Risque si non traité** : double source (enum + slug) qui traîne jusqu'au Lot 3 (cleanup).
+- **Validation** : typecheck (api+web+shared) + biome OK ; unit shared 72/72 + api 88/88 ; **suite d'intégration 19 fichiers / 125 tests verte** (testcontainers). Note Windows : testcontainers exige `DOCKER_HOST=npipe:////./pipe/dockerDesktopLinuxEngine` (+ `TESTCONTAINERS_RYUK_DISABLED=true`) car le pipe Docker Desktop n'est pas celui par défaut.
+- **Opérationnel** : toute nouvelle catégorie exige une **règle de pricing** (Admin → Pricing, scope category) avant qu'un client puisse commander, sinon `findActiveRule` → `NOT_FOUND`.
+
 ## [lot-9→lot-?] Délégation téléconseil : course au rechargement d'une page producteur
 
 - **Découvert** : Lot 9 (test Puppeteer du flux « Assister un producteur » → « Offres de Mor »).

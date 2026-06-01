@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import type { ProductCategory } from '../constants/categories.js';
 import { OFFER_STATUSES, OFFER_UNITS } from '../constants/enums.js';
 import {
   FcfaAmountSchema,
@@ -27,19 +26,16 @@ import {
 export const OfferStatusSchema = z.enum(OFFER_STATUSES);
 export const OfferUnitSchema = z.enum(OFFER_UNITS);
 
-// ProductCategory réutilisé depuis constants/categories existant (Lot 1).
-// On reconstruit l'enum Zod ici plutôt que d'exporter une autre version,
-// pour ne pas dupliquer la source.
-const PRODUCT_CATEGORY_KEYS = [
-  'poultry',
-  'eggs',
-  'cattle',
-  'sheep',
-  'vegetables',
-  'fish',
-] as const satisfies readonly ProductCategory[];
-
-export const ProductCategorySchema = z.enum(PRODUCT_CATEGORY_KEYS);
+// Catégorie produit = SLUG vers la table `product_categories` (taxonomie
+// data-driven, gérée par l'admin). On ne valide plus contre un enum figé : le
+// slug doit respecter le format ci-dessous, et son existence + son statut actif
+// sont vérifiés à l'exécution côté service (offer.create) + garantis par la FK
+// Postgres. Cf. ARCHITECTURE.md (dérogation §E2/§G4, taxonomie dynamique).
+export const ProductCategorySchema = z
+  .string()
+  .min(1)
+  .max(40)
+  .regex(/^[a-z][a-z0-9_-]*$/, 'slug invalide (minuscules, chiffres, - ou _)');
 
 // ─────────────────────────────────────────────────────────────────
 // Champs

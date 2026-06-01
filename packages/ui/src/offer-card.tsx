@@ -49,6 +49,8 @@ type OfferCardProps = {
   subtitle?: string; // ex: "Publiée le 24 mai" ou "Soumise il y a 1h"
   rejectionReason?: string | null;
   pending?: boolean; // affiche le bandeau "En attente de validation MATA"
+  /** Emoji de la catégorie (taxonomie data-driven) ; fallback slug puis 📦. */
+  emoji?: string;
   children?: React.ReactNode; // grid d'actions facultatif (boutons / Links)
   className?: string;
 };
@@ -69,6 +71,7 @@ export function OfferCard({
   subtitle,
   rejectionReason,
   pending,
+  emoji,
   children,
   className,
 }: OfferCardProps): React.JSX.Element {
@@ -80,10 +83,10 @@ export function OfferCard({
         <div
           className={clsx(
             'w-14 h-14 rounded-xl flex items-center justify-center text-3xl shrink-0',
-            CATEGORY_BG[category],
+            CATEGORY_BG[category] ?? 'bg-stone-100',
           )}
         >
-          {CATEGORY_EMOJI[category]}
+          {emoji ?? CATEGORY_EMOJI[category] ?? '📦'}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
@@ -117,7 +120,7 @@ export function OfferCard({
       </div>
       {children && <div className="mt-4">{children}</div>}
       {/* Note catégorie pour SEO/a11y, masqué visuellement */}
-      <span className="sr-only">{CATEGORY_LABEL_FR[category]}</span>
+      <span className="sr-only">{CATEGORY_LABEL_FR[category] ?? category}</span>
     </div>
   );
 }

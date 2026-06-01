@@ -106,7 +106,7 @@ beforeEach(async () => {
     data: {
       producerUserId: producer.id,
       siteId: site.id,
-      category: 'poultry',
+      categorySlug: 'poultry',
       status: 'validated',
       title: 'Poulet test paiement',
       unit: 'unit',

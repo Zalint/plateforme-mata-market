@@ -73,7 +73,7 @@ beforeAll(async () => {
     data: {
       producerUserId: profile.userId,
       siteId: site.id,
-      category: 'poultry',
+      categorySlug: 'poultry',
       status: 'validated',
       title: 'Poulet entier (pricing test)',
       unit: 'unit',
@@ -127,7 +127,7 @@ describe('Pricing flow · création rule → simulate → snapshot', () => {
 
   it('update rule + audit pricing.rule.update avec oldValue/newValue', async () => {
     const existing = await prisma.pricingRule.findFirst({
-      where: { scope: 'category', category: 'poultry' },
+      where: { scope: 'category', categorySlug: 'poultry' },
     });
     if (!existing) throw new Error('rule pré-requise absente');
 
@@ -289,7 +289,7 @@ describe('Pricing flow · création rule → simulate → snapshot', () => {
       prisma.pricingRule.create({
         data: {
           scope: 'category',
-          category: 'eggs',
+          categorySlug: 'eggs',
           model: 'commission_pct',
           commissionPct: 150, // INVALIDE (CHECK 0-100)
           createdBy: admin.id,

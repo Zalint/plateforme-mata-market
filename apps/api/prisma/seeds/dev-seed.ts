@@ -41,7 +41,6 @@ import {
   PrismaClient,
   ProducerStatus,
   ProducerType,
-  ProductCategory,
   SiteType,
   UserRole,
 } from '@prisma/client';
@@ -514,6 +513,26 @@ async function main(): Promise<void> {
   }
   log(`sites     2 sites créés (Poulailler Pout 1, Ferme Dahra)`);
 
+  // 4b. Catégories produit (taxonomie data-driven). Upsert idempotent : la
+  // migration les seede déjà, on garantit ici leur présence pour un `db:seed`
+  // autonome (et on les réactive si désactivées).
+  const CATEGORIES = [
+    { slug: 'poultry', labelFr: 'Volaille', emoji: '🐓', sortOrder: 1 },
+    { slug: 'eggs', labelFr: 'Œufs', emoji: '🥚', sortOrder: 2 },
+    { slug: 'cattle', labelFr: 'Bovin', emoji: '🐄', sortOrder: 3 },
+    { slug: 'sheep', labelFr: 'Ovin', emoji: '🐑', sortOrder: 4 },
+    { slug: 'vegetables', labelFr: 'Maraîcher', emoji: '🥬', sortOrder: 5 },
+    { slug: 'fish', labelFr: 'Poisson', emoji: '🐟', sortOrder: 6 },
+  ];
+  for (const c of CATEGORIES) {
+    await prisma.category.upsert({
+      where: { slug: c.slug },
+      update: { labelFr: c.labelFr, emoji: c.emoji, sortOrder: c.sortOrder, isActive: true },
+      create: c,
+    });
+  }
+  log(`categories ${CATEGORIES.length} catégories upsertées`);
+
   // 5. Offres de Mor (delete fait plus haut, à l'étape 4, pour respecter
   // l'ordre des FK).
   await prisma.offer.createMany({
@@ -521,7 +540,7 @@ async function main(): Promise<void> {
       {
         producerUserId: morUserId,
         siteId: poutSite.id,
-        category: ProductCategory.poultry,
+        categorySlug: 'poultry',
         status: OfferStatus.validated,
         title: 'Poulet entier',
         unit: OfferUnit.unit,
@@ -536,7 +555,7 @@ async function main(): Promise<void> {
       {
         producerUserId: morUserId,
         siteId: poutSite.id,
-        category: ProductCategory.eggs,
+        categorySlug: 'eggs',
         status: OfferStatus.pending,
         title: 'Œufs frais',
         unit: OfferUnit.tray,
@@ -549,7 +568,7 @@ async function main(): Promise<void> {
       {
         producerUserId: morUserId,
         siteId: dahraSite.id,
-        category: ProductCategory.sheep,
+        categorySlug: 'sheep',
         status: OfferStatus.draft,
         title: 'Mouton sur pied',
         unit: OfferUnit.head,
@@ -586,7 +605,7 @@ async function main(): Promise<void> {
     data: {
       producerUserId: awaUserId,
       siteId: awaSite.id,
-      category: ProductCategory.fish,
+      categorySlug: 'fish',
       status: OfferStatus.validated,
       title: 'Thiof frais',
       unit: OfferUnit.kg,
@@ -617,24 +636,17 @@ async function main(): Promise<void> {
   // ─────────────────────────────────────────────────────────────────
 
   const admin = await prisma.user.findFirstOrThrow({ where: { role: UserRole.admin } });
-  const allCategories: ProductCategory[] = [
-    ProductCategory.poultry,
-    ProductCategory.eggs,
-    ProductCategory.cattle,
-    ProductCategory.sheep,
-    ProductCategory.vegetables,
-    ProductCategory.fish,
-  ];
+  const allCategories: string[] = CATEGORIES.map((c) => c.slug);
 
   // Supprime les rules existantes ciblant ces catégories pour rester idempotent.
   await prisma.pricingRule.deleteMany({
-    where: { scope: PricingScope.category, category: { in: allCategories } },
+    where: { scope: PricingScope.category, categorySlug: { in: allCategories } },
   });
 
   await prisma.pricingRule.createMany({
-    data: allCategories.map((category) => ({
+    data: allCategories.map((categorySlug) => ({
       scope: PricingScope.category,
-      category,
+      categorySlug,
       model: PricingModel.commission_pct,
       commissionPct: 10,
       commissionBase: PricingBase.producer_price,

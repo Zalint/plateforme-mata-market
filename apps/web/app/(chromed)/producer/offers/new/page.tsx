@@ -1,18 +1,16 @@
 'use client';
 
-import {
-  CATEGORY_EMOJI,
-  CATEGORY_LABEL_FR,
-  OFFER_UNIT_LABEL_FR,
-  OFFER_UNITS,
-  type OfferUnit,
-  type ProductCategory,
-} from '@mata/shared/constants';
+import { OFFER_UNIT_LABEL_FR, OFFER_UNITS, type OfferUnit } from '@mata/shared/constants';
 import { Icon, useToast } from '@mata/ui';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useId, useState } from 'react';
-import { useCreateOffer, useMySites, useSubmitOffer } from '../../../../../src/lib/api';
+import {
+  useCategories,
+  useCreateOffer,
+  useMySites,
+  useSubmitOffer,
+} from '../../../../../src/lib/api';
 
 /**
  * Producer / Offers / New · création d'une offre en 4 sections.
@@ -24,17 +22,20 @@ import { useCreateOffer, useMySites, useSubmitOffer } from '../../../../../src/l
  * un offerId, càd après création initiale en brouillon).
  */
 
-const CATEGORIES: ProductCategory[] = ['poultry', 'eggs', 'cattle', 'sheep', 'vegetables', 'fish'];
 const UNITS = OFFER_UNITS;
 
 export default function NewOfferPage(): React.JSX.Element {
   const router = useRouter();
   const { data: sitesData, isLoading: sitesLoading } = useMySites();
+  const { data: catData } = useCategories();
+  const categories = catData?.categories ?? [];
   const createOffer = useCreateOffer();
   const submitOffer = useSubmitOffer();
   const toast = useToast();
 
-  const [category, setCategory] = useState<ProductCategory>('poultry');
+  // Catégorie sélectionnée (slug). Vide tant que rien n'est choisi → on retombe
+  // sur la 1ʳᵉ catégorie chargée pour l'affichage et la soumission.
+  const [category, setCategory] = useState<string>('');
   const [unit, setUnit] = useState<OfferUnit>('unit');
   const [quantity, setQuantity] = useState(500);
   const [priceFcfa, setPriceFcfa] = useState(3000);
@@ -47,9 +48,13 @@ export default function NewOfferPage(): React.JSX.Element {
 
   const sites = sitesData?.sites ?? [];
 
+  // Catégorie active : sélection explicite, sinon 1ʳᵉ catégorie chargée.
+  const activeCategory = category || categories[0]?.slug || '';
+  const activeLabel = categories.find((c) => c.slug === activeCategory)?.labelFr ?? activeCategory;
+
   // Auto-suggest title from category if empty
   function effectiveTitle(): string {
-    return title.trim() || CATEGORY_LABEL_FR[category];
+    return title.trim() || activeLabel;
   }
 
   async function handleSave(submit: boolean): Promise<void> {
@@ -57,10 +62,14 @@ export default function NewOfferPage(): React.JSX.Element {
       toast.info('Sélectionnez un site de retrait.');
       return;
     }
+    if (!activeCategory) {
+      toast.info('Aucune catégorie disponible.');
+      return;
+    }
     try {
       const created = await createOffer.mutateAsync({
         siteId,
-        category,
+        category: activeCategory,
         title: effectiveTitle(),
         unit,
         quantity,
@@ -97,23 +106,21 @@ export default function NewOfferPage(): React.JSX.Element {
       <section className="mt-6 bg-white rounded-2xl border border-stone-200 shadow-soft p-5">
         <StepHeader number={1} title="Choisir le produit" />
         <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">
-          {CATEGORIES.map((c) => {
-            const selected = c === category;
+          {categories.map((c) => {
+            const selected = c.slug === activeCategory;
             return (
               <button
                 type="button"
-                key={c}
-                onClick={() => setCategory(c)}
+                key={c.slug}
+                onClick={() => setCategory(c.slug)}
                 className={`aspect-square rounded-xl flex flex-col items-center justify-center text-2xl gap-1 transition ${
                   selected
                     ? 'border-2 border-mata-700 bg-mata-50'
                     : 'border border-stone-200 bg-white hover:border-mata-300'
                 }`}
               >
-                {CATEGORY_EMOJI[c]}
-                <span className="text-[10px] font-semibold text-stone-700">
-                  {CATEGORY_LABEL_FR[c]}
-                </span>
+                {c.emoji}
+                <span className="text-[10px] font-semibold text-stone-700">{c.labelFr}</span>
               </button>
             );
           })}
@@ -130,7 +137,7 @@ export default function NewOfferPage(): React.JSX.Element {
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder={CATEGORY_LABEL_FR[category]}
+            placeholder={activeLabel}
             className="mt-1.5 w-full px-4 py-2.5 border-2 border-stone-200 rounded-xl bg-white outline-none focus:border-mata-700 text-stone-900 text-sm"
           />
         </div>

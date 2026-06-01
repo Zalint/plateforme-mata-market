@@ -135,6 +135,11 @@ enum SiteStatus {
   @@map("site_status")
 }
 
+// DEPRECATED (lot catégories dynamiques) : l'enum est conservé en Release 1 le
+// temps de la bascule vers la table `product_categories` (FK categorySlug). Il
+// sera supprimé en Release 2 (cf. docs/BACKLOG.md). Ne plus l'utiliser dans le
+// nouveau code — la source de vérité des catégories est désormais le modèle
+// `Category` ci-dessous.
 enum ProductCategory {
   poultry
   eggs
@@ -144,6 +149,34 @@ enum ProductCategory {
   fish
 
   @@map("product_category")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// product_categories · taxonomie produit DATA-DRIVEN (gérable par l'admin)
+//
+// Remplace l'enum ProductCategory (figé, migration par valeur) par une table :
+// l'admin crée/renomme/désactive une catégorie depuis l'UI, sans migration ni
+// déploiement. `slug` est la clé stable (= anciennes valeurs de l'enum) servant
+// de FK sur offers.category_slug et pricing_rules.category_slug.
+//
+// `isActive` = statut métier (PAS un soft-delete générique, §G4) : on désactive
+// au lieu de supprimer pour ne jamais casser une offre/commande qui pointe dessus.
+// Dérogation §E2/§G4 actée dans ARCHITECTURE.md (taxonomie dynamique assumée).
+// ─────────────────────────────────────────────────────────────────
+model Category {
+  slug      String   @id // ex. "poultry", "caprin" — stable, référencé en FK
+  labelFr   String   @map("label_fr")
+  emoji     String
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  offers       Offer[]
+  pricingRules PricingRule[]
+
+  @@index([isActive, sortOrder])
+  @@map("product_categories")
 }
 
 enum OfferStatus {
@@ -525,7 +558,10 @@ model Offer {
   id               String          @id @default(uuid()) @db.Uuid
   producerUserId   String          @map("producer_user_id") @db.Uuid
   siteId           String          @map("site_id") @db.Uuid
-  category         ProductCategory
+  // DEPRECATED R1 : conservé (nullable) le temps de la bascule, supprimé en R2.
+  category         ProductCategory?
+  // Source de vérité : FK vers product_categories.slug (lot catégories dynamiques).
+  categorySlug     String?         @map("category_slug")
   status           OfferStatus     @default(draft)
   title            String // "Poulet entier" — libre du producteur
   unit             OfferUnit
@@ -550,12 +586,14 @@ model Offer {
   // Relations
   producer     ProducerProfile @relation(fields: [producerUserId], references: [userId], onDelete: Cascade)
   site         ProductionSite  @relation(fields: [siteId], references: [id], onDelete: Restrict)
+  categoryRef  Category?       @relation(fields: [categorySlug], references: [slug], onDelete: Restrict)
   photos       OfferPhoto[]
   pricingRules PricingRule[] // Lot 3 : overrides éventuels pour cette offre
   orderItems   OrderItem[] // Lot 4 : items de commande référençant cette offre
 
   @@index([producerUserId, status])
   @@index([category, status, createdAt(sort: Desc)])
+  @@index([categorySlug, status, createdAt(sort: Desc)])
   @@index([status, createdAt(sort: Desc)])
   @@index([siteId])
   @@map("offers")
@@ -609,8 +647,10 @@ model PricingRule {
   id       String           @id @default(uuid()) @db.Uuid
   scope    PricingScope
   // XOR : exactement un des deux non-null. Enforce par CHECK constraint (migration SQL).
-  category ProductCategory?
-  offerId  String?          @map("offer_id") @db.Uuid
+  // DEPRECATED R1 : `category` (enum) conservé le temps de la bascule, supprimé en R2.
+  category     ProductCategory?
+  categorySlug String?          @map("category_slug") // FK product_categories.slug
+  offerId      String?          @map("offer_id") @db.Uuid
 
   model PricingModel
 
@@ -640,10 +680,12 @@ model PricingRule {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  offer     Offer?            @relation(fields: [offerId], references: [id], onDelete: Cascade)
-  snapshots PricingSnapshot[]
+  offer       Offer?            @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  categoryRef Category?         @relation(fields: [categorySlug], references: [slug], onDelete: Restrict)
+  snapshots   PricingSnapshot[]
 
   @@index([category, validFrom(sort: Desc)])
+  @@index([categorySlug, validFrom(sort: Desc)])
   @@index([offerId, validFrom(sort: Desc)])
   @@map("pricing_rules")
 }

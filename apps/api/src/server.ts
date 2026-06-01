@@ -15,6 +15,7 @@ import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
 import { authPlugin, createKeycloakVerifier } from './modules/auth/index.js';
 import { catalogRoutes } from './modules/catalog/index.js';
+import { categoryRoutes } from './modules/categories/index.js';
 import { dashboardRoutes } from './modules/dashboard/index.js';
 import { guestPlugin } from './modules/guest/index.js';
 import { notificationRoutes } from './modules/notifications/index.js';
@@ -112,6 +113,7 @@ async function buildServer(): Promise<void> {
   await app.register(healthRoutes);
   await app.register(authRoutes);
   await app.register(zoneRoutes);
+  await app.register(categoryRoutes); // taxonomie produit data-driven
   await app.register(producerRoutes);
   await app.register(siteRoutes);
   await app.register(offerRoutes);

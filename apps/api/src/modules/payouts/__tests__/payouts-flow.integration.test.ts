@@ -137,7 +137,7 @@ beforeEach(async () => {
     data: {
       producerUserId: producerA.id,
       siteId: siteA.id,
-      category: 'poultry',
+      categorySlug: 'poultry',
       status: 'validated',
       title: 'Poulet A',
       unit: 'unit',
@@ -151,7 +151,7 @@ beforeEach(async () => {
     data: {
       producerUserId: producerB.id,
       siteId: siteB.id,
-      category: 'poultry',
+      categorySlug: 'poultry',
       status: 'validated',
       title: 'Poulet B',
       unit: 'unit',

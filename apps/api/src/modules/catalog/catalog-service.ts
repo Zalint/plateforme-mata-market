@@ -32,7 +32,7 @@ export const catalogService = {
   async listValidated(query: CatalogOfferListQuery): Promise<CatalogOfferListResponse> {
     const where = {
       status: 'validated' as const,
-      ...(query.category && { category: query.category }),
+      ...(query.category && { categorySlug: query.category }),
       ...(query.zoneId && {
         OR: [{ producer: { zoneId: query.zoneId } }, { site: { zoneId: query.zoneId } }],
       }),
@@ -73,7 +73,7 @@ export const catalogService = {
 function toItem(o: Loaded): CatalogOfferItem {
   return {
     id: o.id,
-    category: o.category,
+    category: o.categorySlug ?? o.category ?? '',
     title: o.title,
     unit: o.unit,
     quantity: o.quantity,

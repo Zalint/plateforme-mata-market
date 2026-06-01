@@ -28,7 +28,9 @@ export function toOfferOutput(o: OfferLoaded): OfferOutput {
     producerDisplayName: o.producer.user.displayName,
     siteId: o.siteId,
     siteName: o.site.name,
-    category: o.category,
+    // Source de vérité = categorySlug (FK product_categories). Fallback sur
+    // l'enum legacy le temps de la Release 1 (backfill garantit l'un des deux).
+    category: o.categorySlug ?? o.category ?? '',
     status: o.status,
     title: o.title,
     unit: o.unit,

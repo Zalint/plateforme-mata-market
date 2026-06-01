@@ -231,6 +231,8 @@ mata/
 
 15 tables principales. Schéma complet dans `apps/api/prisma/schema.prisma`. Conventions Postgres : `snake_case` côté DB, `camelCase` côté Prisma via `@map`.
 
+> **Taxonomie produit data-driven (dérogation §C / CLAUDE.md §E2-§G4).** La catégorie produit était initialement un enum Postgres `product_category`. Elle est désormais une **table `product_categories`** (slug, labelFr, emoji, sortOrder, isActive) gérée par l'admin via `/v1/admin/categories` — créer une catégorie ne nécessite plus de migration ni de déploiement. `offers.category_slug` et `pricing_rules.category_slug` sont des **FK** vers cette table. Conséquence assumée : on perd le typage exhaustif TS (`ProductCategory` = `string`, validation du **format** par Zod + **existence** par la FK et `assertCategoryActive`). Migration en deux temps (§G4) : Release 1 = table + colonnes slug + backfill (enum conservé en repli) ; Release 2 = suppression de l'enum. Toute nouvelle catégorie requiert une **règle de pricing** dédiée avant commande.
+
 ### Tables et relations clés
 
 ```

@@ -1,5 +1,6 @@
 import { DomainError } from '@mata/shared/errors';
 import {
+  CategoryListResponseSchema,
   CreateGuestOrderSchema,
   CreateGuestPaymentIntentSchema,
   GuestCatalogOfferDetailSchema,
@@ -73,6 +74,21 @@ export async function guestPlugin(app: FastifyInstance): Promise<void> {
     async () => {
       const zones = await guestService.listZones();
       return { zones };
+    },
+  );
+
+  // ───────────────────────────────────────────────────────────────
+  // GET /v1/guest/categories · catégories produit actives (lecture publique)
+
+  typed.get(
+    '/v1/guest/categories',
+    {
+      config: { rateLimit: READ_RATE_LIMIT },
+      schema: { response: { 200: CategoryListResponseSchema } },
+    },
+    async () => {
+      const categories = await guestService.listCategories();
+      return { categories };
     },
   );
 

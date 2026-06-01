@@ -55,7 +55,7 @@ beforeAll(async () => {
     data: {
       producerUserId: validatedProducer.id,
       siteId: site.id,
-      category: 'poultry',
+      categorySlug: 'poultry',
       status: 'pending',
       title: 'Offre dashboard pending',
       unit: 'unit',
