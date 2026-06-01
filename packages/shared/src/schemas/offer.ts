@@ -14,6 +14,7 @@ import {
  *
  * Workflow status (cf. schema.prisma) :
  *   draft     → pending      (producteur soumet)
+ *   pending   → draft        (producteur retire pour corriger, tant que pending)
  *   pending   → validated    (admin valide)
  *   pending   → rejected     (admin refuse, raison obligatoire)
  *   validated → suspended    (admin OU producteur masque)

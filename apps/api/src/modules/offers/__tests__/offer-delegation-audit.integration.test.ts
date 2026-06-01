@@ -151,3 +151,33 @@ describe("offerService.submit · acteur d'audit en délégation", () => {
     expect(audit?.onBehalfOfUserId).toBe(producer.id);
   });
 });
+
+describe('offerService.withdraw · pending → draft', () => {
+  it('repasse une offre pending en draft (+ audit offer.withdraw), puis refuse hors pending', async () => {
+    const created = await offerService.create(producer.id, offerInput(), {
+      actorUserId: producer.id,
+      onBehalfOfUserId: null,
+    });
+    await offerService.submit({ actorUserId: producer.id, offerId: created.id });
+
+    const withdrawn = await offerService.withdraw({
+      actorUserId: producer.id,
+      offerId: created.id,
+    });
+    expect(withdrawn.status).toBe('draft');
+
+    const row = await prisma.offer.findUnique({ where: { id: created.id } });
+    expect(row?.status).toBe('draft');
+    expect(row?.submittedAt).toBeNull();
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: 'offer.withdraw', targetId: created.id },
+    });
+    expect(audit).not.toBeNull();
+
+    // Hors pending (ici draft) → CONFLICT.
+    await expect(
+      offerService.withdraw({ actorUserId: producer.id, offerId: created.id }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+});

@@ -72,6 +72,17 @@ export function useSubmitOffer() {
   });
 }
 
+export function useWithdrawOffer() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<OfferOutput>(`/v1/offers/${id}/withdraw`, {}, token),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['offers'] });
+    },
+  });
+}
+
 export function useSuspendOffer() {
   const token = useAuthToken();
   const qc = useQueryClient();

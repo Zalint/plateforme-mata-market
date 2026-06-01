@@ -10,6 +10,7 @@ import {
   useReactivateOffer,
   useSubmitOffer,
   useSuspendOffer,
+  useWithdrawOffer,
 } from '../../../../../src/lib/api';
 
 /**
@@ -21,6 +22,7 @@ export default function ProducerOfferDetailPage(): React.JSX.Element {
   const offerId = params.id;
   const { data: offer, isLoading } = useOffer(offerId);
   const submitOffer = useSubmitOffer();
+  const withdrawOffer = useWithdrawOffer();
   const suspendOffer = useSuspendOffer();
   const reactivateOffer = useReactivateOffer();
 
@@ -86,6 +88,16 @@ export default function ProducerOfferDetailPage(): React.JSX.Element {
               className="px-4 py-2.5 bg-mata-700 hover:bg-mata-800 text-white rounded-lg text-sm font-bold disabled:opacity-50"
             >
               Soumettre à validation
+            </button>
+          )}
+          {offer.status === 'pending' && (
+            <button
+              type="button"
+              onClick={() => withdrawOffer.mutate(offer.id)}
+              disabled={withdrawOffer.isPending}
+              className="px-4 py-2.5 bg-white border border-stone-200 text-stone-700 rounded-lg text-sm font-semibold disabled:opacity-50"
+            >
+              Repasser en brouillon
             </button>
           )}
           {offer.status === 'validated' && (

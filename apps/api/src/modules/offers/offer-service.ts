@@ -230,6 +230,20 @@ export const offerService = {
     });
   },
 
+  /**
+   * Retour en brouillon par le producteur, TANT QUE l'offre est `pending`
+   * (pas encore validée/rejetée). Permet de corriger une offre soumise :
+   * l'édition (PATCH) n'est autorisée qu'en `draft`. Réinitialise `submittedAt`.
+   */
+  async withdraw(input: TransitionInput): Promise<OfferOutput> {
+    return runTransition({
+      ...input,
+      from: ['pending'],
+      action: 'offer.withdraw',
+      data: { status: 'draft', submittedAt: null },
+    });
+  },
+
   async validate(input: TransitionInput): Promise<OfferOutput> {
     return runTransition({
       ...input,
@@ -355,7 +369,13 @@ async function runTransition(input: {
   onBehalfOfUserId?: string | null;
   offerId: string;
   from: readonly OfferStatus[];
-  action: 'offer.submit' | 'offer.validate' | 'offer.reject' | 'offer.suspend' | 'offer.reactivate';
+  action:
+    | 'offer.submit'
+    | 'offer.withdraw'
+    | 'offer.validate'
+    | 'offer.reject'
+    | 'offer.suspend'
+    | 'offer.reactivate';
   data: Prisma.OfferUpdateInput;
   auditExtra?: Record<string, unknown>;
   request?: FastifyRequest;

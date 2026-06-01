@@ -136,6 +136,21 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
   );
 
   typed.post(
+    '/v1/offers/:id/withdraw',
+    { schema: { params: OfferIdParamSchema, response: { 200: OfferOutputSchema } } },
+    async (req) => {
+      // Owner OU délégué : repasse une offre `pending` en `draft` pour la modifier.
+      const owner = await loadOfferOwner(req.params.id);
+      assertOwnership(req, owner);
+      return offerService.withdraw({
+        ...resolveAuditActor(req),
+        offerId: req.params.id,
+        request: req,
+      });
+    },
+  );
+
+  typed.post(
     '/v1/offers/:id/validate',
     { schema: { params: OfferIdParamSchema, response: { 200: OfferOutputSchema } } },
     async (req) => {

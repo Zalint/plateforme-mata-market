@@ -31,6 +31,7 @@ export type AuditAction =
   | 'offer.suspend'
   | 'offer.reactivate'
   | 'offer.submit'
+  | 'offer.withdraw'
   // Sites
   | 'site.create'
   | 'site.update'
