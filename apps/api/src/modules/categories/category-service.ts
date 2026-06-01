@@ -68,7 +68,13 @@ export const categoryService = {
       action: 'category.create',
       targetType: 'category',
       targetId: created.slug,
-      newValue: { slug: created.slug, labelFr: created.labelFr, emoji: created.emoji },
+      newValue: {
+        slug: created.slug,
+        labelFr: created.labelFr,
+        emoji: created.emoji,
+        sortOrder: created.sortOrder,
+        isActive: created.isActive,
+      },
       request: args.request,
     });
     return toOutput(created);

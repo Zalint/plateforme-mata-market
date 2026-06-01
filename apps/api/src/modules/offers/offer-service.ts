@@ -385,15 +385,19 @@ export const offerService = {
   /**
    * Cron : expire les offres dont la date limite (availableUntil) est passée.
    * Bulk updateMany (pas d'audit par offre — action système, on logue le total
-   * côté job). Une offre `validated`/`reserved` dont availableUntil < aujourd'hui
-   * passe en `expired`. Retourne le nombre traité.
+   * côté job). Seules les offres `validated` (encore disponibles à la vente)
+   * sont concernées : une offre `reserved` est entièrement réservée, sa date
+   * d'availability n'a plus de sens et l'expirer EMPÊCHERAIT la transition
+   * `reserved → sold` à la livraison. Si une réservation est annulée, l'offre
+   * revient `validated` et sera expirée au prochain passage si encore en retard.
+   * Retourne le nombre traité.
    */
   async expireOverdue(): Promise<{ expired: number }> {
     const startOfToday = new Date();
     startOfToday.setUTCHours(0, 0, 0, 0);
     const res = await prisma.offer.updateMany({
       where: {
-        status: { in: ['validated', 'reserved'] },
+        status: 'validated',
         availableUntil: { lt: startOfToday },
       },
       data: { status: 'expired' },

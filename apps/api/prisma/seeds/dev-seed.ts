@@ -810,12 +810,15 @@ async function main(): Promise<void> {
   // ne touche pas Keycloak → des comptes provisionnés par téléphone (+221…)
   // s'y accumulent sans ligne `users`. On les supprime pour ne pas bloquer les
   // recréations futures. Best-effort (jamais bloquant pour le seed).
-  const dbUsernames = new Set(
-    (await prisma.user.findMany({ select: { username: true } }))
-      .map((u) => u.username)
-      .filter((u): u is string => u !== null),
-  );
-  await purgeKeycloakOrphans(dbUsernames);
+  // Keep-set : username ET phone (un compte staff/admin a username = téléphone,
+  // mais on garde les deux par sécurité — username est nullable).
+  const dbUsers = await prisma.user.findMany({ select: { username: true, phone: true } });
+  const keepIdentifiers = new Set<string>();
+  for (const u of dbUsers) {
+    if (u.username) keepIdentifiers.add(u.username);
+    if (u.phone) keepIdentifiers.add(u.phone);
+  }
+  await purgeKeycloakOrphans(keepIdentifiers);
 }
 
 /**
