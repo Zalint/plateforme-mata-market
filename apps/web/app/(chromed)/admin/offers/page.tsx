@@ -7,6 +7,7 @@ import {
   useAdminOffers,
   useCategories,
   useRejectOffer,
+  useRequestChangesOffer,
   useValidateOffer,
 } from '../../../../src/lib/api';
 
@@ -31,6 +32,7 @@ export default function AdminOffersPage(): React.JSX.Element {
   );
   const validate = useValidateOffer();
   const reject = useRejectOffer();
+  const requestChanges = useRequestChangesOffer();
   const prompt = usePrompt();
   const toast = useToast();
 
@@ -46,6 +48,21 @@ export default function AdminOffersPage(): React.JSX.Element {
     if (!reason) return;
     await reject.mutateAsync({ id, reason });
     toast.success('Offre refusée.');
+  }
+
+  async function handleRequestChanges(id: string): Promise<void> {
+    const reason = await prompt({
+      title: 'Demander des corrections',
+      message: 'Expliquez au producteur ce qui doit être corrigé (l’offre lui sera renvoyée).',
+      placeholder: 'Ex : la photo est floue, le prix semble trop élevé pour la saison…',
+      confirmLabel: 'Renvoyer pour correction',
+      multiline: true,
+      minLength: 5,
+      maxLength: 1000,
+    });
+    if (!reason) return;
+    await requestChanges.mutateAsync({ id, reason });
+    toast.success('Offre renvoyée au producteur pour correction.');
   }
 
   return (
@@ -88,22 +105,32 @@ export default function AdminOffersPage(): React.JSX.Element {
             rejectionReason={o.rejectionReason}
           >
             {o.status === 'pending' && (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => validate.mutate(o.id)}
+                    disabled={validate.isPending}
+                    className="py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Icon name="check" className="w-4 h-4" /> Valider
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleReject(o.id)}
+                    disabled={reject.isPending}
+                    className="py-2 rounded-lg bg-white border border-stone-200 hover:bg-stone-50 text-mata-700 text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Icon name="x" className="w-4 h-4" /> Refuser
+                  </button>
+                </div>
                 <button
                   type="button"
-                  onClick={() => validate.mutate(o.id)}
-                  disabled={validate.isPending}
-                  className="py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  onClick={() => handleRequestChanges(o.id)}
+                  disabled={requestChanges.isPending}
+                  className="w-full py-2 rounded-lg bg-white border border-stone-200 hover:bg-stone-50 text-stone-700 text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
                 >
-                  <Icon name="check" className="w-4 h-4" /> Valider
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleReject(o.id)}
-                  disabled={reject.isPending}
-                  className="py-2 rounded-lg bg-white border border-stone-200 hover:bg-stone-50 text-mata-700 text-sm font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50"
-                >
-                  <Icon name="x" className="w-4 h-4" /> Refuser
+                  <Icon name="pencil" className="w-4 h-4" /> Demander des corrections
                 </button>
               </div>
             )}

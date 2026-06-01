@@ -181,3 +181,46 @@ describe('offerService.withdraw · pending → draft', () => {
     ).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 });
+
+describe('offerService.requestChanges · pending → changes_requested → re-submit', () => {
+  it('renvoie pour correction (feedback + audit), reste éditable, puis re-soumission efface le feedback', async () => {
+    const created = await offerService.create(producer.id, offerInput(), {
+      actorUserId: producer.id,
+      onBehalfOfUserId: null,
+    });
+    await offerService.submit({ actorUserId: producer.id, offerId: created.id });
+
+    // Admin renvoie pour correction avec un message.
+    const requested = await offerService.requestChanges({
+      actorUserId: teleconsultant.id,
+      onBehalfOfUserId: producer.id,
+      offerId: created.id,
+      reason: 'Merci de préciser le calibre et de remettre une photo nette.',
+    });
+    expect(requested.status).toBe('changes_requested');
+    expect(requested.rejectionReason).toContain('calibre');
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: 'offer.request_changes', targetId: created.id },
+    });
+    expect(audit).not.toBeNull();
+
+    // Éditable en changes_requested (comme draft).
+    const edited = await offerService.update(
+      { actorUserId: producer.id },
+      created.id,
+      { qualityNote: 'Calibre 1,5 kg · photo refaite' },
+      undefined,
+    );
+    expect(edited.qualityNote).toBe('Calibre 1,5 kg · photo refaite');
+    expect(edited.status).toBe('changes_requested');
+
+    // Re-soumission → pending + feedback effacé.
+    const resubmitted = await offerService.submit({
+      actorUserId: producer.id,
+      offerId: created.id,
+    });
+    expect(resubmitted.status).toBe('pending');
+    expect(resubmitted.rejectionReason).toBeNull();
+  });
+});

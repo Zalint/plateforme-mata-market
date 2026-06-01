@@ -6,6 +6,7 @@ import {
   OfferListResponseSchema,
   OfferOutputSchema,
   OfferRejectInputSchema,
+  OfferRequestChangesInputSchema,
   OfferStatusSchema,
   OfferSuspendInputSchema,
   OfferUpdateSchema,
@@ -158,6 +159,26 @@ export async function offerRoutes(app: FastifyInstance): Promise<void> {
       return offerService.validate({
         ...resolveAuditActor(req),
         offerId: req.params.id,
+        request: req,
+      });
+    },
+  );
+
+  typed.post(
+    '/v1/offers/:id/request-changes',
+    {
+      schema: {
+        params: OfferIdParamSchema,
+        body: OfferRequestChangesInputSchema,
+        response: { 200: OfferOutputSchema },
+      },
+    },
+    async (req) => {
+      requireRole(req, 'admin', 'teleconsultant');
+      return offerService.requestChanges({
+        ...resolveAuditActor(req),
+        offerId: req.params.id,
+        reason: req.body.reason,
         request: req,
       });
     },

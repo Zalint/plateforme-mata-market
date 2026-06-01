@@ -27,6 +27,7 @@ export type AuditAction =
   | 'offer.create'
   | 'offer.update'
   | 'offer.validate'
+  | 'offer.request_changes'
   | 'offer.reject'
   | 'offer.suspend'
   | 'offer.reactivate'

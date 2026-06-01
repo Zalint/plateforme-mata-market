@@ -47,7 +47,7 @@ export default function ProducerOfferDetailPage(): React.JSX.Element {
                 tone={
                   offer.status === 'validated'
                     ? 'success'
-                    : offer.status === 'pending'
+                    : offer.status === 'pending' || offer.status === 'changes_requested'
                       ? 'warning'
                       : offer.status === 'rejected'
                         ? 'danger'
@@ -70,11 +70,17 @@ export default function ProducerOfferDetailPage(): React.JSX.Element {
             {offer.qualityNote && (
               <p className="mt-2 text-sm text-stone-600">{offer.qualityNote}</p>
             )}
-            {offer.rejectionReason && (
-              <p className="mt-3 text-sm text-red-700 bg-red-50 px-3 py-2 rounded-md">
-                Refusée : {offer.rejectionReason}
-              </p>
-            )}
+            {offer.rejectionReason &&
+              (offer.status === 'changes_requested' ? (
+                <div className="mt-3 text-sm text-amber-800 bg-amber-50 border border-amber-200 px-3 py-2 rounded-md">
+                  <span className="font-semibold">Corrections demandées par MATA :</span>{' '}
+                  {offer.rejectionReason}
+                </div>
+              ) : (
+                <p className="mt-3 text-sm text-red-700 bg-red-50 px-3 py-2 rounded-md">
+                  Refusée : {offer.rejectionReason}
+                </p>
+              ))}
           </div>
         </div>
 
@@ -95,6 +101,24 @@ export default function ProducerOfferDetailPage(): React.JSX.Element {
                 className="px-4 py-2.5 bg-mata-700 hover:bg-mata-800 text-white rounded-lg text-sm font-bold disabled:opacity-50"
               >
                 Soumettre à validation
+              </button>
+            </>
+          )}
+          {offer.status === 'changes_requested' && (
+            <>
+              <Link
+                href={`/producer/offers/${offer.id}/edit`}
+                className="px-4 py-2.5 bg-white border border-stone-200 text-stone-700 rounded-lg text-sm font-semibold hover:bg-stone-50 flex items-center gap-1.5"
+              >
+                <Icon name="pencil" className="w-4 h-4" /> Modifier
+              </Link>
+              <button
+                type="button"
+                onClick={() => submitOffer.mutate(offer.id)}
+                disabled={submitOffer.isPending}
+                className="px-4 py-2.5 bg-mata-700 hover:bg-mata-800 text-white rounded-lg text-sm font-bold disabled:opacity-50"
+              >
+                Soumettre à nouveau
               </button>
             </>
           )}

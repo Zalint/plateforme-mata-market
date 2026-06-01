@@ -160,6 +160,22 @@ export function useValidateOffer() {
   });
 }
 
+export function useRequestChangesOffer() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; reason: string }) =>
+      apiClient.post<OfferOutput>(
+        `/v1/offers/${input.id}/request-changes`,
+        { reason: input.reason },
+        token,
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['offers'] });
+    },
+  });
+}
+
 export function useRejectOffer() {
   const token = useAuthToken();
   const qc = useQueryClient();

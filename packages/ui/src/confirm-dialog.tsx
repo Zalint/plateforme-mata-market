@@ -45,7 +45,11 @@ type PromptOptions = {
   cancelLabel?: string;
   /** Longueur minimale (trim) requise pour activer le bouton. Défaut 1. */
   minLength?: number;
+  /** Longueur maximale. */
+  maxLength?: number;
   initialValue?: string;
+  /** `true` → grand champ texte (textarea multi-ligne) au lieu d'un input. */
+  multiline?: boolean;
 };
 
 type ConfirmFn = (options: ConfirmOptions) => Promise<boolean>;
@@ -106,7 +110,7 @@ function DialogModal({
   onClose: () => void;
 }): React.JSX.Element | null {
   const confirmRef = useRef<HTMLButtonElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
   const titleId = useId();
   const messageId = useId();
   const [value, setValue] = useState(
@@ -171,19 +175,31 @@ function DialogModal({
         <p id={messageId} className="text-sm text-stone-600">
           {options.message}
         </p>
-        {pending.kind === 'prompt' && (
-          <input
-            ref={inputRef}
-            type="text"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') accept();
-            }}
-            placeholder={pending.options.placeholder}
-            className="mt-3 w-full rounded-lg border-2 border-stone-200 px-3 py-2 text-sm outline-none focus:border-mata-700"
-          />
-        )}
+        {pending.kind === 'prompt' &&
+          (pending.options.multiline ? (
+            <textarea
+              ref={inputRef as React.RefObject<HTMLTextAreaElement>}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              rows={5}
+              maxLength={pending.options.maxLength}
+              placeholder={pending.options.placeholder}
+              className="mt-3 w-full resize-y rounded-lg border-2 border-stone-200 px-3 py-2 text-sm outline-none focus:border-mata-700"
+            />
+          ) : (
+            <input
+              ref={inputRef as React.RefObject<HTMLInputElement>}
+              type="text"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') accept();
+              }}
+              maxLength={pending.options.maxLength}
+              placeholder={pending.options.placeholder}
+              className="mt-3 w-full rounded-lg border-2 border-stone-200 px-3 py-2 text-sm outline-none focus:border-mata-700"
+            />
+          ))}
         <div className="mt-6 flex gap-3">
           <button
             type="button"

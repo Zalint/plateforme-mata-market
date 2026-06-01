@@ -22,7 +22,7 @@ export default function EditOfferPage(): React.JSX.Element {
   if (isLoading) return <p className="px-4 py-8 text-sm text-stone-500">Chargement…</p>;
   if (!offer) return <p className="px-4 py-8 text-sm text-red-700">Offre introuvable.</p>;
 
-  if (offer.status !== 'draft') {
+  if (offer.status !== 'draft' && offer.status !== 'changes_requested') {
     return (
       <div className="px-4 sm:px-6 lg:px-8 py-8 max-w-3xl mx-auto">
         <Link
@@ -32,8 +32,8 @@ export default function EditOfferPage(): React.JSX.Element {
           <Icon name="arrow-left" className="w-4 h-4" /> Retour à l'offre
         </Link>
         <p className="text-sm text-amber-700 bg-amber-50 px-3 py-2 rounded-md">
-          Seuls les brouillons sont modifiables. Repassez l'offre en brouillon depuis sa fiche pour
-          pouvoir la modifier.
+          Cette offre n'est plus modifiable (seuls un brouillon ou une offre « à corriger » le
+          sont). Repassez-la en brouillon depuis sa fiche si besoin.
         </p>
       </div>
     );

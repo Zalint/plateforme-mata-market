@@ -169,10 +169,10 @@ export const offerService = {
   ): Promise<OfferOutput> {
     const existing = await prisma.offer.findUnique({ where: { id: offerId } });
     if (!existing) throw new DomainError('NOT_FOUND', 'Offre introuvable');
-    if (existing.status !== 'draft') {
+    if (existing.status !== 'draft' && existing.status !== 'changes_requested') {
       throw new DomainError(
         'CONFLICT',
-        `PATCH refusé sur status=${existing.status} — créer une nouvelle offre.`,
+        `PATCH refusé sur status=${existing.status} — éditable uniquement en brouillon ou à corriger.`,
       );
     }
     if (input.category !== undefined) await assertCategoryActive(input.category);
@@ -224,9 +224,26 @@ export const offerService = {
   async submit(input: TransitionInput): Promise<OfferOutput> {
     return runTransition({
       ...input,
-      from: ['draft'],
+      // Soumission initiale (draft) OU re-soumission après corrections
+      // (changes_requested). On efface le feedback précédent.
+      from: ['draft', 'changes_requested'],
       action: 'offer.submit',
-      data: { status: 'pending', submittedAt: new Date() },
+      data: { status: 'pending', submittedAt: new Date(), rejectionReason: null },
+    });
+  },
+
+  /**
+   * Admin/téléconseiller renvoie une offre `pending` au producteur pour
+   * correction (réversible). Le message (obligatoire) est stocké dans
+   * `rejectionReason` et affiché au producteur. L'offre redevient éditable.
+   */
+  async requestChanges(input: TransitionInput & { reason: string }): Promise<OfferOutput> {
+    return runTransition({
+      ...input,
+      from: ['pending'],
+      action: 'offer.request_changes',
+      data: { status: 'changes_requested', rejectionReason: input.reason },
+      auditExtra: { reason: input.reason },
     });
   },
 
@@ -373,6 +390,7 @@ async function runTransition(input: {
     | 'offer.submit'
     | 'offer.withdraw'
     | 'offer.validate'
+    | 'offer.request_changes'
     | 'offer.reject'
     | 'offer.suspend'
     | 'offer.reactivate';

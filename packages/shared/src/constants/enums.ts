@@ -78,8 +78,9 @@ export const SITE_VEHICLE_ACCESS_LABEL_FR: Record<SiteVehicleAccess, string> = {
 export const OFFER_STATUSES = [
   'draft', // brouillon producteur, modifiable
   'pending', // soumise à MATA pour validation
+  'changes_requested', // renvoyée au producteur pour correction (réversible, éditable)
   'validated', // visible au catalogue, stock dispo
-  'rejected', // refusée par MATA
+  'rejected', // refusée par MATA (définitif)
   'suspended', // masquée par admin ou producteur
   'reserved', // Lot 4 : stock épuisé temporairement (un cancel peut revenir validated)
   'sold', // Lot 4 : épuisé définitivement (tout livré, retiré catalogue)
@@ -89,6 +90,7 @@ export type OfferStatus = (typeof OFFER_STATUSES)[number];
 export const OFFER_STATUS_LABEL_FR: Record<OfferStatus, string> = {
   draft: 'Brouillon',
   pending: 'En attente',
+  changes_requested: 'À corriger',
   validated: 'Validée',
   rejected: 'Refusée',
   suspended: 'Suspendue',

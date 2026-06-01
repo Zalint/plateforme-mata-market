@@ -182,8 +182,9 @@ model Category {
 enum OfferStatus {
   draft // brouillon producteur, modifiable
   pending // soumise à MATA pour validation
+  changes_requested // renvoyée au producteur pour correction (rejection_reason = feedback, réversible + éditable)
   validated // visible au catalogue, stock dispo
-  rejected // refusée par MATA (rejection_reason rempli)
+  rejected // refusée par MATA (rejection_reason rempli, définitif)
   suspended // masquée par admin ou producteur après validation
 
   // Ajoutés Lot 4 (résolution backlog L2→L4).
@@ -544,10 +545,12 @@ model ProductionSite {
 // offers · offres produit + workflow validation (Lot 2)
 //
 // Workflow status :
-//   draft     → pending      (producteur soumet)
-//   pending   → draft        (producteur retire pour corriger, tant que pending)
-//   pending   → validated    (admin valide)
-//   pending   → rejected     (admin refuse, rejection_reason obligatoire)
+//   draft             → pending           (producteur soumet)
+//   pending           → draft             (producteur retire, tant que pending)
+//   pending           → validated         (admin valide)
+//   pending           → changes_requested (admin renvoie pour correction, rejection_reason = feedback)
+//   changes_requested → pending           (producteur corrige et re-soumet ; éditable comme draft)
+//   pending           → rejected          (admin refuse, définitif, rejection_reason obligatoire)
 //   validated → suspended    (admin OU producteur masque)
 //   suspended → validated    (admin OU producteur réactive)
 //

@@ -13,10 +13,12 @@ import {
  * Schemas Offer · offres produit + workflow validation.
  *
  * Workflow status (cf. schema.prisma) :
- *   draft     → pending      (producteur soumet)
- *   pending   → draft        (producteur retire pour corriger, tant que pending)
- *   pending   → validated    (admin valide)
- *   pending   → rejected     (admin refuse, raison obligatoire)
+ *   draft              → pending           (producteur soumet)
+ *   pending            → draft             (producteur retire, tant que pending)
+ *   pending            → validated         (admin valide)
+ *   pending            → changes_requested (admin renvoie pour correction + message)
+ *   changes_requested  → pending           (producteur corrige et re-soumet)
+ *   pending            → rejected          (admin refuse, définitif, raison obligatoire)
  *   validated → suspended    (admin OU producteur masque)
  *   suspended → validated    (admin OU producteur réactive)
  *
@@ -183,6 +185,13 @@ export const OfferRejectInputSchema = z.object({
   reason: z.string().min(5).max(500),
 });
 export type OfferRejectInput = z.infer<typeof OfferRejectInputSchema>;
+
+// `request-changes` : renvoie l'offre au producteur pour correction. Explication
+// obligatoire (grand champ texte), réutilise rejectionReason côté DB.
+export const OfferRequestChangesInputSchema = z.object({
+  reason: z.string().min(5).max(1000),
+});
+export type OfferRequestChangesInput = z.infer<typeof OfferRequestChangesInputSchema>;
 
 // `suspend` : raison courte recommandée (admin OU producteur).
 export const OfferSuspendInputSchema = z.object({
