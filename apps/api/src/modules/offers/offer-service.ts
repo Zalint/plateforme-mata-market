@@ -76,12 +76,21 @@ export const offerService = {
     return toOfferOutput(row);
   },
 
-  async listAdmin(query: OfferAdminListQuery): Promise<OfferAdminListResponse> {
-    const where: Prisma.OfferWhereInput = {
+  /**
+   * Liste admin/modération. `scopeWhere` restreint le périmètre de modération
+   * (portée téléconseiller) ; vide `{}` = aucune restriction (admin). Cf.
+   * assignment-scope.scopeOfferWhereForModerator.
+   */
+  async listAdmin(
+    query: OfferAdminListQuery,
+    scopeWhere: Prisma.OfferWhereInput = {},
+  ): Promise<OfferAdminListResponse> {
+    const filters: Prisma.OfferWhereInput = {
       ...(query.status && { status: query.status }),
       ...(query.category && { categorySlug: query.category }),
       ...(query.q && { title: { contains: query.q, mode: 'insensitive' } }),
     };
+    const where: Prisma.OfferWhereInput = { AND: [filters, scopeWhere] };
     const skip = (query.page - 1) * query.limit;
     const [rows, total] = await Promise.all([
       prisma.offer.findMany({

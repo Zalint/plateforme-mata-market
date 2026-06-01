@@ -39,6 +39,7 @@ const ADMIN_NAV: NavItem[] = [
   { href: '/admin/pickups', label: 'Tournées', icon: 'truck' },
   { href: '/admin/payments', label: 'Paiements', icon: 'wallet' },
   { href: '/admin/teleconseil', label: 'Téléconseil', icon: 'headphones' },
+  { href: '/admin/assignments', label: 'Affectations', icon: 'route' },
   { href: '/admin/pricing', label: 'Pricing', icon: 'calculator' },
   { href: '/admin/categories', label: 'Catégories', icon: 'tag' },
   { href: '/admin/architecture', label: 'App archi', icon: 'scroll-text' },

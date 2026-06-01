@@ -50,16 +50,21 @@ export default function NewUserPage(): React.JSX.Element {
   const producerOk = role !== 'producer' || !!zoneId;
   const canSubmit = displayName.trim().length >= 2 && phoneValid && producerOk && !create.isPending;
 
-  async function handleSubmit(): Promise<void> {
+  function handleSubmit(): void {
     if (!canSubmit) return;
-    const res = await create.mutateAsync({
-      displayName: displayName.trim(),
-      phone,
-      role,
-      type: role === 'producer' ? type : undefined,
-      zoneId: role === 'producer' ? zoneId : undefined,
-    });
-    setResult(res);
+    // `mutate` (et non `mutateAsync`) : l'erreur est capturée par TanStack Query
+    // (create.isError / create.error) et affichée inline, sans rejection non
+    // gérée (qui produisait l'overlay « ApiError: 409 … » en dev).
+    create.mutate(
+      {
+        displayName: displayName.trim(),
+        phone,
+        role,
+        type: role === 'producer' ? type : undefined,
+        zoneId: role === 'producer' ? zoneId : undefined,
+      },
+      { onSuccess: (res) => setResult(res) },
+    );
   }
 
   function resetForm(): void {

@@ -378,6 +378,12 @@ model User {
   // Lot 9 — notation producteur (avis post-livraison)
   ratingsReceived ProducerRating[] @relation("producer_ratings")
   ratingsGiven    ProducerRating[] @relation("client_ratings")
+  // Affectations producteur ↔ téléconseiller (portée de modération)
+  assignmentsAsTeleconsultant TeleconsultantAssignment[] @relation("tc_assignments")
+  assignmentsAsProducer       TeleconsultantAssignment[] @relation("producer_assignments")
+  assignmentsMade             TeleconsultantAssignment[] @relation("assignment_assigned_by")
+  teleconsultantScope         TeleconsultantScope?       @relation("tc_scope")
+  teleconsultantScopesUpdated TeleconsultantScope[]      @relation("tc_scope_updated_by")
 
   @@index([role, status])
   @@map("users")
@@ -1159,6 +1165,50 @@ model TeleconsultSession {
   // Index : cleanup cron (sessions expirées à fermer).
   @@index([expiresAt, closedAt])
   @@map("teleconsult_sessions")
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Affectations producteur ↔ téléconseiller — PORTÉE DE MODÉRATION
+//
+// Un téléconseiller modère (valider / refuser / demander corrections / retirer /
+// restaurer / suspendre / réactiver) UNIQUEMENT les offres des producteurs qui
+// lui sont affectés. `TeleconsultantScope.allProducers = true` lui donne la
+// portée globale (comme un admin). Défaut (aucune affectation + allProducers
+// false) ⇒ il ne voit AUCUNE offre. M:N (un producteur peut être couvert par
+// plusieurs téléconseillers).
+//
+// N'affecte PAS la délégation : un producteur peut déléguer (code) à n'importe
+// quel téléconseiller, qui agit alors EN TANT QUE ce producteur (self-service),
+// indépendamment de ce mapping.
+// ─────────────────────────────────────────────────────────────────
+
+model TeleconsultantAssignment {
+  id                   String   @id @default(uuid()) @db.Uuid
+  teleconsultantUserId String   @map("teleconsultant_user_id") @db.Uuid
+  producerUserId       String   @map("producer_user_id") @db.Uuid
+  assignedByUserId     String   @map("assigned_by_user_id") @db.Uuid
+  assignedAt           DateTime @default(now()) @map("assigned_at")
+
+  teleconsultant User @relation("tc_assignments", fields: [teleconsultantUserId], references: [id], onDelete: Cascade)
+  producer       User @relation("producer_assignments", fields: [producerUserId], references: [id], onDelete: Cascade)
+  assignedBy     User @relation("assignment_assigned_by", fields: [assignedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([teleconsultantUserId, producerUserId])
+  @@index([teleconsultantUserId])
+  @@index([producerUserId])
+  @@map("teleconsultant_assignments")
+}
+
+model TeleconsultantScope {
+  teleconsultantUserId String   @id @map("teleconsultant_user_id") @db.Uuid
+  allProducers         Boolean  @default(false) @map("all_producers")
+  updatedByUserId      String?  @map("updated_by_user_id") @db.Uuid
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  teleconsultant User  @relation("tc_scope", fields: [teleconsultantUserId], references: [id], onDelete: Cascade)
+  updatedBy      User? @relation("tc_scope_updated_by", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@map("teleconsultant_scope")
 }
 
 // ─────────────────────────────────────────────────────────────────

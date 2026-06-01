@@ -209,6 +209,77 @@ exacts où ces dettes sont marquées en commentaire inline.
 
 # Résolues
 
+## [users] Orphelins Keycloak + message de conflit lisible — résolue 2026-06-01
+
+Créer un compte (admin → utilisateur) avec un téléphone déjà provisionné renvoyait
+un `409` brut (« ApiError: 409 POST /v1/admin/users ») au lieu d'un message clair,
+et un **reseed** (qui vide la base applicative mais PAS Keycloak) laissait des
+comptes KC **orphelins** (sans ligne `users`) qui bloquaient toute recréation par
+téléphone.
+
+**Correctifs :**
+1. **Anti-orphelin (cause racine)** : `keycloakAdmin.createUser` ADOPTE désormais un
+   compte KC existant sur `409` (reset mdp + réactivation + ré-assignation rôle) au
+   lieu d'échouer. Les deux appelants (`user-service`, `producer-service`) vérifient
+   la DB en amont → un 409 KC = forcément un orphelin → réutilisé. Idempotent : un
+   reseed ne bloque plus rien, l'orphelin est ré-absorbé. Pas de suppression d'un
+   compte adopté (rollback delete uniquement si on vient de créer).
+   Test unitaire `keycloak-admin.test.ts` (httpFetch + env mockés) : 201 → création,
+   409 → adoption (reset mdp, pas de delete).
+2. **Message lisible** : `ApiError.message` (http-client) reprend le message métier
+   de l'API (`body.message`) au lieu du libellé technique « 409 POST … » → bénéficie
+   à TOUT le frontend. Messages backend unifiés et sans jargon : « Ce numéro de
+   téléphone est déjà utilisé par un compte. »
+3. **Plus d'overlay** : page `users/new` passe de `mutateAsync` à `mutate` + `onSuccess`
+   → l'erreur est captée par TanStack (affichée inline), sans rejection non gérée.
+
+- **Fichiers** : keycloak-admin.ts (+ test), http-client.ts, user-service.ts,
+  admin/users/new/page.tsx.
+4. **Purge au reseed (cause amont)** : `dev-seed.ts` supprime en fin de seed les
+   comptes Keycloak orphelins — username = téléphone (`+221…`, provisionnés via le
+   flux admin/staff) absents de la base. Ne touche jamais aux users du realm-export
+   (`mor.diop`…) ni aux service-accounts. Best-effort (KC absent/erreur → skip, le
+   seed ne casse pas). → les orphelins ne s'accumulent plus.
+
+- **Fichiers** : keycloak-admin.ts (+ test), http-client.ts, user-service.ts,
+  admin/users/new/page.tsx, prisma/seeds/dev-seed.ts.
+- **Validation** : typecheck + biome (304) ; unit keycloak-admin 2/2 ; intégration
+  user-create 4/4 ; démo live (adoption de `+221773929671` → compte recréé). La purge
+  au reseed se vérifie au prochain `pnpm dev:up:reseed`.
+
+## [assignments] Portée de modération producteur ↔ téléconseiller — résolue 2026-06-01
+
+Permettre d'affecter des producteurs à un téléconseiller pour borner sa **modération**
+(à 100 producteurs, répartir entre téléconseillers).
+
+**Modèle retenu** (après itération avec Saliou) : le mapping borde la MODÉRATION,
+PAS la délégation.
+- Modération (`valider/refuser/demander corrections/retirer/restaurer/suspendre/réactiver`)
+  → un téléconseiller agit comme l'admin **mais uniquement sur ses producteurs affectés**.
+  3 états : `allProducers=true` → tout ; sous-ensemble coché → ceux-là ; rien (défaut) → AUCUNE offre.
+  La file `/admin/offers` est filtrée ; une action hors périmètre → 403 « …pas affecté ».
+- Délégation (assister via code) → **ouverte** : n'importe quel producteur délègue à
+  n'importe quel téléconseiller (inchangé). Producteur self-service (submit/withdraw/archive)
+  intact.
+
+**Backend (Lot 1)** : tables `teleconsultant_assignments` (M:N) + `teleconsultant_scope`
+(`all_producers`), migration `20260601141644_teleconsultant_assignments` ; module
+`assignments` (service + audit `teleconsultant.assignment.set` + helpers
+`assertModeratorForProducer` / `scopeOfferWhereForModerator`) ; câblage offer-routes
+(file + 7 actions) ; routes admin `GET /v1/assignments/context`,
+`GET`/`PUT /v1/assignments/:teleconsultantUserId` ; seed Ibrahima `allProducers=true`
+(préserve le dev). Tests : `moderation-scope.integration.test.ts` (6) + maj
+`offer-routes-auth` (portée globale).
+
+**Frontend (Lot 2)** : écran admin **« Affectations »** (`/admin/assignments`, lien sidebar) —
+sélection d'un téléconseiller, toggle « Tous les producteurs » ou checklist (recherche +
+filtre zone + overlap M:N « aussi : … »), avertissement « aucun = ne voit rien ».
+Hooks `useAssignmentContext` / `useUpdateAssignmentScope`. Démo Puppeteer : round-trip
+PUT OK (« Modère : 1 producteur »).
+
+**Validation** : typecheck (api+web+shared) + biome (303 fichiers) verts ; intégration
+offres+orders+assignments 31/31.
+
 ## [offers] Statut `withdrawn` (retrait MATA) + déclencheur `sold` + suspend admin — résolue 2026-06-01
 
 Trois manques du cycle de vie d'offre comblés :

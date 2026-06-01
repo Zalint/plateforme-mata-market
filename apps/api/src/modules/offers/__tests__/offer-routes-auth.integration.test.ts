@@ -113,6 +113,12 @@ beforeAll(async () => {
       zoneId: zone.id,
     },
   });
+  // Portée GLOBALE pour ce téléconseiller (allProducers) → il modère comme un
+  // admin. La portée de modération elle-même est testée dans
+  // assignments/__tests__/moderation-scope.integration.test.ts.
+  await prisma.teleconsultantScope.create({
+    data: { teleconsultantUserId: teleconsultant.id, allProducers: true },
+  });
 });
 
 beforeEach(async () => {
@@ -121,6 +127,9 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await prisma.offer.deleteMany({ where: { siteId: site.id } });
+  await prisma.teleconsultantScope.deleteMany({
+    where: { teleconsultantUserId: teleconsultant.id },
+  });
   await prisma.auditLog.deleteMany({
     where: { actorUserId: { in: [producer.id, teleconsultant.id, client.id] } },
   });
@@ -134,7 +143,7 @@ afterAll(async () => {
 });
 
 describe('POST /v1/offers/:id/suspend|reactivate · gardes de rôle', () => {
-  it('téléconseiller (hors session) suspend puis réactive — comme l’admin', async () => {
+  it('téléconseiller à portée globale suspend puis réactive (hors session)', async () => {
     const app = await buildApp();
     const offerId = await createValidatedOffer();
 

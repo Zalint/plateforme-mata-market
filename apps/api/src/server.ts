@@ -13,6 +13,7 @@ import {
 import { env } from './env.js';
 import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
+import { assignmentRoutes } from './modules/assignments/index.js';
 import { authPlugin, createKeycloakVerifier } from './modules/auth/index.js';
 import { catalogRoutes } from './modules/catalog/index.js';
 import { categoryRoutes } from './modules/categories/index.js';
@@ -117,6 +118,7 @@ async function buildServer(): Promise<void> {
   await app.register(producerRoutes);
   await app.register(siteRoutes);
   await app.register(offerRoutes);
+  await app.register(assignmentRoutes); // affectations producteur ↔ téléconseiller (portée modération)
   await app.register(catalogRoutes);
   await app.register(pricingRoutes);
   await app.register(orderRoutes);

@@ -317,6 +317,20 @@ async function main(): Promise<void> {
     log(`user      ${saved.role.padEnd(15)} ${saved.displayName.padEnd(20)} kc=${kcShort}`);
   }
 
+  // 1b. Portée de modération du téléconseiller seedé : `allProducers = true`
+  // (préserve le comportement dev « voit toutes les offres »). Sans cette ligne,
+  // le nouveau défaut (aucune affectation = aucune offre) viderait sa file de
+  // validation tant que l'admin ne l'a pas configuré via l'écran « Affectations ».
+  const ibrahimaUserId = userIdBySlug.get('ibrahima-ndiaye');
+  if (ibrahimaUserId) {
+    await prisma.teleconsultantScope.upsert({
+      where: { teleconsultantUserId: ibrahimaUserId },
+      update: { allProducers: true },
+      create: { teleconsultantUserId: ibrahimaUserId, allProducers: true },
+    });
+    log('scope     teleconsultant  Ibrahima Ndiaye      allProducers=true');
+  }
+
   // 2. Zones
   const zoneIdBySlug = new Map<string, string>();
   for (const zone of ZONES) {
@@ -791,6 +805,78 @@ async function main(): Promise<void> {
     });
   }
   log(`orders    3 commandes livrées + 3 avis (Mor 5★+4★ → 4.5 · Awa 5★ → 5.0)`);
+
+  // Purge des orphelins Keycloak (cf. fonction) : le wipe de la base applicative
+  // ne touche pas Keycloak → des comptes provisionnés par téléphone (+221…)
+  // s'y accumulent sans ligne `users`. On les supprime pour ne pas bloquer les
+  // recréations futures. Best-effort (jamais bloquant pour le seed).
+  const dbUsernames = new Set(
+    (await prisma.user.findMany({ select: { username: true } }))
+      .map((u) => u.username)
+      .filter((u): u is string => u !== null),
+  );
+  await purgeKeycloakOrphans(dbUsernames);
+}
+
+/**
+ * Supprime les comptes Keycloak « orphelins » : username = téléphone (`+221…`,
+ * donc provisionnés via le flux admin/staff) ET absents de la base applicative
+ * après reseed. Ne touche JAMAIS aux users du realm-export (usernames type
+ * `mor.diop`) ni aux service-accounts. Lit la config depuis `process.env` ;
+ * tout est best-effort (KC absent / erreur → log + skip, le seed ne casse pas).
+ */
+async function purgeKeycloakOrphans(keepUsernames: Set<string>): Promise<void> {
+  const baseUrl = process.env.KEYCLOAK_URL?.replace(/\/$/, '');
+  const realm = process.env.KEYCLOAK_REALM;
+  const clientId = process.env.KEYCLOAK_ADMIN_CLIENT_ID;
+  const clientSecret = process.env.KEYCLOAK_ADMIN_CLIENT_SECRET;
+  if (!baseUrl || !realm || !clientId || !clientSecret) {
+    log('keycloak  purge orphelins ignorée (config admin absente)');
+    return;
+  }
+  try {
+    const tokenRes = await fetch(`${baseUrl}/realms/${realm}/protocol/openid-connect/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+    });
+    if (!tokenRes.ok) {
+      log(`keycloak  purge orphelins ignorée (token HTTP ${tokenRes.status})`);
+      return;
+    }
+    const token = ((await tokenRes.json()) as { access_token?: string }).access_token;
+    if (!token) {
+      log('keycloak  purge orphelins ignorée (token absent)');
+      return;
+    }
+    const auth = { authorization: `Bearer ${token}` };
+    const listRes = await fetch(`${baseUrl}/admin/realms/${realm}/users?max=1000`, {
+      headers: auth,
+    });
+    if (!listRes.ok) {
+      log(`keycloak  purge orphelins ignorée (list HTTP ${listRes.status})`);
+      return;
+    }
+    const kcUsers = (await listRes.json()) as { id: string; username?: string }[];
+    let purged = 0;
+    for (const u of kcUsers) {
+      const username = u.username ?? '';
+      if (!username.startsWith('+')) continue; // jamais les users realm-export / service-accounts
+      if (keepUsernames.has(username)) continue; // a une ligne DB → légitime
+      const del = await fetch(`${baseUrl}/admin/realms/${realm}/users/${u.id}`, {
+        method: 'DELETE',
+        headers: auth,
+      });
+      if (del.ok || del.status === 404) purged += 1;
+    }
+    log(`keycloak  ${purged} orphelin(s) supprimé(s) (comptes téléphone sans ligne DB)`);
+  } catch (err) {
+    log(`keycloak  purge orphelins ignorée (${err instanceof Error ? err.message : 'erreur'})`);
+  }
 }
 
 function log(line: string): void {

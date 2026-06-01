@@ -23,6 +23,8 @@ export type AuditAction =
   // Catégories produit (taxonomie data-driven)
   | 'category.create'
   | 'category.update'
+  // Affectations producteur ↔ téléconseiller (portée de modération)
+  | 'teleconsultant.assignment.set'
   // Offres
   | 'offer.create'
   | 'offer.update'
