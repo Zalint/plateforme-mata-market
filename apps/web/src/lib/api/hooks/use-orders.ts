@@ -146,6 +146,18 @@ export function useReleaseOrder() {
   });
 }
 
+/** Lot E : trace que le client a été contacté (appel / WhatsApp). */
+export function useMarkOrderNotified() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<OrderOutput>(`/v1/orders/${id}/notify`, {}, token),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}
+
 /** Lot D : le téléconseiller ajuste le total de la commande (motif obligatoire). */
 export function useAdjustOrderPrice() {
   const token = useAuthToken();

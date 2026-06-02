@@ -115,22 +115,27 @@ describe('ORDER_TRANSITIONS · matrice state machine', () => {
     expect(ORDER_TRANSITIONS.cancelled).toEqual([]);
   });
 
-  it('cycle nominal complet : created → confirmed → ... → delivered', () => {
+  // Cycle simplifié à 4 états (pivot téléconseiller, Lot 0) : les tournées
+  // sont découplées du statut commande. collecting/collected/stored sont
+  // orphelins (conservés dans l'enum Postgres mais sans transition).
+  it('cycle nominal complet : created → confirmed → delivering → delivered', () => {
     expect(isValidOrderTransition('created', 'confirmed')).toBe(true);
-    expect(isValidOrderTransition('confirmed', 'collecting')).toBe(true);
-    expect(isValidOrderTransition('collecting', 'collected')).toBe(true);
-    expect(isValidOrderTransition('collected', 'stored')).toBe(true);
-    expect(isValidOrderTransition('stored', 'delivering')).toBe(true);
+    expect(isValidOrderTransition('confirmed', 'delivering')).toBe(true);
     expect(isValidOrderTransition('delivering', 'delivered')).toBe(true);
   });
 
-  it('cancel possible depuis created et confirmed seulement', () => {
+  it('statuts orphelins (collecting/collected/stored) sans transition sortante', () => {
+    expect(ORDER_TRANSITIONS.collecting).toEqual([]);
+    expect(ORDER_TRANSITIONS.collected).toEqual([]);
+    expect(ORDER_TRANSITIONS.stored).toEqual([]);
+  });
+
+  it('cancel possible jusqu’en livraison (created, confirmed, delivering)', () => {
     expect(isValidOrderTransition('created', 'cancelled')).toBe(true);
     expect(isValidOrderTransition('confirmed', 'cancelled')).toBe(true);
-    expect(isValidOrderTransition('collecting', 'cancelled')).toBe(false);
-    expect(isValidOrderTransition('collected', 'cancelled')).toBe(false);
-    expect(isValidOrderTransition('stored', 'cancelled')).toBe(false);
-    expect(isValidOrderTransition('delivering', 'cancelled')).toBe(false);
+    expect(isValidOrderTransition('delivering', 'cancelled')).toBe(true);
+    // Plus possible une fois livré.
+    expect(isValidOrderTransition('delivered', 'cancelled')).toBe(false);
   });
 
   it('aucune transition vers un statut antérieur (pas de retour arrière)', () => {

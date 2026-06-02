@@ -15,7 +15,7 @@ type OrderItemLoaded = OrderItem & {
 };
 
 export type OrderLoaded = Order & {
-  client: Pick<User, 'displayName'> | null;
+  client: Pick<User, 'displayName' | 'phone'> | null;
   assignedTeleconsultant: Pick<User, 'displayName'> | null;
   zone: Pick<Zone, 'name'>;
   items: OrderItemLoaded[];
@@ -26,9 +26,13 @@ function toIsoDate(d: Date): string {
 }
 
 // `showProducer` (défaut true = staff/producteur) : masque l'identité producteur
-// des items pour le client propriétaire (pivot : le client ne voit pas le
-// producteur). Les méthodes client du service passent `false`.
-export function toOrderOutput(o: OrderLoaded, showProducer = true): OrderOutput {
+// des items pour le client propriétaire (pivot). `showContact` (défaut false) :
+// expose le téléphone du client UNIQUEMENT au staff (pour appeler/WhatsApp, Lot E).
+export function toOrderOutput(
+  o: OrderLoaded,
+  showProducer = true,
+  showContact = false,
+): OrderOutput {
   return {
     id: o.id,
     orderNumber: o.orderNumber,
@@ -52,6 +56,8 @@ export function toOrderOutput(o: OrderLoaded, showProducer = true): OrderOutput 
     adjustedTotalFcfa: o.adjustedTotalFcfa,
     priceAdjustmentReason: o.priceAdjustmentReason,
     priceAdjustedAt: o.priceAdjustedAt?.toISOString() ?? null,
+    clientPhone: showContact ? (o.client?.phone ?? o.guestPhoneNumber) : null,
+    clientNotifiedAt: o.clientNotifiedAt?.toISOString() ?? null,
     confirmedAt: o.confirmedAt?.toISOString() ?? null,
     collectedAt: o.collectedAt?.toISOString() ?? null,
     storedAt: o.storedAt?.toISOString() ?? null,
@@ -85,7 +91,7 @@ function toOrderItemOutput(i: OrderItemLoaded, showProducer: boolean): OrderItem
  * mais on n'a besoin que de displayName, donc on sélectionne.
  */
 export const orderInclude = {
-  client: { select: { displayName: true } },
+  client: { select: { displayName: true, phone: true } },
   assignedTeleconsultant: { select: { displayName: true } },
   zone: { select: { name: true } },
   items: {

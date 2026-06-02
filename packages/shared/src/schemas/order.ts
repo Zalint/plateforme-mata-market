@@ -186,6 +186,11 @@ export const OrderOutputSchema = z.object({
   priceAdjustmentReason: z.string().nullable(),
   priceAdjustedAt: IsoDateTimeSchema.nullable(),
 
+  // Lot E — contact client pour le téléconseiller (téléphone visible STAFF
+  // uniquement, sinon null) + trace de notification.
+  clientPhone: z.string().nullable(),
+  clientNotifiedAt: IsoDateTimeSchema.nullable(),
+
   // Timestamps des transitions importantes
   confirmedAt: IsoDateTimeSchema.nullable(),
   collectedAt: IsoDateTimeSchema.nullable(),

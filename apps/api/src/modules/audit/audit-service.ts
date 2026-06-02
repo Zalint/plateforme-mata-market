@@ -53,6 +53,7 @@ export type AuditAction =
   | 'order.assign'
   | 'order.unassign'
   | 'order.price_adjust'
+  | 'order.notify_client'
   | 'order.idempotent_replay'
   // Paiements
   | 'payment.intent_created'

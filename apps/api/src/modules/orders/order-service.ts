@@ -466,13 +466,17 @@ async function cancelOrderInternal(args: CancelArgs): Promise<OrderOutput> {
 // ─────────────────────────────────────────────────────────────────
 // Lectures
 
-async function getByIdInternal(orderId: string, showProducer = true): Promise<OrderOutput> {
+async function getByIdInternal(
+  orderId: string,
+  showProducer = true,
+  showContact = false,
+): Promise<OrderOutput> {
   const row = await prisma.order.findUnique({
     where: { id: orderId },
     include: orderInclude,
   });
   if (!row) throw new DomainError('NOT_FOUND', 'Commande introuvable');
-  return toOrderOutput(row as OrderLoaded, showProducer);
+  return toOrderOutput(row as OrderLoaded, showProducer, showContact);
 }
 
 async function listMineInternal(clientUserId: string): Promise<OrderOutput[]> {
@@ -507,7 +511,8 @@ async function listAdminInternal(query: OrderAdminListQuery): Promise<OrderOutpu
     orderBy: { createdAt: 'desc' },
     take: 200, // borne MVP, pagination Lot 9
   });
-  return rows.map((r) => toOrderOutput(r as OrderLoaded));
+  // Vue staff : producteur + contact client visibles.
+  return rows.map((r) => toOrderOutput(r as OrderLoaded, true, true));
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -675,6 +680,33 @@ async function adjustPriceInternal(args: {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Notification client (Lot E) : trace « client notifié » (le téléconseiller a
+// appelé / WhatsApp le client — la notification elle-même est hors-app).
+
+async function markNotifiedInternal(args: {
+  actorUserId: string;
+  orderId: string;
+  request?: FastifyRequest;
+}): Promise<OrderOutput> {
+  const { actorUserId, orderId, request } = args;
+  const exists = await prisma.order.findUnique({ where: { id: orderId }, select: { id: true } });
+  if (!exists) throw new DomainError('NOT_FOUND', 'Commande introuvable');
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: { clientNotifiedAt: new Date() },
+    include: orderInclude,
+  });
+  await auditService.log({
+    actorUserId,
+    action: 'order.notify_client',
+    targetType: 'order',
+    targetId: orderId,
+    request,
+  });
+  return toOrderOutput(updated as OrderLoaded, true, true);
+}
+
+// ─────────────────────────────────────────────────────────────────
 // Service exporté
 
 export const orderService = {
@@ -685,6 +717,7 @@ export const orderService = {
   claim: claimOrderInternal,
   release: releaseOrderInternal,
   adjustPrice: adjustPriceInternal,
+  markNotified: markNotifiedInternal,
   getById: getByIdInternal,
   listMine: listMineInternal,
   listReceived: listReceivedInternal,

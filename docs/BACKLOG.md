@@ -29,6 +29,27 @@ exacts où ces dettes sont marquées en commentaire inline.
 
 # En cours
 
+## [pivot-tc→lot-?] Ajustement de prix : part producteur non recalculée
+
+- **Découvert** : pivot téléconseiller, Lot D (`POST /v1/orders/:id/adjust-price`, commit 716fe9a).
+- **Cible** : ultérieur — quand le reversement devra refléter un prix renégocié.
+- **Pourquoi reporté** : l'ajustement de prix (Lot D) ne touche QUE le total client
+  (`adjustedTotalFcfa`), pas les `pricing_snapshots` (immuables, §G4). La part producteur
+  (`producerShare`) et la commission MATA restent calculées sur les snapshots d'origine.
+  Donc si le téléconseiller renégocie le prix à la hausse/baisse avec le producteur, le
+  **reversement** producteur ne bouge pas — seul le client paie le nouveau total. Recalculer
+  proprement la répartition (nouvelle part producteur + commission) sans casser l'immuabilité
+  des snapshots demande un modèle d'« avenant de pricing » non spécifié au MVP.
+- **Fichiers** : apps/api/src/modules/orders/order-service.ts (`adjustPriceInternal`),
+  payment-service.ts (`effectiveTotalFcfa = adjustedTotalFcfa ?? totalFcfa` côté encaissement),
+  payouts (calcul sur snapshots inchangé).
+- **Garde-fou actuel** : l'ajustement est refusé après paiement (`paymentStatus='paid'` → 409),
+  donc pas d'incohérence sur une commande déjà encaissée. Le cas couvert au MVP = renégociation
+  AVANT paiement, où seul le total client importe (paiement à la livraison ou en ligne).
+- **Risque si non traité** : si MATA veut répercuter une renégociation sur la part producteur,
+  il faudra le faire à la main (ou via un avenant). Pas bloquant tant que l'ajustement sert à
+  corriger le prix CLIENT (cas d'usage validé : « le producteur a annoncé un nouveau prix »).
+
 ## [lotcat→lotcat+1] Catégories produit data-driven — Lot 2 (frontend) + Lot 3 (cleanup)
 
 - **Découvert** : lotcat (passage de l'enum `ProductCategory` à une table `product_categories` gérée par l'admin).
@@ -84,25 +105,6 @@ exacts où ces dettes sont marquées en commentaire inline.
 - **Découvert** : Lot 9.
 - **Pourquoi reporté** : décision "on laisse tel quel". Les deux rôles ont aujourd'hui exactement les mêmes droits/parcours/pricing ; le rôle distinct est un marqueur de segmentation.
 - **Risque si non traité** : aucun. Évolution future possible : pricing pro / facturation (TVA, NINEA) / conditions de paiement.
-
-## [lot-9→lot-?] Une commande répartie sur plusieurs tournées créées séparément
-
-- **Découvert** : Lot 9 (couplage commande ↔ tournée, Option 1)
-- **Cible** : ultérieur — si on observe des commandes multi-zones/multi-producteurs
-- **Pourquoi reporté** : décision validée « la commande passe `collecting` dès la
-  création d'une tournée ». Conséquence : `createPickup` exige `order.status =
-  confirmed`, donc une fois la 1re tournée créée (commande → `collecting`), on ne
-  peut plus rattacher d'AUTRES items de la même commande à une 2e tournée créée
-  plus tard. OK tant qu'une commande tient dans une seule tournée.
-- **Fichiers** : apps/api/src/modules/pickups/pickup-service.ts (garde
-  `order.status !== 'confirmed'` dans `createPickup`).
-- **Garde-fou actuel** : la transition `collecting → collected` ne se déclenche
-  que lorsque TOUS les items de la commande sont collectés (déjà géré) — donc le
-  modèle reste cohérent pour les commandes mono-tournée.
-- **Risque si non traité** : impossible de scinder la collecte d'une commande
-  entre deux tournées planifiées à des moments différents. Levée possible :
-  élargir l'éligibilité à `confirmed | collecting` (le check « tous collectés »
-  et le revert d'annulation gèrent déjà le multi-tournée).
 
 ## [lot-2→lot-?] Édition champs cosmétiques d'une offre validée
 
@@ -208,6 +210,67 @@ exacts où ces dettes sont marquées en commentaire inline.
 ---
 
 # Résolues
+
+## [pivot-tc] Pivot téléconseiller : cycle 4 états + producteur masqué + self-assignation + paiement déféré + ajustement prix + notif — résolue 2026-06-02
+
+Refonte du flux commande autour du téléconseiller (TC), en 6 lots livrés et poussés
+sur `development` :
+
+- **Lot 0 — cycle 4 états** (commit a7f93a6) : `ORDER_TRANSITIONS` simplifié à
+  `created → confirmed → delivering → delivered` (+ `cancelled` jusqu'en livraison).
+  Les tournées (`pickups`) sont **découplées** du statut commande (plus aucune
+  transition `collecting/collected/stored` pilotée par `pickup-service`). Les 3
+  valeurs d'enum orphelines sont conservées en base (pas de migration destructive,
+  §G4/§D10) ; nettoyage enum possible ultérieurement.
+- **Lot A — producteur masqué** (commit b75f61d) : le client (pro/particulier) ne
+  voit JAMAIS l'identité producteur. Masquage **côté serveur par rôle** (`showProducer`
+  dans catalog + orders mappers ; `canSeeProducer`/`showProducerFor` = staff + producteur
+  uniquement). Le client note désormais **la commande** (note interne répartie sur chaque
+  producteur, commit a47ed58) sans choisir ni voir le producteur.
+- **Lot B — self-assignation** (commit 4b50e6e) : une commande est visible par TOUS les
+  TC ; chacun se l'assigne (`claim`, compare-and-swap) / la relâche (`release`, assigné ou
+  admin). Migration `order_self_assignment` (assignedTeleconsultantUserId + assignedAt).
+  Audit `order.assign`/`order.unassign`.
+- **Lot C — confirmation TC + paiement déféré** (commit 7f0e1d8) : garde-fou confirmation
+  (un TC ne confirme pas une commande assignée à un AUTRE TC) ; **paiement après confirmation
+  OU à la livraison** (gate `delivering` si `online` non payé). Le webhook Bictorys branche
+  invité (created→confirm) vs authentifié (confirmed→paid only).
+- **Lot D — ajustement de prix audité** (commit 716fe9a) : le TC ajuste le total client
+  (`adjustedTotalFcfa` + motif), **snapshots et total d'origine préservés** (immuables).
+  Refusé après paiement. Audit `order.price_adjust`. Limite connue (part producteur non
+  recalculée) suivie dans l'entrée active `[pivot-tc→lot-?]`.
+- **Lot E — notification client simple** (ce commit) : trace « client contacté »
+  (`clientNotifiedAt` + audit `order.notify_client`) ; le staff voit le téléphone client
+  (`showContact`, masqué au reste) ; UI admin avec liens **WhatsApp** (`wa.me`) + **Appeler**
+  (`tel:`) qui marquent la commande notifiée. Solution volontairement simple (pas d'envoi
+  automatisé) conforme à la demande « une solution simple au début ».
+
+**Validation finale** : typecheck (api+web+shared) + biome OK ; unit shared 73/73 + api
+90/90 ; **intégration 21 fichiers / 155 tests verts** (testcontainers). Note : 2 tests unit
+`order.test.ts` (ORDER_TRANSITIONS) hérités de l'ancien cycle ont été corrigés au cycle 4
+états (cf. entrée déc. ci-dessous).
+
+## [tech] Tests unit ORDER_TRANSITIONS hérités de l'ancien cycle — résolue 2026-06-02
+
+Découvert en lançant la suite unit `@mata/shared` pendant le Lot E : deux tests de
+`packages/shared/src/schemas/order.test.ts` (« cycle nominal complet » et « cancel
+possible depuis created et confirmed seulement ») asseyaient encore l'ANCIEN cycle
+(`created → confirmed → collecting → collected → stored → delivering → delivered`) — Lot 0
+l'avait réduit à 4 états sans mettre à jour cette suite unit (seules les intégrations
+l'avaient été). Corrigés au cycle réel : cycle nominal `created → confirmed → delivering →
+delivered`, nouveau test « statuts orphelins sans transition sortante », et « cancel possible
+jusqu'en livraison (created, confirmed, delivering) ». Aucun test supprimé/skippé (§D5/§G6).
+
+## [pivot-tc] Commande multi-tournées débloquée par le découplage — résolue 2026-06-02
+
+L'entrée active `[lot-9→lot-?] Une commande répartie sur plusieurs tournées` est levée
+par le **découplage** du Lot 0. Avant : `createPickup` faisait passer la commande en
+`collecting`, donc une 2e tournée pour d'autres items de la même commande était refusée
+(statut ≠ `confirmed`). Après Lot 0, `pickup-service` ne transitionne plus la commande :
+elle **reste `confirmed`** tant que le TC/admin ne la passe pas en `delivering`. Plusieurs
+tournées peuvent donc collecter les items d'une même commande sans blocage de statut.
+`createPickup` exige toujours `order.status === 'confirmed'` par item (garde-fou stock
+réservé), mais ce n'est plus exclusif. Fichier : apps/api/src/modules/pickups/pickup-service.ts:81.
 
 ## [users] Orphelins Keycloak + message de conflit lisible — résolue 2026-06-01
 

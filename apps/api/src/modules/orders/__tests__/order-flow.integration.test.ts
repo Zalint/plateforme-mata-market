@@ -709,3 +709,42 @@ describe('Order flow · ajustement de prix (Lot D)', () => {
     ).rejects.toMatchObject({ code: 'CONFLICT' });
   });
 });
+
+describe('Order flow · notification client (Lot E)', () => {
+  it('téléphone client masqué au client, visible au staff ; markNotified trace + audit', async () => {
+    offer = await createOffer({ qty: 100, price: 3000 });
+    const order = await orderService.create({
+      clientUserId: client.id,
+      input: {
+        items: [{ offerId: offer.id, quantity: 2 }],
+        delivery: {
+          zoneId: zone.id,
+          addressLine: 'Almadies',
+          slotDate: '2026-06-15',
+          slotPeriod: 'morning',
+        },
+      },
+    });
+
+    // Vue client (showContact=false) : pas de téléphone, pas encore notifié.
+    const clientView = await orderService.getById(order.id, false, false);
+    expect(clientView.clientPhone).toBeNull();
+    expect(clientView.clientNotifiedAt).toBeNull();
+
+    // Vue staff (listAdmin → showContact=true) : téléphone visible.
+    const adminList = await orderService.listAdmin({});
+    const staffRow = adminList.find((o) => o.id === order.id);
+    expect(staffRow?.clientPhone).toBe(client.phone);
+
+    // markNotified : trace l'horodatage + audit.
+    const notified = await orderService.markNotified({ actorUserId: admin.id, orderId: order.id });
+    expect(notified.clientNotifiedAt).not.toBeNull();
+    expect(notified.clientPhone).toBe(client.phone);
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: 'order.notify_client', targetId: order.id },
+    });
+    expect(audit).not.toBeNull();
+    expect(audit?.actorUserId).toBe(admin.id);
+  });
+});

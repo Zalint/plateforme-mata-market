@@ -22,6 +22,7 @@ import {
   useAdminOrders,
   useCancelOrder,
   useClaimOrder,
+  useMarkOrderNotified,
   useMe,
   useReleaseOrder,
   useTransitionOrderStatus,
@@ -58,6 +59,7 @@ export default function AdminOrdersPage(): React.JSX.Element {
   const claim = useClaimOrder();
   const release = useReleaseOrder();
   const adjust = useAdjustOrderPrice();
+  const notify = useMarkOrderNotified();
   const { data: me } = useMe();
   const prompt = usePrompt();
   const toast = useToast();
@@ -224,6 +226,35 @@ export default function AdminOrdersPage(): React.JSX.Element {
                   </button>
                 )}
               </div>
+
+              {/* Contact client (Lot E) — WhatsApp / Appel, ouvre l'app du téléconseiller */}
+              {o.clientPhone && (
+                <div className="mt-2 flex items-center gap-2 flex-wrap text-xs">
+                  <a
+                    href={`https://wa.me/${o.clientPhone.replace(/\D/g, '')}?text=${encodeURIComponent(
+                      `Bonjour, c'est MATA au sujet de votre commande ${o.orderNumber}.`,
+                    )}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => notify.mutate(o.id)}
+                    className="px-3 py-1.5 rounded-lg border border-stone-200 text-stone-700 font-semibold hover:bg-stone-50 flex items-center gap-1"
+                  >
+                    <Icon name="phone-call" className="w-3 h-3" /> WhatsApp
+                  </a>
+                  <a
+                    href={`tel:${o.clientPhone}`}
+                    onClick={() => notify.mutate(o.id)}
+                    className="px-3 py-1.5 rounded-lg border border-stone-200 text-stone-700 font-semibold hover:bg-stone-50 flex items-center gap-1"
+                  >
+                    <Icon name="phone-call" className="w-3 h-3" /> Appeler
+                  </a>
+                  {o.clientNotifiedAt && (
+                    <span className="text-mata-700 font-semibold">
+                      Notifié le {new Date(o.clientNotifiedAt).toLocaleDateString('fr-FR')}
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Actions */}
               {(nextStates.length > 0 || canCancel) && (

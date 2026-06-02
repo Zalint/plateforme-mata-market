@@ -835,6 +835,10 @@ model Order {
   priceAdjustmentReason String?   @map("price_adjustment_reason")
   priceAdjustedAt       DateTime? @map("price_adjusted_at")
 
+  // Lot E (pivot) — trace « client notifié » (le téléconseiller a appelé /
+  // WhatsApp le client pour confirmer/reconfirmer). Notification hors-app.
+  clientNotifiedAt DateTime? @map("client_notified_at")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

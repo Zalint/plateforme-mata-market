@@ -35,6 +35,11 @@ function showProducerFor(role: string | undefined): boolean {
   return role !== 'client_pro' && role !== 'client_particulier';
 }
 
+// Staff MATA : voit le contact client (téléphone) pour appeler/WhatsApp (Lot E).
+function isStaffRole(role: string | undefined): boolean {
+  return role === 'admin' || role === 'super_admin' || role === 'teleconsultant';
+}
+
 export async function orderRoutes(app: FastifyInstance): Promise<void> {
   const typed = app.withTypeProvider<ZodTypeProvider>();
 
@@ -134,7 +139,11 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req) => {
       const user = requireUser(req);
-      const order = await orderService.getById(req.params.id, showProducerFor(user.role));
+      const order = await orderService.getById(
+        req.params.id,
+        showProducerFor(user.role),
+        isStaffRole(user.role),
+      );
 
       // Permission compound : admin/staff, owner client, ou producteur d'un item.
       if (user.role === 'admin' || user.role === 'super_admin' || user.role === 'teleconsultant') {
@@ -291,6 +300,21 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
         actorUserId: user.id,
         orderId: req.params.id,
         input: req.body,
+        request: req,
+      });
+    },
+  );
+
+  // POST /v1/orders/:id/notify · trace que le client a été contacté (Lot E).
+  typed.post(
+    '/v1/orders/:id/notify',
+    { schema: { params: OrderIdParamSchema, response: { 200: OrderOutputSchema } } },
+    async (req) => {
+      requireRole(req, 'teleconsultant', 'admin');
+      const user = requireUser(req);
+      return orderService.markNotified({
+        actorUserId: user.id,
+        orderId: req.params.id,
         request: req,
       });
     },
