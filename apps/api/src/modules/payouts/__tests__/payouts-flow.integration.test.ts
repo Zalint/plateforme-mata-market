@@ -210,15 +210,12 @@ async function createDeliveredPaidOrder(
     },
   });
   const orderId = result.id;
-  // Transition jusqu'à delivered (cycle 4 états).
+  // Pivot Lot C : paiement requis AVANT la livraison (garde-fou en ligne) — et
+  // le compute payout filtre sur paymentStatus='paid' de toute façon.
   await orderService.transitionStatus({ actorUserId: admin.id, orderId, to: 'confirmed' });
+  await prisma.order.update({ where: { id: orderId }, data: { paymentStatus: 'paid' } });
   await orderService.transitionStatus({ actorUserId: admin.id, orderId, to: 'delivering' });
   await orderService.transitionStatus({ actorUserId: admin.id, orderId, to: 'delivered' });
-  // Fixe payment_status à 'paid' (sans payment row : le compute filtre sur l'enum).
-  await prisma.order.update({
-    where: { id: orderId },
-    data: { paymentStatus: 'paid' },
-  });
   const row = await prisma.order.findUnique({ where: { id: orderId } });
   if (!row) throw new Error('order disappeared');
   return row;

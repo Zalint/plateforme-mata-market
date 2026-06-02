@@ -104,6 +104,7 @@ async function createCheckoutSessionInternal(
       id: true,
       orderNumber: true,
       status: true,
+      clientUserId: true,
       paymentStatus: true,
       totalFcfa: true,
       guestPhoneNumber: true,
@@ -112,13 +113,16 @@ async function createCheckoutSessionInternal(
   });
   if (!order) throw new DomainError('NOT_FOUND', 'Commande introuvable');
 
-  // L'intent ne peut être créé que si :
-  //  - order.status === 'created' (pas encore confirmé/annulé)
-  //  - order.paymentStatus === 'pending' (pas encore payé)
-  if (order.status !== 'created') {
+  // Pivot Lot C :
+  //  - client AUTHENTIFIÉ → paiement APRÈS confirmation du téléconseiller
+  //    (order.status === 'confirmed').
+  //  - INVITÉ (clientUserId null) → paie au checkout (pas de session téléconseil
+  //    ni de « retour » possible) → order.status === 'created'.
+  const requiredStatus = order.clientUserId ? 'confirmed' : 'created';
+  if (order.status !== requiredStatus) {
     throw new DomainError(
       'CONFLICT',
-      `Impossible de créer un paiement : commande au statut ${order.status}`,
+      `Impossible de créer un paiement : commande au statut ${order.status} (attendu: ${requiredStatus})`,
     );
   }
   if (order.paymentStatus !== 'pending') {
@@ -377,24 +381,35 @@ async function processWebhookInternal(args: ProcessWebhookArgs): Promise<Webhook
     if (payload.paymentMethod) updateData.paymentMethod = payload.paymentMethod;
     await tx.payment.update({ where: { id: payment.id }, data: updateData });
 
-    // Si nouveau status === 'paid' : transition order created → confirmed.
+    // Pivot Lot C, deux flux :
+    //  - INVITÉ : a payé au checkout, commande encore `created` → on la confirme
+    //    (paiement = confirmation pour l'invité).
+    //  - AUTHENTIFIÉ : commande DÉJÀ confirmée par le téléconseiller → on marque
+    //    juste le paiement payé (la commande pourra partir en livraison via le
+    //    garde-fou `confirmed → delivering` côté order-service).
     if (newStatus === 'paid' && payment.order.status === 'created') {
       await tx.order.update({
         where: { id: payment.order.id },
-        data: {
-          status: 'confirmed',
-          paymentStatus: 'paid',
-          confirmedAt: new Date(),
-        },
+        data: { status: 'confirmed', paymentStatus: 'paid', confirmedAt: new Date() },
       });
-      // Outbox event pour dispatch n8n au Lot 7 (push producteur + email client).
       await tx.outboxEvent.create({
         data: {
           eventType: 'order.confirmed',
           payload: { orderId: payment.order.id, paymentId: payment.id } as Prisma.InputJsonValue,
         },
       });
-    } else if (newStatus !== 'paid') {
+    } else if (newStatus === 'paid') {
+      await tx.order.update({
+        where: { id: payment.order.id },
+        data: { paymentStatus: 'paid' },
+      });
+      await tx.outboxEvent.create({
+        data: {
+          eventType: 'order.paid',
+          payload: { orderId: payment.order.id, paymentId: payment.id } as Prisma.InputJsonValue,
+        },
+      });
+    } else {
       // Synchronise paymentStatus sur orders sans toucher au cycle status.
       await tx.order.update({
         where: { id: payment.order.id },

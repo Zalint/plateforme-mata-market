@@ -171,6 +171,7 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
         actorUserId: user.id,
         orderId: req.params.id,
         to: req.body.to,
+        isAdmin: user.role === 'admin' || user.role === 'super_admin',
         request: req,
       });
     },

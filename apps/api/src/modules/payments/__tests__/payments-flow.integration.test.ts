@@ -157,6 +157,12 @@ async function createOrder(): Promise<Order> {
       },
     },
   });
+  // Pivot Lot C : le paiement en ligne intervient APRÈS la confirmation du
+  // téléconseiller → on confirme la commande pour pouvoir créer l'intent.
+  await prisma.order.update({
+    where: { id: result.id },
+    data: { status: 'confirmed', confirmedAt: new Date() },
+  });
   // Re-fetch en Order (Prisma row, pas l'output schema).
   const row = await prisma.order.findUnique({ where: { id: result.id } });
   if (!row) throw new Error('order disappeared');
@@ -213,7 +219,7 @@ describe('paymentService.createCheckoutSession', () => {
     expect(audit).not.toBeNull();
   });
 
-  it('refuse si order.status !== created', async () => {
+  it('refuse si order.status !== confirmed (ex: annulée)', async () => {
     const order = await createOrder();
     await prisma.order.update({
       where: { id: order.id },
@@ -260,12 +266,13 @@ describe('paymentService.processWebhook', () => {
     });
     expect(outcome.kind).toBe('signature_invalid');
 
-    // L'order ne doit PAS avoir été confirmé.
+    // Webhook invalide → rien ne change (la commande reste confirmée, impayée).
     const row = await prisma.order.findUnique({ where: { id: order.id } });
-    expect(row?.status).toBe('created');
+    expect(row?.status).toBe('confirmed');
+    expect(row?.paymentStatus).toBe('pending');
   });
 
-  it('paid valide → order confirmed + payment paid + outbox event + audit', async () => {
+  it('paid valide → payment paid (commande déjà confirmée) + outbox order.paid + audit', async () => {
     const order = await createOrder();
     mockBictorysFetch({});
     await paymentService.createCheckoutSession({
@@ -287,9 +294,9 @@ describe('paymentService.processWebhook', () => {
     if (outcome.kind === 'updated') expect(outcome.newStatus).toBe('paid');
 
     const updatedOrder = await prisma.order.findUnique({ where: { id: order.id } });
+    // La commande reste confirmée ; le webhook ne fait que marquer le paiement.
     expect(updatedOrder?.status).toBe('confirmed');
     expect(updatedOrder?.paymentStatus).toBe('paid');
-    expect(updatedOrder?.confirmedAt).not.toBeNull();
 
     const updatedPayment = await prisma.payment.findUnique({ where: { orderId: order.id } });
     expect(updatedPayment?.status).toBe('paid');
@@ -297,7 +304,7 @@ describe('paymentService.processWebhook', () => {
     expect(updatedPayment?.paymentMethod).toBe('wave');
 
     const outbox = await prisma.outboxEvent.findFirst({
-      where: { eventType: 'order.confirmed' },
+      where: { eventType: 'order.paid' },
     });
     expect(outbox).not.toBeNull();
 

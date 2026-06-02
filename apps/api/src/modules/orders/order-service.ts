@@ -226,17 +226,25 @@ interface TransitionArgs {
   actorUserId: string;
   orderId: string;
   to: OrderStatus;
+  /** Vrai si l'acteur est admin (peut confirmer sans être l'assigné). */
+  isAdmin?: boolean;
   request?: FastifyRequest;
 }
 
 async function transitionStatusInternal(args: TransitionArgs): Promise<OrderOutput> {
-  const { actorUserId, orderId, to, request } = args;
+  const { actorUserId, orderId, to, isAdmin = false, request } = args;
 
   // Verrouille l'ordre pour éviter les courses de transition.
   const updated = await prisma.$transaction(async (tx) => {
     const current = await tx.order.findUnique({
       where: { id: orderId },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        assignedTeleconsultantUserId: true,
+        paymentMethod: true,
+        paymentStatus: true,
+      },
     });
     if (!current) throw new DomainError('NOT_FOUND', 'Commande introuvable');
     if (!isValidOrderTransition(current.status, to)) {
@@ -250,6 +258,33 @@ async function transitionStatusInternal(args: TransitionArgs): Promise<OrderOutp
       throw new DomainError(
         'VALIDATION',
         'Annulation : utiliser POST /v1/orders/:id/cancel (raison obligatoire)',
+      );
+    }
+
+    // Pivot : on ne confirme pas une commande qu'un AUTRE téléconseiller a prise.
+    // Libre / à soi / admin → OK (le téléconseiller « Prend » puis confirme).
+    if (
+      to === 'confirmed' &&
+      !isAdmin &&
+      current.assignedTeleconsultantUserId &&
+      current.assignedTeleconsultantUserId !== actorUserId
+    ) {
+      throw new DomainError(
+        'FORBIDDEN',
+        'Commande assignée à un autre téléconseiller — il doit la confirmer (ou la relâcher)',
+      );
+    }
+
+    // Garde-fou paiement (pivot, option a) : on ne part en livraison qu'une fois
+    // payée pour le paiement EN LIGNE ; le paiement à la livraison (cash) passe.
+    if (
+      to === 'delivering' &&
+      current.paymentMethod === 'online' &&
+      current.paymentStatus !== 'paid'
+    ) {
+      throw new DomainError(
+        'CONFLICT',
+        'Commande non payée : le paiement en ligne doit être réglé avant la livraison',
       );
     }
 

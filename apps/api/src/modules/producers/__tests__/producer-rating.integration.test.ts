@@ -136,6 +136,8 @@ async function deliveredOrderId(): Promise<string> {
       },
     },
   });
+  // Pivot Lot C : paiement requis avant la livraison (garde-fou en ligne).
+  await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: 'paid' } });
   for (const to of ['confirmed', 'delivering', 'delivered'] as const) {
     await orderService.transitionStatus({ actorUserId: admin.id, orderId: order.id, to });
   }

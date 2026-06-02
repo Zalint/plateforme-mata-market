@@ -49,7 +49,11 @@ export default function ClientOrderDetailPage(): React.JSX.Element {
   }
 
   const canCancel = order.status === 'created' || order.status === 'confirmed';
-  const canPay = order.status === 'created' && order.paymentStatus === 'pending';
+  // Pivot : le paiement en ligne intervient APRÈS la confirmation du téléconseiller.
+  const canPay =
+    order.status === 'confirmed' &&
+    order.paymentStatus === 'pending' &&
+    order.paymentMethod === 'online';
   const currentStepIdx = order.status === 'cancelled' ? -1 : TIMELINE_STEPS.indexOf(order.status);
 
   async function handlePay(): Promise<void> {

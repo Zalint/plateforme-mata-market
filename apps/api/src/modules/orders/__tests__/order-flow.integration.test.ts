@@ -246,6 +246,9 @@ describe('Order flow · state machine + cancel', () => {
     expect(t1.status).toBe('confirmed');
     expect(t1.confirmedAt).not.toBeNull();
 
+    // Pivot Lot C : paiement requis avant la livraison (garde-fou en ligne).
+    await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: 'paid' } });
+
     const t2 = await orderService.transitionStatus({
       actorUserId: admin.id,
       orderId: order.id,
@@ -285,7 +288,8 @@ describe('Order flow · state machine + cancel', () => {
     });
     expect((await prisma.offer.findUnique({ where: { id: offer.id } }))?.status).toBe('reserved');
 
-    // Cycle complet jusqu'à delivered.
+    // Cycle complet jusqu'à delivered (paiement avant livraison — Lot C).
+    await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: 'paid' } });
     for (const to of ['confirmed', 'delivering'] as const) {
       await orderService.transitionStatus({ actorUserId: admin.id, orderId: order.id, to });
     }
@@ -326,6 +330,7 @@ describe('Order flow · state machine + cancel', () => {
     });
     expect((await prisma.offer.findUnique({ where: { id: offer.id } }))?.status).toBe('validated');
 
+    await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: 'paid' } });
     for (const to of ['confirmed', 'delivering', 'delivered'] as const) {
       await orderService.transitionStatus({ actorUserId: admin.id, orderId: order.id, to });
     }
@@ -416,6 +421,7 @@ describe('Order flow · state machine + cancel', () => {
       },
     });
     // Cycle 4 états : l'annulation reste possible jusqu'en livraison, plus après.
+    await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: 'paid' } });
     for (const to of ['confirmed', 'delivering', 'delivered'] as const) {
       await orderService.transitionStatus({ actorUserId: admin.id, orderId: order.id, to });
     }
@@ -594,5 +600,67 @@ describe('Order flow · self-assignation (Lot B)', () => {
     await orderService.claim({ actorUserId: producer.id, orderId });
     const released = await orderService.release({ actorUserId: admin.id, isAdmin: true, orderId });
     expect(released.assignedTeleconsultantUserId).toBeNull();
+  });
+});
+
+describe('Order flow · garde-fou paiement (Lot C)', () => {
+  const delivery = {
+    zoneId: '',
+    addressLine: 'Almadies',
+    slotDate: '2026-06-15',
+    slotPeriod: 'morning' as const,
+  };
+
+  it('online non payé bloque confirmed → delivering ; payé débloque', async () => {
+    offer = await createOffer({ qty: 100, price: 3000 });
+    const order = await orderService.create({
+      clientUserId: client.id,
+      input: {
+        items: [{ offerId: offer.id, quantity: 2 }],
+        delivery: { ...delivery, zoneId: zone.id },
+      },
+    });
+    await orderService.transitionStatus({
+      actorUserId: admin.id,
+      orderId: order.id,
+      to: 'confirmed',
+    });
+
+    // Online + non payé → livraison refusée.
+    await expect(
+      orderService.transitionStatus({ actorUserId: admin.id, orderId: order.id, to: 'delivering' }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+
+    // Payé → livraison OK.
+    await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: 'paid' } });
+    const delivering = await orderService.transitionStatus({
+      actorUserId: admin.id,
+      orderId: order.id,
+      to: 'delivering',
+    });
+    expect(delivering.status).toBe('delivering');
+  });
+
+  it('paiement à la livraison (cash) : livraison possible sans paiement préalable', async () => {
+    offer = await createOffer({ qty: 100, price: 3000 });
+    const order = await orderService.create({
+      clientUserId: client.id,
+      paymentMethod: 'cash_on_delivery',
+      input: {
+        items: [{ offerId: offer.id, quantity: 2 }],
+        delivery: { ...delivery, zoneId: zone.id },
+      },
+    });
+    await orderService.transitionStatus({
+      actorUserId: admin.id,
+      orderId: order.id,
+      to: 'confirmed',
+    });
+    const delivering = await orderService.transitionStatus({
+      actorUserId: admin.id,
+      orderId: order.id,
+      to: 'delivering',
+    });
+    expect(delivering.status).toBe('delivering');
   });
 });
