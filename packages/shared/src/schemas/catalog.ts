@@ -36,14 +36,17 @@ export const CatalogOfferItemSchema = z.object({
   availableFrom: z.string().date(),
   qualityNote: z.string().nullable(),
   photoPublicIds: z.array(z.string()), // ids Cloudinary (URLs reconstruites côté front)
+  // Identité producteur MASQUÉE pour les clients (null) ; visible uniquement par
+  // le staff (admin/téléconseiller). Le `site.name` est masqué de même (il révèle
+  // le producteur). Cf. catalog-service (décision selon le rôle du demandeur).
   producer: z.object({
-    userId: UuidSchema,
-    displayName: z.string(),
+    userId: UuidSchema.nullable(),
+    displayName: z.string().nullable(),
     zoneId: UuidSchema,
   }),
   site: z.object({
     id: UuidSchema,
-    name: z.string(),
+    name: z.string().nullable(),
     zoneId: UuidSchema,
   }),
 });

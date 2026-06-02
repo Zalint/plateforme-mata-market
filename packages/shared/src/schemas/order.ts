@@ -119,8 +119,10 @@ export const OrderItemOutputSchema = z.object({
   id: UuidSchema,
   offerId: UuidSchema,
   offerTitle: z.string(), // joint depuis offers.title pour affichage rapide
-  producerUserId: UuidSchema,
-  producerDisplayName: z.string(), // joint depuis users.display_name
+  // Identité producteur MASQUÉE pour le client propriétaire (null) ; visible par
+  // le staff (admin/téléconseiller) et le producteur. Cf. order mapper (rôle).
+  producerUserId: UuidSchema.nullable(),
+  producerDisplayName: z.string().nullable(),
   quantity: z.number().int().positive(),
   unitPriceAtOrder: FcfaAmountSchema,
   pricingSnapshot: PricingSnapshotOutputSchema,

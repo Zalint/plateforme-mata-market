@@ -507,4 +507,32 @@ describe('Order flow · lectures', () => {
     expect(received).toHaveLength(1);
     expect(received[0]?.items[0]?.producerUserId).toBe(producer.id);
   });
+
+  it('vue client masque l’identité producteur ; staff la voit (Lot A)', async () => {
+    offer = await createOffer({ qty: 100, price: 3000 });
+    const order = await orderService.create({
+      clientUserId: client.id,
+      input: {
+        items: [{ offerId: offer.id, quantity: 2 }],
+        delivery: {
+          zoneId: zone.id,
+          addressLine: 'Almadies',
+          slotDate: '2026-06-15',
+          slotPeriod: 'morning',
+        },
+      },
+    });
+
+    // Vue client : producteur masqué (listMine + getById showProducer=false).
+    const mine = await orderService.listMine(client.id);
+    expect(mine[0]?.items[0]?.producerUserId).toBeNull();
+    expect(mine[0]?.items[0]?.producerDisplayName).toBeNull();
+    const clientView = await orderService.getById(order.id, false);
+    expect(clientView.items[0]?.producerDisplayName).toBeNull();
+
+    // Vue staff : producteur visible.
+    const staffView = await orderService.getById(order.id, true);
+    expect(staffView.items[0]?.producerUserId).toBe(producer.id);
+    expect(staffView.items[0]?.producerDisplayName).not.toBeNull();
+  });
 });

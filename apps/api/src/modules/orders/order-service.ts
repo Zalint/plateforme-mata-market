@@ -215,7 +215,8 @@ async function createOrderInternal(args: CreateOrderArgs): Promise<OrderOutput> 
     request,
   });
 
-  return toOrderOutput(created);
+  // Masque le producteur : le créateur (client/invité) n'a pas à le voir.
+  return toOrderOutput(created, false);
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -367,6 +368,8 @@ interface CancelArgs {
   actorUserId: string;
   orderId: string;
   input: OrderCancelInput;
+  /** Masque l'identité producteur dans la réponse pour le client (défaut: visible). */
+  showProducer?: boolean;
   request?: FastifyRequest;
 }
 
@@ -422,19 +425,19 @@ async function cancelOrderInternal(args: CancelArgs): Promise<OrderOutput> {
     request,
   });
 
-  return toOrderOutput(cancelled.result as OrderLoaded);
+  return toOrderOutput(cancelled.result as OrderLoaded, args.showProducer ?? true);
 }
 
 // ─────────────────────────────────────────────────────────────────
 // Lectures
 
-async function getByIdInternal(orderId: string): Promise<OrderOutput> {
+async function getByIdInternal(orderId: string, showProducer = true): Promise<OrderOutput> {
   const row = await prisma.order.findUnique({
     where: { id: orderId },
     include: orderInclude,
   });
   if (!row) throw new DomainError('NOT_FOUND', 'Commande introuvable');
-  return toOrderOutput(row as OrderLoaded);
+  return toOrderOutput(row as OrderLoaded, showProducer);
 }
 
 async function listMineInternal(clientUserId: string): Promise<OrderOutput[]> {
@@ -443,7 +446,8 @@ async function listMineInternal(clientUserId: string): Promise<OrderOutput[]> {
     include: orderInclude,
     orderBy: { createdAt: 'desc' },
   });
-  return rows.map((r) => toOrderOutput(r as OrderLoaded));
+  // Vue client : identité producteur masquée.
+  return rows.map((r) => toOrderOutput(r as OrderLoaded, false));
 }
 
 async function listReceivedInternal(producerUserId: string): Promise<OrderOutput[]> {

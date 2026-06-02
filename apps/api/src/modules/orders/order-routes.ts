@@ -26,6 +26,12 @@ import { orderService } from './order-service.js';
 
 const OrderIdParamSchema = z.object({ id: UuidSchema });
 
+// Pivot : le client (pro/particulier) ne voit pas l'identité producteur. Staff
+// (admin/téléconseiller) et producteur la voient.
+function showProducerFor(role: string | undefined): boolean {
+  return role !== 'client_pro' && role !== 'client_particulier';
+}
+
 export async function orderRoutes(app: FastifyInstance): Promise<void> {
   const typed = app.withTypeProvider<ZodTypeProvider>();
 
@@ -125,7 +131,7 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req) => {
       const user = requireUser(req);
-      const order = await orderService.getById(req.params.id);
+      const order = await orderService.getById(req.params.id, showProducerFor(user.role));
 
       // Permission compound : admin/staff, owner client, ou producteur d'un item.
       if (user.role === 'admin' || user.role === 'super_admin' || user.role === 'teleconsultant') {
@@ -202,6 +208,7 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
         actorUserId: user.id,
         orderId: req.params.id,
         input: req.body,
+        showProducer: showProducerFor(user.role),
         request: req,
       });
     },

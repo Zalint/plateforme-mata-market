@@ -29,7 +29,10 @@ const include = {
 } as const;
 
 export const catalogService = {
-  async listValidated(query: CatalogOfferListQuery): Promise<CatalogOfferListResponse> {
+  async listValidated(
+    query: CatalogOfferListQuery,
+    showProducer: boolean,
+  ): Promise<CatalogOfferListResponse> {
     // Effet immédiat de la date limite : on masque les offres dont availableUntil
     // est passée, même avant que le cron d'expiration ne change leur statut.
     const startOfToday = new Date();
@@ -60,7 +63,7 @@ export const catalogService = {
       prisma.offer.count({ where }),
     ]);
     return {
-      offers: rows.map(toItem),
+      offers: rows.map((r) => toItem(r, showProducer)),
       meta: {
         page: query.page,
         limit: query.limit,
@@ -70,17 +73,19 @@ export const catalogService = {
     };
   },
 
-  async getValidatedById(id: string): Promise<CatalogOfferDetail> {
+  async getValidatedById(id: string, showProducer: boolean): Promise<CatalogOfferDetail> {
     const row = await prisma.offer.findUnique({ where: { id }, include });
     if (!row) throw new DomainError('NOT_FOUND', 'Offre introuvable');
     if (row.status !== 'validated') {
       throw new DomainError('NOT_FOUND', 'Offre non disponible au catalogue');
     }
-    return toDetail(row);
+    return toDetail(row, showProducer);
   },
 };
 
-function toItem(o: Loaded): CatalogOfferItem {
+// `showProducer` : masque l'identité producteur (+ nom du site) pour les clients
+// (null) ; vrai pour le staff. Cf. catalog-routes (décision selon le rôle).
+function toItem(o: Loaded, showProducer: boolean): CatalogOfferItem {
   return {
     id: o.id,
     category: o.categorySlug ?? o.category ?? '',
@@ -92,17 +97,17 @@ function toItem(o: Loaded): CatalogOfferItem {
     qualityNote: o.qualityNote,
     photoPublicIds: o.photos.map((p) => p.cloudinaryPublicId),
     producer: {
-      userId: o.producer.userId,
-      displayName: o.producer.user.displayName,
+      userId: showProducer ? o.producer.userId : null,
+      displayName: showProducer ? o.producer.user.displayName : null,
       zoneId: o.producer.zoneId,
     },
-    site: { id: o.site.id, name: o.site.name, zoneId: o.site.zoneId },
+    site: { id: o.site.id, name: showProducer ? o.site.name : null, zoneId: o.site.zoneId },
   };
 }
 
-function toDetail(o: Loaded): CatalogOfferDetail {
+function toDetail(o: Loaded, showProducer: boolean): CatalogOfferDetail {
   return {
-    ...toItem(o),
+    ...toItem(o, showProducer),
     availableUntil: o.availableUntil ? o.availableUntil.toISOString().slice(0, 10) : null,
   };
 }

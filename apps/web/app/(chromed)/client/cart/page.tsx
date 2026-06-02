@@ -132,9 +132,9 @@ export default function ClientCartPage(): React.JSX.Element {
                   <div className="font-bold text-stone-900 text-sm">
                     {offer.title} × {item.quantity}
                   </div>
-                  <div className="text-xs text-stone-500">
-                    {offer.producer.displayName} · {offer.site.name}
-                  </div>
+                  {offer.qualityNote && (
+                    <div className="text-xs text-stone-500">{offer.qualityNote}</div>
+                  )}
                   <div className="flex items-center gap-1.5 mt-1">
                     <button
                       type="button"

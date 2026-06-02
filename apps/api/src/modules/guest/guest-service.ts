@@ -57,7 +57,7 @@ async function listCatalogInternal(
   query: GuestCatalogOfferListQuery,
 ): Promise<GuestCatalogOfferListResponse> {
   // GuestCatalogOfferListQuery a la même forme que CatalogOfferListQuery.
-  const res = await catalogService.listValidated(query as CatalogOfferListQuery);
+  const res = await catalogService.listValidated(query as CatalogOfferListQuery, false);
   return {
     offers: res.offers.map(maskCatalogItem),
     meta: res.meta,
@@ -65,7 +65,7 @@ async function listCatalogInternal(
 }
 
 async function getCatalogOfferInternal(id: string): Promise<GuestCatalogOfferDetail> {
-  const detail: CatalogOfferDetail = await catalogService.getValidatedById(id);
+  const detail: CatalogOfferDetail = await catalogService.getValidatedById(id, false);
   return {
     ...maskCatalogItem(detail),
     availableUntil: detail.availableUntil,

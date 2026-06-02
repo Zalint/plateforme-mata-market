@@ -105,7 +105,7 @@ export default function ClientCatalogPage(): React.JSX.Element {
                 title={o.title}
                 unit={o.unit}
                 priceFcfa={o.priceFcfa}
-                subtitle={`${o.producer.displayName} · ${o.site.name}`}
+                subtitle={o.qualityNote ?? undefined}
                 imageUrl={cloudinaryThumb(o.photoPublicIds[0]) ?? undefined}
                 className="flex-1"
               />

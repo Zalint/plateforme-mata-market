@@ -24,7 +24,10 @@ function toIsoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function toOrderOutput(o: OrderLoaded): OrderOutput {
+// `showProducer` (défaut true = staff/producteur) : masque l'identité producteur
+// des items pour le client propriétaire (pivot : le client ne voit pas le
+// producteur). Les méthodes client du service passent `false`.
+export function toOrderOutput(o: OrderLoaded, showProducer = true): OrderOutput {
   return {
     id: o.id,
     orderNumber: o.orderNumber,
@@ -41,7 +44,7 @@ export function toOrderOutput(o: OrderLoaded): OrderOutput {
     deliverySlotPeriod: o.deliverySlotPeriod,
     totalFcfa: o.totalFcfa,
     paymentStatus: o.paymentStatus,
-    items: o.items.map(toOrderItemOutput),
+    items: o.items.map((i) => toOrderItemOutput(i, showProducer)),
     confirmedAt: o.confirmedAt?.toISOString() ?? null,
     collectedAt: o.collectedAt?.toISOString() ?? null,
     storedAt: o.storedAt?.toISOString() ?? null,
@@ -53,13 +56,13 @@ export function toOrderOutput(o: OrderLoaded): OrderOutput {
   };
 }
 
-function toOrderItemOutput(i: OrderItemLoaded): OrderItemOutput {
+function toOrderItemOutput(i: OrderItemLoaded, showProducer: boolean): OrderItemOutput {
   return {
     id: i.id,
     offerId: i.offerId,
     offerTitle: i.offer.title,
-    producerUserId: i.producerUserId,
-    producerDisplayName: i.producer.displayName,
+    producerUserId: showProducer ? i.producerUserId : null,
+    producerDisplayName: showProducer ? i.producer.displayName : null,
     quantity: i.quantity,
     unitPriceAtOrder: i.unitPriceAtOrder,
     pricingSnapshot: toPricingSnapshotOutput(i.pricingSnapshot),
