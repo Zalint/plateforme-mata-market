@@ -240,6 +240,41 @@ describe('producerService.createRating · notation post-livraison', () => {
   });
 });
 
+describe('producerService.rateOrder · notation au niveau commande (Lot A)', () => {
+  it('note la commande → applique à chaque producteur ; 2e fois → CONFLICT', async () => {
+    const orderId = await deliveredOrderId();
+    await producerService.rateOrder({
+      actorUserId: client.id,
+      orderId,
+      input: { stars: 4, comment: 'Bien' },
+    });
+
+    // La note est créée pour le producteur de la commande.
+    const ratings = await prisma.producerRating.findMany({ where: { orderId } });
+    expect(ratings.length).toBeGreaterThanOrEqual(1);
+    expect(ratings[0]?.stars).toBe(4);
+    expect(ratings.every((r) => r.producerUserId === producer.id)).toBe(true);
+
+    // Audit au niveau commande.
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: 'producer.rating.create', targetType: 'order', targetId: orderId },
+    });
+    expect(audit).not.toBeNull();
+
+    // 2e note de la même commande → CONFLICT.
+    await expect(
+      producerService.rateOrder({ actorUserId: client.id, orderId, input: { stars: 2 } }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('refuse (FORBIDDEN) si l’acteur n’est pas le propriétaire', async () => {
+    const orderId = await deliveredOrderId();
+    await expect(
+      producerService.rateOrder({ actorUserId: admin.id, orderId, input: { stars: 5 } }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
 describe('producerService.listRatings · détail admin', () => {
   it('liste les avis avec n° commande + nom client', async () => {
     const orderId1 = await deliveredOrderId();

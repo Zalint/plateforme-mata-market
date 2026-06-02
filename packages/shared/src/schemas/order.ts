@@ -107,6 +107,15 @@ export const OrderCancelInputSchema = z.object({
 });
 export type OrderCancelInput = z.infer<typeof OrderCancelInputSchema>;
 
+// Notation d'une commande livrée par le client : une seule note (1–5★ + avis)
+// appliquée EN INTERNE à chaque producteur de la commande (le client ne voit /
+// ne choisit pas le producteur — cf. masquage Lot A).
+export const OrderRateInputSchema = z.object({
+  stars: z.number().int().min(1).max(5),
+  comment: z.string().trim().max(500).optional(),
+});
+export type OrderRateInput = z.infer<typeof OrderRateInputSchema>;
+
 // ─────────────────────────────────────────────────────────────────
 // Sortie API
 

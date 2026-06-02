@@ -5,6 +5,7 @@ import {
   OrderCreateSchema,
   OrderListResponseSchema,
   OrderOutputSchema,
+  OrderRateInputSchema,
   OrderStatusTransitionInputSchema,
   UuidSchema,
 } from '@mata/shared/schemas';
@@ -13,6 +14,7 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { prisma } from '../../lib/prisma.js';
 import { requireRole, requireUser } from '../auth/index.js';
+import { producerService } from '../producers/index.js';
 import { withIdempotency } from './idempotency.js';
 import { orderService } from './order-service.js';
 
@@ -211,6 +213,32 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
         showProducer: showProducerFor(user.role),
         request: req,
       });
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────
+  // POST /v1/orders/:id/rate · le client note sa commande livrée. La note
+  // s'applique EN INTERNE à chaque producteur (le client ne le voit pas, Lot A).
+
+  typed.post(
+    '/v1/orders/:id/rate',
+    {
+      schema: {
+        params: OrderIdParamSchema,
+        body: OrderRateInputSchema,
+        response: { 204: z.null() },
+      },
+    },
+    async (req, reply) => {
+      requireRole(req, 'client_pro', 'client_particulier');
+      const user = requireUser(req);
+      await producerService.rateOrder({
+        actorUserId: user.id,
+        orderId: req.params.id,
+        input: req.body,
+        request: req,
+      });
+      return reply.code(204).send();
     },
   );
 }

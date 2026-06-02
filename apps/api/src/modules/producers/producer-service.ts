@@ -375,6 +375,59 @@ export const producerService = {
   },
 
   /**
+   * Notation au NIVEAU COMMANDE (pivot Lot A : le client ne voit pas le
+   * producteur). Une seule note du client s'applique à CHAQUE producteur de la
+   * commande livrée. Idempotent : si la commande est déjà notée → CONFLICT.
+   */
+  async rateOrder(args: {
+    actorUserId: string;
+    orderId: string;
+    input: { stars: number; comment?: string };
+    request?: FastifyRequest;
+  }): Promise<void> {
+    const { actorUserId, orderId, input, request } = args;
+
+    const order = await orderService.getById(orderId); // showProducer=true (défaut)
+    if (order.status !== 'delivered') {
+      throw new DomainError('CONFLICT', 'Notation possible uniquement après livraison');
+    }
+    if (order.clientUserId !== actorUserId) {
+      throw new DomainError('FORBIDDEN', "Cette commande n'est pas la vôtre");
+    }
+    const producerIds = [
+      ...new Set(
+        order.items.map((i) => i.producerUserId).filter((id): id is string => id !== null),
+      ),
+    ];
+    if (producerIds.length === 0) {
+      throw new DomainError('VALIDATION', 'Commande sans producteur à noter');
+    }
+
+    const created = await prisma.producerRating.createMany({
+      data: producerIds.map((producerUserId) => ({
+        producerUserId,
+        orderId,
+        clientUserId: actorUserId,
+        stars: input.stars,
+        comment: input.comment ?? null,
+      })),
+      skipDuplicates: true,
+    });
+    if (created.count === 0) {
+      throw new DomainError('CONFLICT', 'Vous avez déjà noté cette commande');
+    }
+
+    await auditService.log({
+      actorUserId,
+      action: 'producer.rating.create',
+      targetType: 'order',
+      targetId: orderId,
+      newValue: { stars: input.stars, producerCount: producerIds.length },
+      request,
+    });
+  },
+
+  /**
    * Validation admin : pending → validated. Pose validatedAt / validatedBy.
    * Refus 409 si statut ≠ pending.
    */

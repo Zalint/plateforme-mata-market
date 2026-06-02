@@ -181,6 +181,23 @@ export function useRateProducer() {
   });
 }
 
+/** Notation au niveau commande (le client note sa commande, pas le producteur). */
+export function useRateOrder() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { orderId: string; stars: number; comment?: string }) =>
+      apiClient.post<void>(
+        `/v1/orders/${input.orderId}/rate`,
+        { stars: input.stars, comment: input.comment },
+        token,
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}
+
 export function useRevealBankDetails() {
   const token = useAuthToken();
   return useMutation({
