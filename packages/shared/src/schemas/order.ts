@@ -116,6 +116,14 @@ export const OrderRateInputSchema = z.object({
 });
 export type OrderRateInput = z.infer<typeof OrderRateInputSchema>;
 
+// Ajustement de prix par le téléconseiller (Lot D) : nouveau total + motif. Les
+// snapshots restent immuables (on ne modifie que le total effectif client).
+export const OrderAdjustPriceInputSchema = z.object({
+  newTotalFcfa: FcfaAmountSchema,
+  reason: z.string().trim().min(3).max(300),
+});
+export type OrderAdjustPriceInput = z.infer<typeof OrderAdjustPriceInputSchema>;
+
 // ─────────────────────────────────────────────────────────────────
 // Sortie API
 
@@ -171,6 +179,12 @@ export const OrderOutputSchema = z.object({
   assignedTeleconsultantUserId: UuidSchema.nullable(),
   assignedTeleconsultantName: z.string().nullable(),
   assignedAt: IsoDateTimeSchema.nullable(),
+
+  // Lot D — ajustement de prix (téléconseiller). Total effectif côté client =
+  // adjustedTotalFcfa ?? totalFcfa.
+  adjustedTotalFcfa: FcfaAmountSchema.nullable(),
+  priceAdjustmentReason: z.string().nullable(),
+  priceAdjustedAt: IsoDateTimeSchema.nullable(),
 
   // Timestamps des transitions importantes
   confirmedAt: IsoDateTimeSchema.nullable(),

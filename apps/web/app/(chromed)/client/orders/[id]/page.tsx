@@ -108,8 +108,14 @@ export default function ClientOrderDetailPage(): React.JSX.Element {
         <div className="text-right">
           <div className="text-xs text-stone-500 uppercase tracking-wider font-semibold">Total</div>
           <div className="text-2xl font-bold text-stone-900 tabular">
-            <Money amount={order.totalFcfa} bold={false} />
+            <Money amount={order.adjustedTotalFcfa ?? order.totalFcfa} bold={false} />
           </div>
+          {order.adjustedTotalFcfa != null && (
+            <div className="text-[11px] text-mata-700 font-semibold">
+              Prix ajusté par MATA{' '}
+              <span className="text-stone-400 line-through tabular">{order.totalFcfa} F</span>
+            </div>
+          )}
         </div>
       </div>
 

@@ -52,6 +52,7 @@ export type AuditAction =
   | 'order.status_change'
   | 'order.assign'
   | 'order.unassign'
+  | 'order.price_adjust'
   | 'order.idempotent_replay'
   // Paiements
   | 'payment.intent_created'

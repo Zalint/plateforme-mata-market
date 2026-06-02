@@ -248,6 +248,18 @@ describe('paymentService.createCheckoutSession', () => {
     expect(second.paymentId).toBe(first.paymentId);
     expect(second.providerIntentId).toBe(first.providerIntentId);
   });
+
+  it('le montant de l’intent suit le prix ajusté (Lot D)', async () => {
+    const order = await createOrder();
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { adjustedTotalFcfa: order.totalFcfa + 700, priceAdjustedAt: new Date() },
+    });
+    mockBictorysFetch({});
+    await paymentService.createCheckoutSession({ actorUserId: client.id, orderId: order.id });
+    const row = await prisma.payment.findUnique({ where: { orderId: order.id } });
+    expect(row?.amountFcfa).toBe(order.totalFcfa + 700);
+  });
 });
 
 describe('paymentService.processWebhook', () => {

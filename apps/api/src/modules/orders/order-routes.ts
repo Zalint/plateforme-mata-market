@@ -1,5 +1,6 @@
 import { DomainError } from '@mata/shared/errors';
 import {
+  OrderAdjustPriceInputSchema,
   OrderAdminListQuerySchema,
   OrderCancelInputSchema,
   OrderCreateSchema,
@@ -268,6 +269,28 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
         actorUserId: user.id,
         isAdmin,
         orderId: req.params.id,
+        request: req,
+      });
+    },
+  );
+
+  // POST /v1/orders/:id/adjust-price · le téléconseiller ajuste le total (Lot D).
+  typed.post(
+    '/v1/orders/:id/adjust-price',
+    {
+      schema: {
+        params: OrderIdParamSchema,
+        body: OrderAdjustPriceInputSchema,
+        response: { 200: OrderOutputSchema },
+      },
+    },
+    async (req) => {
+      requireRole(req, 'teleconsultant', 'admin');
+      const user = requireUser(req);
+      return orderService.adjustPrice({
+        actorUserId: user.id,
+        orderId: req.params.id,
+        input: req.body,
         request: req,
       });
     },

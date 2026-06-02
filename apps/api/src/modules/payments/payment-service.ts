@@ -107,6 +107,7 @@ async function createCheckoutSessionInternal(
       clientUserId: true,
       paymentStatus: true,
       totalFcfa: true,
+      adjustedTotalFcfa: true,
       guestPhoneNumber: true,
       payment: { select: { id: true, paymentUrl: true, providerIntentId: true, status: true } },
     },
@@ -154,8 +155,11 @@ async function createCheckoutSessionInternal(
   // S'assurer que Bictorys est configuré (refuse early si non).
   requireBictorysConfig();
 
+  // Total effectif : le téléconseiller a pu ajuster le prix (Lot D).
+  const effectiveTotalFcfa = order.adjustedTotalFcfa ?? order.totalFcfa;
+
   const intent = await createPaymentIntent({
-    amountFcfa: order.totalFcfa,
+    amountFcfa: effectiveTotalFcfa,
     currency: 'XOF',
     reference: order.orderNumber,
     returnUrl,
@@ -179,7 +183,7 @@ async function createCheckoutSessionInternal(
         id: paymentId,
         orderId: order.id,
         providerIntentId: intent.id,
-        amountFcfa: order.totalFcfa,
+        amountFcfa: effectiveTotalFcfa,
         currency: 'XOF',
         status: 'pending',
         paymentUrl: intent.paymentUrl,

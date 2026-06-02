@@ -145,3 +145,20 @@ export function useReleaseOrder() {
     },
   });
 }
+
+/** Lot D : le téléconseiller ajuste le total de la commande (motif obligatoire). */
+export function useAdjustOrderPrice() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; newTotalFcfa: number; reason: string }) =>
+      apiClient.post<OrderOutput>(
+        `/v1/orders/${input.id}/adjust-price`,
+        { newTotalFcfa: input.newTotalFcfa, reason: input.reason },
+        token,
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}

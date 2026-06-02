@@ -7,9 +7,18 @@ import {
   ORDER_STATUSES,
   type OrderStatus,
 } from '@mata/shared/constants';
-import { FilterChip, Icon, Money, StatusBadge, type StatusTone, usePrompt } from '@mata/ui';
+import {
+  FilterChip,
+  Icon,
+  Money,
+  StatusBadge,
+  type StatusTone,
+  usePrompt,
+  useToast,
+} from '@mata/ui';
 import { useState } from 'react';
 import {
+  useAdjustOrderPrice,
   useAdminOrders,
   useCancelOrder,
   useClaimOrder,
@@ -48,10 +57,39 @@ export default function AdminOrdersPage(): React.JSX.Element {
   const cancel = useCancelOrder();
   const claim = useClaimOrder();
   const release = useReleaseOrder();
+  const adjust = useAdjustOrderPrice();
   const { data: me } = useMe();
   const prompt = usePrompt();
+  const toast = useToast();
   const orders = data?.orders ?? [];
   const isAdmin = me?.role === 'admin' || me?.role === 'super_admin';
+
+  async function handleAdjustPrice(id: string, currentTotal: number): Promise<void> {
+    const totalStr = await prompt({
+      title: 'Ajuster le prix',
+      message: `Nouveau total FCFA (actuel : ${currentTotal}). Le client devra reconfirmer.`,
+      placeholder: String(currentTotal),
+      confirmLabel: 'Continuer',
+      minLength: 1,
+    });
+    if (!totalStr) return;
+    const newTotalFcfa = Number.parseInt(totalStr.replace(/\s/g, ''), 10);
+    if (!Number.isFinite(newTotalFcfa) || newTotalFcfa <= 0) {
+      toast.error('Montant invalide.');
+      return;
+    }
+    const reason = await prompt({
+      title: 'Motif de l’ajustement',
+      message: 'Pourquoi le prix change-t-il ? (tracé dans l’audit)',
+      placeholder: 'Ex : le producteur a annoncé un nouveau prix au kilo',
+      confirmLabel: 'Ajuster',
+      minLength: 3,
+      maxLength: 300,
+    });
+    if (!reason) return;
+    await adjust.mutateAsync({ id, newTotalFcfa, reason });
+    toast.success('Prix ajusté. Pensez à reconfirmer avec le client.');
+  }
 
   async function handleCancel(id: string): Promise<void> {
     const reason = await prompt({
@@ -131,7 +169,17 @@ export default function AdminOrdersPage(): React.JSX.Element {
                   </div>
                 </div>
                 <div className="text-right">
-                  <Money amount={o.totalFcfa} className="text-lg" />
+                  {o.adjustedTotalFcfa != null ? (
+                    <>
+                      <Money amount={o.adjustedTotalFcfa} className="text-lg" />
+                      <div className="text-[10px] text-stone-400 line-through tabular">
+                        {o.totalFcfa} F
+                      </div>
+                      <div className="text-[10px] text-mata-700 font-semibold">Prix ajusté</div>
+                    </>
+                  ) : (
+                    <Money amount={o.totalFcfa} className="text-lg" />
+                  )}
                 </div>
               </div>
 
@@ -165,6 +213,16 @@ export default function AdminOrdersPage(): React.JSX.Element {
                       Relâcher
                     </button>
                   )}
+                {(o.status === 'created' || o.status === 'confirmed') && (
+                  <button
+                    type="button"
+                    onClick={() => handleAdjustPrice(o.id, o.adjustedTotalFcfa ?? o.totalFcfa)}
+                    disabled={adjust.isPending}
+                    className="px-3 py-1.5 rounded-lg border border-stone-200 text-stone-700 text-xs font-semibold hover:bg-stone-50 disabled:opacity-50 flex items-center gap-1"
+                  >
+                    <Icon name="calculator" className="w-3 h-3" /> Ajuster le prix
+                  </button>
+                )}
               </div>
 
               {/* Actions */}

@@ -827,6 +827,14 @@ model Order {
   assignedTeleconsultantUserId String?   @map("assigned_teleconsultant_user_id") @db.Uuid
   assignedAt                   DateTime? @map("assigned_at")
 
+  // Lot D (pivot) — ajustement de prix par le téléconseiller (le producteur a
+  // annoncé un prix différent). Les pricing_snapshots restent IMMUABLES : on
+  // stocke seulement le nouveau total + le motif + la date. Total effectif =
+  // adjustedTotalFcfa ?? totalFcfa. L'acteur est tracé dans audit_log.
+  adjustedTotalFcfa     Int?      @map("adjusted_total_fcfa")
+  priceAdjustmentReason String?   @map("price_adjustment_reason")
+  priceAdjustedAt       DateTime? @map("price_adjusted_at")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

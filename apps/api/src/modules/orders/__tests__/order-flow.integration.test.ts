@@ -664,3 +664,48 @@ describe('Order flow · garde-fou paiement (Lot C)', () => {
     expect(delivering.status).toBe('delivering');
   });
 });
+
+describe('Order flow · ajustement de prix (Lot D)', () => {
+  it('ajuste le total (snapshots + total d’origine préservés), refuse après paiement', async () => {
+    offer = await createOffer({ qty: 100, price: 3000 });
+    const order = await orderService.create({
+      clientUserId: client.id,
+      input: {
+        items: [{ offerId: offer.id, quantity: 2 }],
+        delivery: {
+          zoneId: zone.id,
+          addressLine: 'Almadies',
+          slotDate: '2026-06-15',
+          slotPeriod: 'morning',
+        },
+      },
+    });
+    const originalTotal = order.totalFcfa;
+
+    const adjusted = await orderService.adjustPrice({
+      actorUserId: admin.id,
+      orderId: order.id,
+      input: { newTotalFcfa: originalTotal + 500, reason: 'Prix producteur en hausse' },
+    });
+    expect(adjusted.adjustedTotalFcfa).toBe(originalTotal + 500);
+    expect(adjusted.priceAdjustmentReason).toContain('hausse');
+    // Total d'origine + snapshots intacts (immuables).
+    expect(adjusted.totalFcfa).toBe(originalTotal);
+    expect(adjusted.items[0]?.pricingSnapshot.finalPriceFcfa).toBeGreaterThan(3000);
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { action: 'order.price_adjust', targetId: order.id },
+    });
+    expect(audit).not.toBeNull();
+
+    // Après paiement → refus.
+    await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: 'paid' } });
+    await expect(
+      orderService.adjustPrice({
+        actorUserId: admin.id,
+        orderId: order.id,
+        input: { newTotalFcfa: 1, reason: 'trop tard' },
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+});

@@ -621,6 +621,60 @@ async function releaseOrderInternal(args: {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Ajustement de prix (Lot D) : le téléconseiller fixe un nouveau total après
+// que le producteur a annoncé un prix différent. Snapshots IMMUABLES préservés.
+
+async function adjustPriceInternal(args: {
+  actorUserId: string;
+  orderId: string;
+  input: { newTotalFcfa: number; reason: string };
+  request?: FastifyRequest;
+}): Promise<OrderOutput> {
+  const { actorUserId, orderId, input, request } = args;
+  const current = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true,
+      status: true,
+      paymentStatus: true,
+      totalFcfa: true,
+      adjustedTotalFcfa: true,
+    },
+  });
+  if (!current) throw new DomainError('NOT_FOUND', 'Commande introuvable');
+  // Ajustable seulement avant la livraison et avant paiement (le client doit
+  // re-confirmer le nouveau prix, puis payer).
+  if (current.status !== 'created' && current.status !== 'confirmed') {
+    throw new DomainError(
+      'CONFLICT',
+      `Ajustement impossible au statut ${current.status} (avant livraison uniquement)`,
+    );
+  }
+  if (current.paymentStatus === 'paid') {
+    throw new DomainError('CONFLICT', 'Commande déjà payée : ajustement impossible');
+  }
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: {
+      adjustedTotalFcfa: input.newTotalFcfa,
+      priceAdjustmentReason: input.reason,
+      priceAdjustedAt: new Date(),
+    },
+    include: orderInclude,
+  });
+  await auditService.log({
+    actorUserId,
+    action: 'order.price_adjust',
+    targetType: 'order',
+    targetId: orderId,
+    oldValue: { effectiveTotalFcfa: current.adjustedTotalFcfa ?? current.totalFcfa },
+    newValue: { adjustedTotalFcfa: input.newTotalFcfa, reason: input.reason },
+    request,
+  });
+  return toOrderOutput(updated as OrderLoaded);
+}
+
+// ─────────────────────────────────────────────────────────────────
 // Service exporté
 
 export const orderService = {
@@ -630,6 +684,7 @@ export const orderService = {
   cancel: cancelOrderInternal,
   claim: claimOrderInternal,
   release: releaseOrderInternal,
+  adjustPrice: adjustPriceInternal,
   getById: getByIdInternal,
   listMine: listMineInternal,
   listReceived: listReceivedInternal,
