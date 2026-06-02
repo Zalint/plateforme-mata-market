@@ -167,6 +167,11 @@ export const OrderOutputSchema = z.object({
   // Items
   items: z.array(OrderItemOutputSchema),
 
+  // Lot B — self-assignation au téléconseiller (null = libre / non assignée).
+  assignedTeleconsultantUserId: UuidSchema.nullable(),
+  assignedTeleconsultantName: z.string().nullable(),
+  assignedAt: IsoDateTimeSchema.nullable(),
+
   // Timestamps des transitions importantes
   confirmedAt: IsoDateTimeSchema.nullable(),
   collectedAt: IsoDateTimeSchema.nullable(),

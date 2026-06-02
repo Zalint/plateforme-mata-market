@@ -241,4 +241,34 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(204).send();
     },
   );
+
+  // ─────────────────────────────────────────────────────────────
+  // POST /v1/orders/:id/claim · un téléconseiller PREND la commande (Lot B).
+  // POST /v1/orders/:id/release · la relâche (l'assigné ou un admin).
+
+  typed.post(
+    '/v1/orders/:id/claim',
+    { schema: { params: OrderIdParamSchema, response: { 200: OrderOutputSchema } } },
+    async (req) => {
+      requireRole(req, 'teleconsultant', 'admin');
+      const user = requireUser(req);
+      return orderService.claim({ actorUserId: user.id, orderId: req.params.id, request: req });
+    },
+  );
+
+  typed.post(
+    '/v1/orders/:id/release',
+    { schema: { params: OrderIdParamSchema, response: { 200: OrderOutputSchema } } },
+    async (req) => {
+      requireRole(req, 'teleconsultant', 'admin');
+      const user = requireUser(req);
+      const isAdmin = user.role === 'admin' || user.role === 'super_admin';
+      return orderService.release({
+        actorUserId: user.id,
+        isAdmin,
+        orderId: req.params.id,
+        request: req,
+      });
+    },
+  );
 }

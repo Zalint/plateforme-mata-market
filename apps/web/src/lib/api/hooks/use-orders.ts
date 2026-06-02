@@ -122,3 +122,26 @@ export function useCancelOrder() {
     },
   });
 }
+
+/** Lot B : le téléconseiller prend / relâche une commande. */
+export function useClaimOrder() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<OrderOutput>(`/v1/orders/${id}/claim`, {}, token),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}
+
+export function useReleaseOrder() {
+  const token = useAuthToken();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.post<OrderOutput>(`/v1/orders/${id}/release`, {}, token),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['orders'] });
+    },
+  });
+}

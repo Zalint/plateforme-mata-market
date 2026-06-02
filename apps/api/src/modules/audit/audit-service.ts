@@ -50,6 +50,8 @@ export type AuditAction =
   | 'order.confirm'
   | 'order.cancel'
   | 'order.status_change'
+  | 'order.assign'
+  | 'order.unassign'
   | 'order.idempotent_replay'
   // Paiements
   | 'payment.intent_created'

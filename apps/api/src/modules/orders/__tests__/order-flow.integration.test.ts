@@ -536,3 +536,63 @@ describe('Order flow · lectures', () => {
     expect(staffView.items[0]?.producerDisplayName).not.toBeNull();
   });
 });
+
+describe('Order flow · self-assignation (Lot B)', () => {
+  // Le service ne valide pas le rôle (la route le fait) : on utilise les users
+  // existants comme acteurs téléconseillers.
+  async function makeOrder(): Promise<string> {
+    offer = await createOffer({ qty: 100, price: 3000 });
+    const order = await orderService.create({
+      clientUserId: client.id,
+      input: {
+        items: [{ offerId: offer.id, quantity: 2 }],
+        delivery: {
+          zoneId: zone.id,
+          addressLine: 'Almadies',
+          slotDate: '2026-06-15',
+          slotPeriod: 'morning',
+        },
+      },
+    });
+    return order.id;
+  }
+
+  it('prendre une commande libre, refuser une 2e prise, puis relâcher', async () => {
+    const orderId = await makeOrder();
+
+    const claimed = await orderService.claim({ actorUserId: admin.id, orderId });
+    expect(claimed.assignedTeleconsultantUserId).toBe(admin.id);
+    expect(claimed.assignedAt).not.toBeNull();
+
+    // Déjà prise par un autre → CONFLICT.
+    await expect(orderService.claim({ actorUserId: producer.id, orderId })).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+
+    // Relâcher par un non-assigné non-admin → FORBIDDEN.
+    await expect(
+      orderService.release({ actorUserId: producer.id, isAdmin: false, orderId }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    // L'assigné relâche → libre.
+    const released = await orderService.release({
+      actorUserId: admin.id,
+      isAdmin: false,
+      orderId,
+    });
+    expect(released.assignedTeleconsultantUserId).toBeNull();
+
+    // Audit assign + unassign.
+    const assigns = await prisma.auditLog.findMany({
+      where: { targetId: orderId, action: { in: ['order.assign', 'order.unassign'] } },
+    });
+    expect(assigns.length).toBe(2);
+  });
+
+  it('un admin peut relâcher la commande d’un autre téléconseiller', async () => {
+    const orderId = await makeOrder();
+    await orderService.claim({ actorUserId: producer.id, orderId });
+    const released = await orderService.release({ actorUserId: admin.id, isAdmin: true, orderId });
+    expect(released.assignedTeleconsultantUserId).toBeNull();
+  });
+});

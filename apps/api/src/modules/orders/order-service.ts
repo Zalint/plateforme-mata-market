@@ -505,6 +505,87 @@ async function transitionWithinTxInternal(
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Self-assignation (Lot B) : un téléconseiller « prend » une commande libre.
+
+async function claimOrderInternal(args: {
+  actorUserId: string;
+  orderId: string;
+  request?: FastifyRequest;
+}): Promise<OrderOutput> {
+  const { actorUserId, orderId, request } = args;
+  const updated = await prisma.$transaction(async (tx) => {
+    const current = await tx.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, assignedTeleconsultantUserId: true },
+    });
+    if (!current) throw new DomainError('NOT_FOUND', 'Commande introuvable');
+    if (
+      current.assignedTeleconsultantUserId &&
+      current.assignedTeleconsultantUserId !== actorUserId
+    ) {
+      throw new DomainError('CONFLICT', 'Commande déjà prise par un autre téléconseiller');
+    }
+    // Compare-and-swap : assigne seulement si encore libre (ou déjà à soi) →
+    // évite qu'une prise concurrente écrase l'autre.
+    const swapped = await tx.order.updateMany({
+      where: {
+        id: orderId,
+        OR: [{ assignedTeleconsultantUserId: null }, { assignedTeleconsultantUserId: actorUserId }],
+      },
+      data: { assignedTeleconsultantUserId: actorUserId, assignedAt: new Date() },
+    });
+    if (swapped.count === 0) throw new DomainError('CONFLICT', 'Commande déjà prise');
+    return tx.order.findUniqueOrThrow({ where: { id: orderId }, include: orderInclude });
+  });
+  await auditService.log({
+    actorUserId,
+    action: 'order.assign',
+    targetType: 'order',
+    targetId: orderId,
+    newValue: { assignedTeleconsultantUserId: actorUserId },
+    request,
+  });
+  return toOrderOutput(updated as OrderLoaded);
+}
+
+async function releaseOrderInternal(args: {
+  actorUserId: string;
+  isAdmin: boolean;
+  orderId: string;
+  request?: FastifyRequest;
+}): Promise<OrderOutput> {
+  const { actorUserId, isAdmin, orderId, request } = args;
+  const current = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { id: true, assignedTeleconsultantUserId: true },
+  });
+  if (!current) throw new DomainError('NOT_FOUND', 'Commande introuvable');
+  if (!current.assignedTeleconsultantUserId) {
+    throw new DomainError('CONFLICT', 'Commande non assignée');
+  }
+  if (!isAdmin && current.assignedTeleconsultantUserId !== actorUserId) {
+    throw new DomainError(
+      'FORBIDDEN',
+      'Seul le téléconseiller assigné (ou un admin) peut relâcher cette commande',
+    );
+  }
+  const updated = await prisma.order.update({
+    where: { id: orderId },
+    data: { assignedTeleconsultantUserId: null, assignedAt: null },
+    include: orderInclude,
+  });
+  await auditService.log({
+    actorUserId,
+    action: 'order.unassign',
+    targetType: 'order',
+    targetId: orderId,
+    oldValue: { assignedTeleconsultantUserId: current.assignedTeleconsultantUserId },
+    request,
+  });
+  return toOrderOutput(updated as OrderLoaded);
+}
+
+// ─────────────────────────────────────────────────────────────────
 // Service exporté
 
 export const orderService = {
@@ -512,6 +593,8 @@ export const orderService = {
   transitionStatus: transitionStatusInternal,
   transitionWithinTx: transitionWithinTxInternal,
   cancel: cancelOrderInternal,
+  claim: claimOrderInternal,
+  release: releaseOrderInternal,
   getById: getByIdInternal,
   listMine: listMineInternal,
   listReceived: listReceivedInternal,

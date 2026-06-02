@@ -9,7 +9,14 @@ import {
 } from '@mata/shared/constants';
 import { FilterChip, Icon, Money, StatusBadge, type StatusTone, usePrompt } from '@mata/ui';
 import { useState } from 'react';
-import { useAdminOrders, useCancelOrder, useTransitionOrderStatus } from '../../../../src/lib/api';
+import {
+  useAdminOrders,
+  useCancelOrder,
+  useClaimOrder,
+  useMe,
+  useReleaseOrder,
+  useTransitionOrderStatus,
+} from '../../../../src/lib/api';
 
 /**
  * Admin / Commandes · queue + boutons transitions.
@@ -39,8 +46,12 @@ export default function AdminOrdersPage(): React.JSX.Element {
   const { data, isLoading } = useAdminOrders(filter === 'all' ? undefined : filter);
   const transition = useTransitionOrderStatus();
   const cancel = useCancelOrder();
+  const claim = useClaimOrder();
+  const release = useReleaseOrder();
+  const { data: me } = useMe();
   const prompt = usePrompt();
   const orders = data?.orders ?? [];
+  const isAdmin = me?.role === 'admin' || me?.role === 'super_admin';
 
   async function handleCancel(id: string): Promise<void> {
     const reason = await prompt({
@@ -98,6 +109,17 @@ export default function AdminOrdersPage(): React.JSX.Element {
                     <StatusBadge tone={TONE[o.status]}>
                       {ORDER_STATUS_LABEL_FR[o.status]}
                     </StatusBadge>
+                    {o.assignedTeleconsultantUserId ? (
+                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-mata-50 text-mata-800 font-semibold">
+                        {o.assignedTeleconsultantUserId === me?.id
+                          ? 'Assignée à vous'
+                          : `Assignée à ${o.assignedTeleconsultantName}`}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] px-2 py-0.5 rounded-md bg-stone-100 text-stone-500 font-semibold">
+                        Non assignée
+                      </span>
+                    )}
                   </div>
                   <div className="font-bold text-stone-900 mt-1">
                     {o.clientDisplayName ?? '— guest —'} ·{' '}
@@ -118,6 +140,31 @@ export default function AdminOrdersPage(): React.JSX.Element {
                 {o.items
                   .map((i) => `${i.offerTitle} × ${i.quantity} (${i.producerDisplayName})`)
                   .join(' · ')}
+              </div>
+
+              {/* Assignation (Lot B) */}
+              <div className="mt-3 flex items-center gap-2 flex-wrap">
+                {!o.assignedTeleconsultantUserId && (
+                  <button
+                    type="button"
+                    onClick={() => claim.mutate(o.id)}
+                    disabled={claim.isPending}
+                    className="px-3 py-1.5 rounded-lg bg-mata-700 hover:bg-mata-800 disabled:bg-stone-300 text-white text-xs font-bold flex items-center gap-1"
+                  >
+                    <Icon name="check" className="w-3 h-3" /> Prendre
+                  </button>
+                )}
+                {o.assignedTeleconsultantUserId &&
+                  (o.assignedTeleconsultantUserId === me?.id || isAdmin) && (
+                    <button
+                      type="button"
+                      onClick={() => release.mutate(o.id)}
+                      disabled={release.isPending}
+                      className="px-3 py-1.5 rounded-lg border border-stone-200 text-stone-700 text-xs font-semibold hover:bg-stone-50 disabled:opacity-50"
+                    >
+                      Relâcher
+                    </button>
+                  )}
               </div>
 
               {/* Actions */}

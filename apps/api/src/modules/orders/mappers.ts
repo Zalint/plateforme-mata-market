@@ -16,6 +16,7 @@ type OrderItemLoaded = OrderItem & {
 
 export type OrderLoaded = Order & {
   client: Pick<User, 'displayName'> | null;
+  assignedTeleconsultant: Pick<User, 'displayName'> | null;
   zone: Pick<Zone, 'name'>;
   items: OrderItemLoaded[];
 };
@@ -45,6 +46,9 @@ export function toOrderOutput(o: OrderLoaded, showProducer = true): OrderOutput 
     totalFcfa: o.totalFcfa,
     paymentStatus: o.paymentStatus,
     items: o.items.map((i) => toOrderItemOutput(i, showProducer)),
+    assignedTeleconsultantUserId: o.assignedTeleconsultantUserId,
+    assignedTeleconsultantName: o.assignedTeleconsultant?.displayName ?? null,
+    assignedAt: o.assignedAt?.toISOString() ?? null,
     confirmedAt: o.confirmedAt?.toISOString() ?? null,
     collectedAt: o.collectedAt?.toISOString() ?? null,
     storedAt: o.storedAt?.toISOString() ?? null,
@@ -79,6 +83,7 @@ function toOrderItemOutput(i: OrderItemLoaded, showProducer: boolean): OrderItem
  */
 export const orderInclude = {
   client: { select: { displayName: true } },
+  assignedTeleconsultant: { select: { displayName: true } },
   zone: { select: { name: true } },
   items: {
     include: {
