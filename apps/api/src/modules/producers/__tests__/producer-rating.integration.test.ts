@@ -136,14 +136,7 @@ async function deliveredOrderId(): Promise<string> {
       },
     },
   });
-  for (const to of [
-    'confirmed',
-    'collecting',
-    'collected',
-    'stored',
-    'delivering',
-    'delivered',
-  ] as const) {
+  for (const to of ['confirmed', 'delivering', 'delivered'] as const) {
     await orderService.transitionStatus({ actorUserId: admin.id, orderId: order.id, to });
   }
   return order.id;

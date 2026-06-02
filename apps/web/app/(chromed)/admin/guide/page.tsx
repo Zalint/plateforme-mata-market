@@ -8,7 +8,7 @@ import {
   PICKUP_TRANSITIONS,
   type PickupStatus,
 } from '@mata/shared/constants';
-import { Icon, type IconName, StatusBadge, type StatusTone } from '@mata/ui';
+import { Icon, StatusBadge, type StatusTone } from '@mata/ui';
 
 /**
  * Admin / Guide d'utilisation · page de documentation (lecture seule).
@@ -24,29 +24,18 @@ const ORDER_ROWS: StatusRow<OrderStatus>[] = [
   {
     status: 'created',
     tone: 'neutral',
-    desc: 'Panier validé par le client, en attente de confirmation MATA.',
+    desc: 'Le client a commandé. En attente : un téléconseiller la prend en charge.',
   },
   {
     status: 'confirmed',
     tone: 'success',
-    desc: 'MATA accepte : producteurs notifiés, stock réservé. Devient rattachable à une tournée.',
+    desc: 'Le téléconseiller a validé avec le producteur (et le client si le prix a changé). Stock réservé.',
   },
   {
-    status: 'collecting',
-    tone: 'warning',
-    desc: 'Une tournée de collecte ramasse les produits chez les producteurs. Statut piloté par la tournée.',
-  },
-  {
-    status: 'collected',
+    status: 'delivering',
     tone: 'info',
-    desc: 'Tous les items ont été récupérés, en route vers le dépôt. Statut piloté par la tournée.',
+    desc: 'En cours d’acheminement vers le client (collecte + livraison gérées par l’équipe).',
   },
-  {
-    status: 'stored',
-    tone: 'neutral',
-    desc: 'Entrée en chambre froide, en attente de la tournée de livraison.',
-  },
-  { status: 'delivering', tone: 'info', desc: 'Le livreur est en route vers le client.' },
   {
     status: 'delivered',
     tone: 'success',
@@ -55,7 +44,7 @@ const ORDER_ROWS: StatusRow<OrderStatus>[] = [
   {
     status: 'cancelled',
     tone: 'danger',
-    desc: 'Annulée par le client (avant collecte) ou par MATA (rupture, problème).',
+    desc: 'Annulée par le client ou MATA, à tout moment avant la livraison.',
   },
 ];
 
@@ -262,38 +251,6 @@ const ORDER_EXTRA = ORDER_ROWS.filter((r) => r.status === 'cancelled');
 const PICKUP_FLOW = PICKUP_ROWS.filter((r) => r.status !== 'cancelled');
 const PICKUP_EXTRA = PICKUP_ROWS.filter((r) => r.status === 'cancelled');
 
-type LinkStep = {
-  icon: IconName;
-  action: string;
-  from: { status: OrderStatus; tone: StatusTone };
-  to: { status: OrderStatus; tone: StatusTone };
-  desc: string;
-};
-
-const LINK_STEPS: LinkStep[] = [
-  {
-    icon: 'plus',
-    action: 'Créer la tournée',
-    from: { status: 'confirmed', tone: 'success' },
-    to: { status: 'collecting', tone: 'warning' },
-    desc: 'La commande apparaît dans « Mes collectes » des producteurs concernés.',
-  },
-  {
-    icon: 'check-circle',
-    action: 'Tournée « Effectuée »',
-    from: { status: 'collecting', tone: 'warning' },
-    to: { status: 'collected', tone: 'info' },
-    desc: 'Dès que TOUS les items de la commande sont collectés (multi-tournées possible).',
-  },
-  {
-    icon: 'x',
-    action: 'Annuler la tournée',
-    from: { status: 'collecting', tone: 'warning' },
-    to: { status: 'confirmed', tone: 'success' },
-    desc: 'Si la commande n’a plus aucune tournée active → elle redevient planifiable.',
-  },
-];
-
 function Card({
   title,
   children,
@@ -440,34 +397,6 @@ export default function AdminGuidePage(): React.JSX.Element {
           transitions={PICKUP_TRANSITIONS}
           label={PICKUP_STATUS_LABEL_FR}
         />
-      </Card>
-
-      <Card title="Le lien commande ↔ tournée (automatique)">
-        <p className="text-sm text-stone-500 mb-4">
-          Les statuts de collecte d'une commande ne se changent pas à la main : ils suivent la
-          tournée. Trois règles :
-        </p>
-        <ul className="space-y-4">
-          {LINK_STEPS.map((s) => (
-            <li key={s.action} className="flex items-start gap-3">
-              <div className="shrink-0 w-9 h-9 rounded-lg bg-mata-50 flex items-center justify-center">
-                <Icon name={s.icon} className="w-5 h-5 text-mata-700" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-stone-900 text-sm">{s.action}</span>
-                  <span className="text-stone-300">·</span>
-                  <StatusBadge tone={s.from.tone}>
-                    {ORDER_STATUS_LABEL_FR[s.from.status]}
-                  </StatusBadge>
-                  <Icon name="arrow-right" className="w-3.5 h-3.5 text-stone-400" />
-                  <StatusBadge tone={s.to.tone}>{ORDER_STATUS_LABEL_FR[s.to.status]}</StatusBadge>
-                </div>
-                <div className="text-sm text-stone-600 mt-1">{s.desc}</div>
-              </div>
-            </li>
-          ))}
-        </ul>
       </Card>
 
       <Card title="Comment se calcule le prix (pricing à 7 composantes)">

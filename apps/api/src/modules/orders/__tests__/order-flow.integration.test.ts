@@ -223,7 +223,7 @@ describe('Order flow · création + snapshot lié + réservation stock', () => {
 });
 
 describe('Order flow · state machine + cancel', () => {
-  it('cycle complet created → confirmed → ... → delivered', async () => {
+  it('cycle complet created → confirmed → delivering → delivered', async () => {
     offer = await createOffer({ qty: 100, price: 3000 });
     const order = await orderService.create({
       clientUserId: client.id,
@@ -249,45 +249,23 @@ describe('Order flow · state machine + cancel', () => {
     const t2 = await orderService.transitionStatus({
       actorUserId: admin.id,
       orderId: order.id,
-      to: 'collecting',
+      to: 'delivering',
     });
-    expect(t2.status).toBe('collecting');
+    expect(t2.status).toBe('delivering');
 
     const t3 = await orderService.transitionStatus({
       actorUserId: admin.id,
       orderId: order.id,
-      to: 'collected',
-    });
-    expect(t3.status).toBe('collected');
-    expect(t3.collectedAt).not.toBeNull();
-
-    const t4 = await orderService.transitionStatus({
-      actorUserId: admin.id,
-      orderId: order.id,
-      to: 'stored',
-    });
-    expect(t4.status).toBe('stored');
-
-    const t5 = await orderService.transitionStatus({
-      actorUserId: admin.id,
-      orderId: order.id,
-      to: 'delivering',
-    });
-    expect(t5.status).toBe('delivering');
-
-    const t6 = await orderService.transitionStatus({
-      actorUserId: admin.id,
-      orderId: order.id,
       to: 'delivered',
     });
-    expect(t6.status).toBe('delivered');
-    expect(t6.deliveredAt).not.toBeNull();
+    expect(t3.status).toBe('delivered');
+    expect(t3.deliveredAt).not.toBeNull();
 
-    // 6 audits status_change écrits.
+    // 3 audits status_change écrits (confirmed → delivering → delivered).
     const audits = await prisma.auditLog.findMany({
       where: { targetId: order.id, action: 'order.status_change' },
     });
-    expect(audits).toHaveLength(6);
+    expect(audits).toHaveLength(3);
   });
 
   it('offre `reserved` → `sold` quand toutes ses commandes sont livrées (+ audit offer.sold)', async () => {
@@ -308,7 +286,7 @@ describe('Order flow · state machine + cancel', () => {
     expect((await prisma.offer.findUnique({ where: { id: offer.id } }))?.status).toBe('reserved');
 
     // Cycle complet jusqu'à delivered.
-    for (const to of ['confirmed', 'collecting', 'collected', 'stored', 'delivering'] as const) {
+    for (const to of ['confirmed', 'delivering'] as const) {
       await orderService.transitionStatus({ actorUserId: admin.id, orderId: order.id, to });
     }
     // Avant la dernière étape : toujours reserved (pas encore livré).
@@ -348,14 +326,7 @@ describe('Order flow · state machine + cancel', () => {
     });
     expect((await prisma.offer.findUnique({ where: { id: offer.id } }))?.status).toBe('validated');
 
-    for (const to of [
-      'confirmed',
-      'collecting',
-      'collected',
-      'stored',
-      'delivering',
-      'delivered',
-    ] as const) {
+    for (const to of ['confirmed', 'delivering', 'delivered'] as const) {
       await orderService.transitionStatus({ actorUserId: admin.id, orderId: order.id, to });
     }
 
@@ -430,7 +401,7 @@ describe('Order flow · state machine + cancel', () => {
     expect(newValue.reason).toBe('Test cancel');
   });
 
-  it('refuse cancel depuis status non éligible (collecting)', async () => {
+  it('refuse cancel depuis status non éligible (delivered)', async () => {
     offer = await createOffer({ qty: 100, price: 3000 });
     const order = await orderService.create({
       clientUserId: client.id,
@@ -444,16 +415,10 @@ describe('Order flow · state machine + cancel', () => {
         },
       },
     });
-    await orderService.transitionStatus({
-      actorUserId: admin.id,
-      orderId: order.id,
-      to: 'confirmed',
-    });
-    await orderService.transitionStatus({
-      actorUserId: admin.id,
-      orderId: order.id,
-      to: 'collecting',
-    });
+    // Cycle 4 états : l'annulation reste possible jusqu'en livraison, plus après.
+    for (const to of ['confirmed', 'delivering', 'delivered'] as const) {
+      await orderService.transitionStatus({ actorUserId: admin.id, orderId: order.id, to });
+    }
     await expect(
       orderService.cancel({
         actorUserId: client.id,

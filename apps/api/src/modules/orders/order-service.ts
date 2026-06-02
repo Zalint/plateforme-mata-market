@@ -21,7 +21,7 @@ import { generateOrderNumber } from './order-numbering.js';
 
 /**
  * Service orders · création transactionnelle, state machine guardée,
- * cycle 8 étapes + cancelled.
+ * cycle 4 étapes (created → confirmed → delivering → delivered) + cancelled.
  *
  * Garanties :
  *  - Création atomique : génération num + réservation stock + snapshots
@@ -254,8 +254,6 @@ async function transitionStatusInternal(args: TransitionArgs): Promise<OrderOutp
 
     const data: Prisma.OrderUpdateManyMutationInput = { status: to };
     if (to === 'confirmed') data.confirmedAt = new Date();
-    if (to === 'collected') data.collectedAt = new Date();
-    if (to === 'stored') data.storedAt = new Date();
     if (to === 'delivered') data.deliveredAt = new Date();
 
     // Compare-and-swap : on conditionne l'update au statut LU (current.status).

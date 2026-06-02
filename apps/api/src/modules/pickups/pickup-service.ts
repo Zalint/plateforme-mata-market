@@ -1,8 +1,4 @@
-import {
-  isValidPickupTransition,
-  type OrderStatus,
-  type PickupStatus,
-} from '@mata/shared/constants';
+import { isValidPickupTransition, type PickupStatus } from '@mata/shared/constants';
 import { DomainError } from '@mata/shared/errors';
 import type { PickupAdminListQuery, PickupCreate, PickupOutput } from '@mata/shared/schemas';
 import type { Prisma } from '@prisma/client';
@@ -11,33 +7,12 @@ import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { auditService } from '../audit/index.js';
 import { notificationService } from '../notifications/index.js';
-import { orderService } from '../orders/index.js';
 import { type PickupLoaded, pickupInclude, toPickupOutput } from './mappers.js';
 import { generatePickupNumber } from './pickup-numbering.js';
 
-/** Transition commande cascadée par la tournée, à auditer après commit. */
-type OrderTransition = { orderId: string; from: OrderStatus; to: OrderStatus };
-
-/** Audit `order.status_change` pour les transitions cascadées par la tournée. */
-async function auditOrderTransitions(
-  transitions: OrderTransition[],
-  actorUserId: string,
-  via: string,
-  pickupId: string,
-  request?: FastifyRequest,
-): Promise<void> {
-  for (const t of transitions) {
-    await auditService.log({
-      actorUserId,
-      action: 'order.status_change',
-      targetType: 'order',
-      targetId: t.orderId,
-      oldValue: { status: t.from },
-      newValue: { status: t.to, via, pickupId },
-      request,
-    });
-  }
-}
+// Pivot 4 états : les tournées sont DÉCOUPLÉES du statut commande. Une tournée
+// ne transitionne plus l'order (collecting / collected / revert) ; elle reste un
+// outil de planification logistique interne. Cf. ORDER_TRANSITIONS.
 
 // Producteurs distincts concernés par les items d'une tournée.
 function distinctProducerIds(pickup: PickupLoaded): string[] {
@@ -86,7 +61,6 @@ async function createPickupInternal(args: CreatePickupArgs): Promise<PickupOutpu
 
   const txResult = await prisma.$transaction(async (tx) => {
     // Valide chaque order_item : existe, commande confirmée, pas déjà collecté.
-    const affectedOrderIds = new Set<string>();
     for (const orderItemId of input.orderItemIds) {
       const item = await tx.orderItem.findUnique({
         where: { id: orderItemId },
@@ -100,10 +74,7 @@ async function createPickupInternal(args: CreatePickupArgs): Promise<PickupOutpu
       if (!item) {
         throw new DomainError('NOT_FOUND', `Item ${orderItemId} introuvable`);
       }
-      // « Déjà rattaché » vérifié AVANT le statut : message plus précis, et la
-      // commande passe `collecting` dès la 1re tournée (couplage) — sans cet ordre
-      // un ré-ajout du même item afficherait « commande collecting » au lieu de
-      // l'erreur d'attache.
+      // « Déjà rattaché » vérifié AVANT le statut : message plus précis.
       if (item.pickupItem) {
         throw new DomainError('CONFLICT', `Item ${orderItemId} déjà rattaché à une tournée`);
       }
@@ -113,7 +84,6 @@ async function createPickupInternal(args: CreatePickupArgs): Promise<PickupOutpu
           `Item ${orderItemId} non collectable (commande ${item.order.status}, attendu confirmed)`,
         );
       }
-      affectedOrderIds.add(item.orderId);
     }
 
     const pickupNumber = await generatePickupNumber(tx);
@@ -149,17 +119,7 @@ async function createPickupInternal(args: CreatePickupArgs): Promise<PickupOutpu
       },
     });
 
-    // Couplage tournée → commande : chaque commande concernée passe
-    // confirmed → collecting dans la MÊME transaction (atomique, §G4). Les items
-    // étant tous validés `confirmed` plus haut, la transition est toujours valide.
-    const orderTransitions: OrderTransition[] = [];
-    for (const orderId of affectedOrderIds) {
-      orderTransitions.push(
-        await orderService.transitionWithinTx(tx, { orderId, to: 'collecting' }),
-      );
-    }
-
-    return { pickup: pickup as PickupLoaded, orderTransitions };
+    return { pickup: pickup as PickupLoaded };
   });
 
   const created = txResult.pickup;
@@ -176,14 +136,6 @@ async function createPickupInternal(args: CreatePickupArgs): Promise<PickupOutpu
     },
     request,
   });
-  await auditOrderTransitions(
-    txResult.orderTransitions,
-    actorUserId,
-    'pickup.create',
-    created.id,
-    request,
-  );
-
   logger.info(
     { pickupId: created.id, pickupNumber: created.pickupNumber, itemCount: created.items.length },
     'pickup.created',
@@ -262,36 +214,7 @@ async function transitionStatusInternal(args: TransitionArgs): Promise<PickupOut
       });
     }
 
-    // Couplage tournée → commande : à `collected`, une commande passe
-    // collecting → collected uniquement si TOUS ses items sont collectés (une
-    // commande peut être répartie sur plusieurs tournées). On vérifie qu'il ne
-    // reste aucun item non rattaché ou rattaché à une tournée non collectée.
-    const orderTransitions: OrderTransition[] = [];
-    if (to === 'collected') {
-      const items = await tx.pickupItem.findMany({
-        where: { pickupId },
-        select: { orderItem: { select: { orderId: true } } },
-      });
-      const orderIds = new Set(items.map((i) => i.orderItem.orderId));
-      for (const orderId of orderIds) {
-        const remaining = await tx.orderItem.count({
-          where: {
-            orderId,
-            OR: [
-              { pickupItem: null },
-              { pickupItem: { pickup: { status: { not: 'collected' } } } },
-            ],
-          },
-        });
-        if (remaining === 0) {
-          orderTransitions.push(
-            await orderService.transitionWithinTx(tx, { orderId, to: 'collected' }),
-          );
-        }
-      }
-    }
-
-    return { result: result as PickupLoaded, from: current.status, orderTransitions };
+    return { result: result as PickupLoaded, from: current.status };
   });
 
   await auditService.log({
@@ -303,14 +226,6 @@ async function transitionStatusInternal(args: TransitionArgs): Promise<PickupOut
     newValue: { status: to },
     request,
   });
-  await auditOrderTransitions(
-    updated.orderTransitions,
-    actorUserId,
-    'pickup.collected',
-    pickupId,
-    request,
-  );
-
   // Push web (Lot 7, hors chemin critique) au démarrage effectif de la collecte.
   if (to === 'collecting') {
     await Promise.all(
@@ -351,13 +266,6 @@ async function cancelPickupInternal(args: CancelArgs): Promise<PickupOutput> {
       throw new DomainError('CONFLICT', `Annulation impossible depuis status=${current.status}`);
     }
 
-    // Commandes concernées (avant de libérer les items).
-    const itemsBefore = await tx.pickupItem.findMany({
-      where: { pickupId },
-      select: { orderItem: { select: { orderId: true } } },
-    });
-    const affectedOrderIds = new Set(itemsBefore.map((i) => i.orderItem.orderId));
-
     // Libère les items : delete pickup_items (l'UNIQUE order_item_id se libère,
     // les items redeviennent affectables à une nouvelle tournée).
     await tx.pickupItem.deleteMany({ where: { pickupId } });
@@ -372,24 +280,7 @@ async function cancelPickupInternal(args: CancelArgs): Promise<PickupOutput> {
       include: pickupInclude,
     });
 
-    // Couplage tournée → commande : revert collecting → confirmed pour les
-    // commandes qui n'ont plus AUCUN item rattaché à une tournée active (sinon
-    // elles restent en collecte via une autre tournée). Statut commande vrai.
-    const orderTransitions: OrderTransition[] = [];
-    for (const orderId of affectedOrderIds) {
-      const stillAttached = await tx.orderItem.count({
-        where: { orderId, pickupItem: { pickup: { status: { not: 'cancelled' } } } },
-      });
-      if (stillAttached > 0) continue;
-      const ord = await tx.order.findUnique({ where: { id: orderId }, select: { status: true } });
-      if (ord?.status === 'collecting') {
-        orderTransitions.push(
-          await orderService.transitionWithinTx(tx, { orderId, to: 'confirmed' }),
-        );
-      }
-    }
-
-    return { result: result as PickupLoaded, from: current.status, orderTransitions };
+    return { result: result as PickupLoaded, from: current.status };
   });
 
   await auditService.log({
@@ -401,14 +292,6 @@ async function cancelPickupInternal(args: CancelArgs): Promise<PickupOutput> {
     newValue: { status: 'cancelled', reason },
     request,
   });
-  await auditOrderTransitions(
-    cancelled.orderTransitions,
-    actorUserId,
-    'pickup.cancel',
-    pickupId,
-    request,
-  );
-
   return toPickupOutput(cancelled.result);
 }
 

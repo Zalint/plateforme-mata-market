@@ -29,15 +29,7 @@ const TONE: Record<OrderStatus, StatusTone> = {
   cancelled: 'danger',
 };
 
-const TIMELINE_STEPS: OrderStatus[] = [
-  'created',
-  'confirmed',
-  'collecting',
-  'collected',
-  'stored',
-  'delivering',
-  'delivered',
-];
+const TIMELINE_STEPS: OrderStatus[] = ['created', 'confirmed', 'delivering', 'delivered'];
 
 export default function ClientOrderDetailPage(): React.JSX.Element {
   const params = useParams<{ id: string }>();

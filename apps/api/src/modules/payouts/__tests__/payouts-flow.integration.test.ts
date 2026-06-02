@@ -210,11 +210,8 @@ async function createDeliveredPaidOrder(
     },
   });
   const orderId = result.id;
-  // Transition jusqu'à delivered.
+  // Transition jusqu'à delivered (cycle 4 états).
   await orderService.transitionStatus({ actorUserId: admin.id, orderId, to: 'confirmed' });
-  await orderService.transitionStatus({ actorUserId: admin.id, orderId, to: 'collecting' });
-  await orderService.transitionStatus({ actorUserId: admin.id, orderId, to: 'collected' });
-  await orderService.transitionStatus({ actorUserId: admin.id, orderId, to: 'stored' });
   await orderService.transitionStatus({ actorUserId: admin.id, orderId, to: 'delivering' });
   await orderService.transitionStatus({ actorUserId: admin.id, orderId, to: 'delivered' });
   // Fixe payment_status à 'paid' (sans payment row : le compute filtre sur l'enum).

@@ -2,6 +2,7 @@
 
 import {
   isValidOrderTransition,
+  ORDER_ACTIVE_STATUSES,
   ORDER_STATUS_LABEL_FR,
   ORDER_STATUSES,
   type OrderStatus,
@@ -15,12 +16,9 @@ import { useAdminOrders, useCancelOrder, useTransitionOrderStatus } from '../../
  *
  * Reproduit la maquette `mockup/index.html` section ADMIN/ORDERS (§2375).
  *
- * L'admin pilote tout le cycle au Lot 4 :
- *  created → confirmed → collecting → collected → stored → delivering → delivered.
- * Cancel possible depuis created ou confirmed seulement (state machine).
- *
- * Lot 7 (tournées) introduira la transition `collected` automatique
- * (scan QR par le MLC) — pour l'instant tout est manuel.
+ * Cycle simplifié à 4 étapes (pivot téléconseiller) :
+ *  created → confirmed → delivering → delivered. Annulation possible avant
+ *  livraison. Les tournées sont découplées du statut commande.
  */
 
 const TONE: Record<OrderStatus, StatusTone> = {
@@ -34,16 +32,7 @@ const TONE: Record<OrderStatus, StatusTone> = {
   cancelled: 'danger',
 };
 
-const FILTERS: (OrderStatus | 'all')[] = ['all', ...ORDER_STATUSES];
-
-// Transitions de collecte pilotées par la TOURNÉE (pickup-service), pas par
-// l'admin ici : créer/avancer/annuler une tournée fait suivre le statut commande
-// automatiquement. On masque donc ces boutons (sinon double pilotage / dérive).
-const PICKUP_DRIVEN_TRANSITIONS: ReadonlySet<string> = new Set([
-  'confirmed→collecting',
-  'collecting→collected',
-  'collecting→confirmed',
-]);
+const FILTERS: (OrderStatus | 'all')[] = ['all', ...ORDER_ACTIVE_STATUSES];
 
 export default function AdminOrdersPage(): React.JSX.Element {
   const [filter, setFilter] = useState<OrderStatus | 'all'>('all');
@@ -92,10 +81,7 @@ export default function AdminOrdersPage(): React.JSX.Element {
       <div className="space-y-3">
         {orders.map((o) => {
           const nextStates = ORDER_STATUSES.filter(
-            (s) =>
-              s !== 'cancelled' &&
-              isValidOrderTransition(o.status, s) &&
-              !PICKUP_DRIVEN_TRANSITIONS.has(`${o.status}→${s}`),
+            (s) => s !== 'cancelled' && isValidOrderTransition(o.status, s),
           );
           const canCancel = isValidOrderTransition(o.status, 'cancelled');
           return (

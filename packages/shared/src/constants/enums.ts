@@ -238,28 +238,38 @@ export const ORDER_STATUS_LABEL_FR: Record<OrderStatus, string> = {
 // Matrice des transitions valides. Source de vérité du state-machine guard
 // côté service (order-service.ts) et de l'UI (boutons disabled selon status).
 //
+// Cycle simplifié à 4 étapes (pivot téléconseiller — le téléconseiller pilote
+// la commande à la main, la logistique fine est hors-app) :
+//
 //   created    → confirmed | cancelled
-//   confirmed  → collecting | cancelled
-//   collecting → collected | confirmed   (retour si la tournée est annulée)
-//   collected  → stored
-//   stored     → delivering
-//   delivering → delivered
+//   confirmed  → delivering | cancelled
+//   delivering → delivered | cancelled
 //   delivered  → (terminal)
 //   cancelled  → (terminal)
 //
-// `collecting → confirmed` n'est PAS une action admin manuelle : il sert au
-// revert automatique quand une tournée de collecte est annulée (pickup-service),
-// pour que le statut commande reste vrai (collecting ⟺ tournée active).
+// Les statuts logistiques historiques (collecting / collected / stored) sont
+// RETIRÉS du cycle. On les garde dans l'enum Postgres (pas de migration
+// destructive) mais ils sont INATTEIGNABLES (aucune transition n'y mène).
 export const ORDER_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   created: ['confirmed', 'cancelled'],
-  confirmed: ['collecting', 'cancelled'],
-  collecting: ['collected', 'confirmed'],
-  collected: ['stored'],
-  stored: ['delivering'],
-  delivering: ['delivered'],
+  confirmed: ['delivering', 'cancelled'],
+  delivering: ['delivered', 'cancelled'],
   delivered: [],
   cancelled: [],
+  collecting: [],
+  collected: [],
+  stored: [],
 };
+
+// Statuts effectivement utilisés par le cycle (affichage : filtres, steppers).
+// `ORDER_STATUSES` reste la source de vérité de l'enum Postgres (8 valeurs).
+export const ORDER_ACTIVE_STATUSES = [
+  'created',
+  'confirmed',
+  'delivering',
+  'delivered',
+  'cancelled',
+] as const satisfies readonly OrderStatus[];
 
 export function isValidOrderTransition(from: OrderStatus, to: OrderStatus): boolean {
   return ORDER_TRANSITIONS[from].includes(to);

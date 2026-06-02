@@ -545,20 +545,15 @@ describe('Pickup flow · lecture producteur + numérotation', () => {
   });
 });
 
-describe('Pickup flow · couplage commande ↔ tournée', () => {
-  async function orderIdOf(orderItemId: string): Promise<string> {
+describe('Pickup flow · découplé du statut commande (pivot 4 états)', () => {
+  it('créer une tournée ne change PAS le statut de la commande (reste confirmed)', async () => {
+    const orderItemId = await makeConfirmedOrderItem();
     const oi = await prisma.orderItem.findUniqueOrThrow({
       where: { id: orderItemId },
       select: { orderId: true },
     });
-    return oi.orderId;
-  }
 
-  it('créer une tournée fait passer la commande confirmed → collecting (+ audit)', async () => {
-    const orderItemId = await makeConfirmedOrderItem();
-    const orderId = await orderIdOf(orderItemId);
-
-    const pickup = await pickupService.createPickup({
+    await pickupService.createPickup({
       actorUserId: admin.id,
       input: {
         zoneId: zone.id,
@@ -568,69 +563,8 @@ describe('Pickup flow · couplage commande ↔ tournée', () => {
       },
     });
 
-    const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
-    expect(order.status).toBe('collecting');
-
-    // Cible l'audit de la cascade (plusieurs order.status_change existent pour
-    // cette commande : created→confirmed puis confirmed→collecting).
-    const audit = await prisma.auditLog.findFirst({
-      where: {
-        action: 'order.status_change',
-        targetId: orderId,
-        newValue: { path: ['status'], equals: 'collecting' },
-      },
-    });
-    expect(audit).not.toBeNull();
-    expect((audit?.newValue as { via: string }).via).toBe('pickup.create');
-    expect((audit?.newValue as { pickupId: string }).pickupId).toBe(pickup.id);
-  });
-
-  it('tournée collected fait passer la commande collecting → collected', async () => {
-    const orderItemId = await makeConfirmedOrderItem();
-    const orderId = await orderIdOf(orderItemId);
-
-    const pickup = await pickupService.createPickup({
-      actorUserId: admin.id,
-      input: {
-        zoneId: zone.id,
-        scheduledFor: '2026-06-10T08:00:00.000Z',
-        scheduledPeriod: 'morning',
-        orderItemIds: [orderItemId],
-      },
-    });
-    for (const to of ['to_confirm', 'confirmed', 'collecting', 'collected'] as const) {
-      await pickupService.transitionStatus({ actorUserId: admin.id, pickupId: pickup.id, to });
-    }
-
-    const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
-    expect(order.status).toBe('collected');
-    expect(order.collectedAt).not.toBeNull();
-  });
-
-  it('annuler la tournée fait revenir la commande collecting → confirmed', async () => {
-    const orderItemId = await makeConfirmedOrderItem();
-    const orderId = await orderIdOf(orderItemId);
-
-    const pickup = await pickupService.createPickup({
-      actorUserId: admin.id,
-      input: {
-        zoneId: zone.id,
-        scheduledFor: '2026-06-10T08:00:00.000Z',
-        scheduledPeriod: 'morning',
-        orderItemIds: [orderItemId],
-      },
-    });
-    expect((await prisma.order.findUniqueOrThrow({ where: { id: orderId } })).status).toBe(
-      'collecting',
-    );
-
-    await pickupService.cancelPickup({
-      actorUserId: admin.id,
-      pickupId: pickup.id,
-      reason: 'Test',
-    });
-
-    const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    // Découplage : la tournée ne pilote plus le statut commande.
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: oi.orderId } });
     expect(order.status).toBe('confirmed');
   });
 });
